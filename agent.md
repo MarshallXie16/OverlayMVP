@@ -63,6 +63,18 @@ Before any significant task, engage in recursive self-prompting:
 - Bug reports and their status
 - Task dependencies and blockers
 
+**completed_tasks.md**
+- Archive of completed work with dates
+- Scope changes and decisions made
+- Time taken vs estimates
+- Key learnings from each task
+
+**fixed_bugs.md**
+- Detailed bug resolutions with root causes
+- Prevention measures implemented
+- Patterns to avoid
+- Testing strategies that caught issues
+
 **README.md**
 - Quick start guide for developers
 - Installation and setup instructions
@@ -75,9 +87,12 @@ Before any significant task, engage in recursive self-prompting:
 - Test running instructions
 - QA procedures and checklists
 
-**fixed_bugs.md**
-- Document resolved bugs with root causes and solutions
-- Prevent regression and share knowledge
+**docs/** (Technical Documentation)
+- Component documentation with usage examples
+- API endpoint specifications
+- Architecture diagrams and decisions
+- Configuration guides
+- Troubleshooting guides
 
 ## Development Methodology
 
@@ -179,6 +194,10 @@ ANALYZE → DESIGN → IMPLEMENT → TEST → DOCUMENT → REFLECT
 - After every 3 features, review and refactor for patterns
 - Weekly: Review technical debt in tasks.md
 - When bugs occur: Root cause analysis → fixed_bugs.md
+- **Refactor as you implement**: Fix inefficient/incorrect code immediately if scope <30 mins
+- **Create tech debt tickets**: For larger issues, document in tasks.md with `TECH-DEBT:` prefix
+- Extract reusable patterns and components proactively
+- Document all refactoring decisions in memory.md
 - Regularly question: "Is this still the simplest solution?"
 
 ### Error Recovery
@@ -208,7 +227,9 @@ When encountering issues:
 - Integration tests for API endpoints
 - E2E tests for critical user journeys
 - Skip tests only for pure UI changes
-- Always test after major refactors
+- **Always run full test suite for affected components after implementation**
+- Write regression tests for every bug fix
+- Test both happy path and edge cases
 
 ### Common Pitfall Avoidance
 - Check for existing components before creating new ones
@@ -244,6 +265,41 @@ When encountering issues:
 3. **Fail Fast, Learn Faster**: Quick experiments over perfect planning
 4. **Documentation is Code**: Treat documentation as first-class deliverable
 5. **Question Everything**: Regularly ask "Is this still the right approach?"
+6. **Flag Concerns Proactively**: Immediately document:
+   - Technical debt in tasks.md
+   - Inefficient/incorrect code found during investigation
+   - Missing tests or documentation
+   - Technical infeasibility or major risks
+   - Performance bottlenecks or security concerns
+7. **Continuous Quality**: Refactor as you go, don't let problems accumulate
+
+## Quality Gates & Verification
+
+### Pre-Implementation Checklist
+- [ ] User story/requirements clear and complete
+- [ ] Checked memory.md for existing patterns
+- [ ] Investigated similar implementations in codebase
+- [ ] Identified reusable components
+- [ ] Considered 2-3 implementation approaches
+
+### Implementation Standards
+- [ ] Functions < 50 lines (break down if larger)
+- [ ] Clear separation of concerns
+- [ ] Comprehensive error handling
+- [ ] Input validation on all user data
+- [ ] No hardcoded values (use constants/config)
+- [ ] Logging at appropriate levels
+
+### Post-Implementation Verification
+- [ ] All acceptance criteria met
+- [ ] Unit tests written for business logic
+- [ ] Integration tests for API endpoints
+- [ ] Full test suite passes for affected components
+- [ ] No new console errors/warnings
+- [ ] Performance acceptable (no obvious inefficiencies)
+- [ ] Documentation updated (code comments, docs/, README)
+- [ ] memory.md updated with patterns/decisions
+- [ ] tasks.md updated (completed/new items)
 
 ## Self-Review Checklist
 
