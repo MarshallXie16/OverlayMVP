@@ -5,8 +5,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-# Import routers (will be created in sprint 1)
-# from app.api import auth, workflows, screenshots, health
+# Import routers
+from app.api import auth, screenshots, workflows
 
 
 @asynccontextmanager
@@ -49,8 +49,7 @@ async def root():
     }
 
 
-# Register API routers (to be added in sprint 1)
-# app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
-# app.include_router(workflows.router, prefix="/api/workflows", tags=["Workflows"])
-# app.include_router(screenshots.router, prefix="/api/screenshots", tags=["Screenshots"])
-# app.include_router(health.router, prefix="/api/health", tags=["Health"])
+# Register API routers
+app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
+app.include_router(screenshots.router, prefix="/api", tags=["Screenshots"])
+app.include_router(workflows.router, prefix="/api/workflows", tags=["Workflows"])

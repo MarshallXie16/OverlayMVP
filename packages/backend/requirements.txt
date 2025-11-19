@@ -12,6 +12,7 @@ alembic==1.12.1
 passlib[bcrypt]==1.7.4
 python-jose[cryptography]==3.3.0
 python-multipart==0.0.6
+bcrypt==4.0.1  # Pin to compatible version with passlib
 
 # AI Services
 anthropic==0.7.1
@@ -24,6 +25,16 @@ redis==5.0.1
 # AWS S3
 boto3==1.29.7
 
+# Image Processing
+Pillow==10.1.0
+
 # Utilities
 python-dotenv==1.0.0
 httpx==0.25.2
+
+# Testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+
+# Validation
+email-validator==2.3.0
