@@ -13,37 +13,36 @@ Building a Chrome Extension + Web Dashboard + API server for recording, managing
 
 ```
 workflow-platform/
-├── packages/
-│   ├── extension/              # Chrome extension (TypeScript + React)
-│   │   ├── src/
-│   │   │   ├── content/        # Content scripts (recorder, walkthrough)
-│   │   │   ├── background/     # Background service worker
-│   │   │   ├── popup/          # Popup UI components
-│   │   │   ├── shared/         # Shared types and utilities
-│   │   │   └── manifest.json   # Chrome extension manifest v3
-│   │   └── package.json
-│   │
-│   ├── backend/                # FastAPI server (Python 3.11+)
-│   │   ├── app/
-│   │   │   ├── main.py         # FastAPI app entry
-│   │   │   ├── api/            # API route handlers
-│   │   │   ├── models/         # SQLAlchemy ORM models
-│   │   │   ├── schemas/        # Pydantic validation schemas
-│   │   │   ├── services/       # Business logic layer
-│   │   │   ├── tasks/          # Celery background tasks
-│   │   │   ├── db/             # Database session, migrations
-│   │   │   └── utils/          # Helper functions
-│   │   ├── app.db              # SQLite database (gitignored)
-│   │   └── requirements.txt
-│   │
-│   └── dashboard/              # React web app (TypeScript)
-│       ├── src/
-│       │   ├── pages/          # Page components
-│       │   ├── components/     # Reusable UI components
-│       │   ├── hooks/          # Custom React hooks
-│       │   ├── api/            # API client
-│       │   └── store/          # Zustand state management
-│       └── package.json
+├── extension/                  # Chrome extension (TypeScript + React)
+│   ├── src/
+│   │   ├── content/            # Content scripts (recorder, walkthrough)
+│   │   ├── background/         # Background service worker
+│   │   ├── popup/              # Popup UI components
+│   │   ├── shared/             # Shared types and utilities
+│   │   └── manifest.json       # Chrome extension manifest v3
+│   └── package.json
+│
+├── backend/                    # FastAPI server (Python 3.11+)
+│   ├── app/
+│   │   ├── main.py             # FastAPI app entry
+│   │   ├── api/                # API route handlers
+│   │   ├── models/             # SQLAlchemy ORM models
+│   │   ├── schemas/            # Pydantic validation schemas
+│   │   ├── services/           # Business logic layer
+│   │   ├── tasks/              # Celery background tasks
+│   │   ├── db/                 # Database session, migrations
+│   │   └── utils/              # Helper functions
+│   ├── app.db                  # SQLite database (gitignored)
+│   └── requirements.txt
+│
+├── dashboard/                  # React web app (TypeScript)
+│   ├── src/
+│   │   ├── pages/              # Page components
+│   │   ├── components/         # Reusable UI components
+│   │   ├── hooks/              # Custom React hooks
+│   │   ├── api/                # API client
+│   │   └── store/              # Zustand state management
+│   └── package.json
 │
 ├── design_docs/                # User-provided specifications
 │   ├── business_plan.md
@@ -51,6 +50,9 @@ workflow-platform/
 │   ├── technical_requirements.md
 │   ├── roadmap.md
 │   └── user_stories.md
+│
+├── .claude/                    # Agent configuration
+│   └── CLAUDE.md               # Agent operating instructions
 │
 ├── .env.example                # Environment variable template
 ├── .gitignore
@@ -171,20 +173,20 @@ DELETE /workflows/:id      - Delete workflow
 ### 1. Starting the Dev Environment
 ```bash
 # Terminal 1: Backend API
-cd packages/backend
+cd backend
 source venv/bin/activate
 uvicorn app.main:app --reload
 
 # Terminal 2: Celery Worker (when needed)
-cd packages/backend
+cd backend
 celery -A app.tasks worker --loglevel=info
 
 # Terminal 3: Dashboard
-cd packages/dashboard
+cd dashboard
 npm run dev
 
 # Terminal 4: Extension
-cd packages/extension
+cd extension
 npm run dev
 # Then load unpacked extension from dist/ folder in Chrome
 ```

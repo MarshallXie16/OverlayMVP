@@ -24,26 +24,26 @@ Current sprint tasks, backlog, and technical debt tracking.
 **Priority**: P0 (Critical)
 **Epic**: EPIC-001
 **Estimate**: 5 SP
-**Status**: 🔴 Not Started
+**Status**: ✅ Complete
 
 **Description**:
 Set up SQLAlchemy models for all core tables (companies, users, workflows, steps, screenshots, health_logs, notifications). Configure Alembic for database migrations. Create initial migration script.
 
 **Acceptance Criteria**:
-- [ ] SQLAlchemy models created for all tables matching technical spec
-- [ ] Alembic configured with proper migration directory
-- [ ] Initial migration script created and tested
-- [ ] Database relationships properly defined (foreign keys, cascades)
-- [ ] Indexes created for common query patterns
-- [ ] Migration can create SQLite database from scratch
-- [ ] Migration can be rolled back cleanly
+- [x] SQLAlchemy models created for all tables matching technical spec
+- [x] Alembic configured with proper migration directory
+- [x] Initial migration script created and tested
+- [x] Database relationships properly defined (foreign keys, cascades)
+- [x] Indexes created for common query patterns
+- [x] Migration can create SQLite database from scratch
+- [x] Migration can be rolled back cleanly
 
 **Technical Context**:
 - **Dependencies**: None (foundational task)
 - **Affected Components**:
-  - `packages/backend/app/models/` - SQLAlchemy models
-  - `packages/backend/app/db/` - Database session management
-  - `packages/backend/alembic/` - Migration scripts
+  - `backend/app/models/` - SQLAlchemy models
+  - `backend/app/db/` - Database session management
+  - `backend/alembic/` - Migration scripts
 - **Key Files**:
   - `app/models/company.py` - Company model
   - `app/models/user.py` - User model
@@ -77,31 +77,31 @@ Set up SQLAlchemy models for all core tables (companies, users, workflows, steps
 **Priority**: P0 (Critical)
 **Epic**: EPIC-001
 **Estimate**: 5 SP
-**Status**: 🔴 Not Started
+**Status**: ✅ Complete
 
 **Description**:
 Implement user signup and login endpoints with JWT token generation. Password hashing with bcrypt. Email validation. Multi-tenant company isolation.
 
 **Acceptance Criteria**:
-- [ ] POST /api/auth/signup endpoint working
-- [ ] POST /api/auth/login endpoint working
-- [ ] Password hashing with bcrypt (cost factor 12)
-- [ ] JWT token generation with 7-day expiration
-- [ ] Email format validation
-- [ ] Password strength validation (min 8 chars, contains letter + number)
-- [ ] Company invite token validation on signup
-- [ ] Returns user data + token on success
-- [ ] Proper error messages for invalid credentials
-- [ ] Tests for all auth endpoints
+- [x] POST /api/auth/signup endpoint working
+- [x] POST /api/auth/login endpoint working
+- [x] Password hashing with bcrypt (cost factor 12)
+- [x] JWT token generation with 7-day expiration
+- [x] Email format validation
+- [x] Password strength validation (min 8 chars, contains letter + number)
+- [x] Company invite token validation on signup
+- [x] Returns user data + token on success
+- [x] Proper error messages for invalid credentials
+- [x] Tests for all auth endpoints
 
 **Technical Context**:
 - **Dependencies**: BE-001 (Database models must exist)
 - **Affected Components**:
-  - `packages/backend/app/api/auth.py` - Auth endpoints
-  - `packages/backend/app/schemas/auth.py` - Pydantic schemas
-  - `packages/backend/app/services/auth.py` - Auth business logic
-  - `packages/backend/app/utils/security.py` - Password hashing
-  - `packages/backend/app/utils/jwt.py` - JWT utilities
+  - `backend/app/api/auth.py` - Auth endpoints
+  - `backend/app/schemas/auth.py` - Pydantic schemas
+  - `backend/app/services/auth.py` - Auth business logic
+  - `backend/app/utils/security.py` - Password hashing
+  - `backend/app/utils/jwt.py` - JWT utilities
 - **Key Files**:
   - `app/api/auth.py` - FastAPI router with signup/login endpoints
   - `app/schemas/auth.py` - SignupRequest, LoginRequest, TokenResponse schemas
@@ -132,26 +132,26 @@ Implement user signup and login endpoints with JWT token generation. Password ha
 **Priority**: P0 (Critical)
 **Epic**: EPIC-001
 **Estimate**: 3 SP
-**Status**: 🔴 Not Started
+**Status**: ✅ Complete
 
 **Description**:
 Create FastAPI dependency for JWT token validation. Extract user context from token. Ensure all protected endpoints validate authentication. Add role-based access control helpers.
 
 **Acceptance Criteria**:
-- [ ] JWT validation dependency created
-- [ ] Token expiration checked
-- [ ] User context extracted (user_id, company_id, role)
-- [ ] Invalid/expired tokens return 401 Unauthorized
-- [ ] Missing tokens return 401 Unauthorized
-- [ ] Role-based helpers: require_admin, require_user
-- [ ] Works with all API endpoints (except /auth/signup, /auth/login)
-- [ ] Tests for valid/invalid/expired tokens
+- [x] JWT validation dependency created
+- [x] Token expiration checked
+- [x] User context extracted (user_id, company_id, role)
+- [x] Invalid/expired tokens return 401 Unauthorized
+- [x] Missing tokens return 401 Unauthorized
+- [x] Role-based helpers: require_admin, require_user
+- [x] Works with all API endpoints (except /auth/signup, /auth/login)
+- [x] Tests for valid/invalid/expired tokens
 
 **Technical Context**:
 - **Dependencies**: BE-002 (Auth system must exist)
 - **Affected Components**:
-  - `packages/backend/app/utils/dependencies.py` - Auth dependencies
-  - `packages/backend/app/main.py` - Register global dependencies
+  - `backend/app/utils/dependencies.py` - Auth dependencies
+  - `backend/app/main.py` - Register global dependencies
 - **Key Files**:
   - `app/utils/dependencies.py` - get_current_user, get_current_admin dependencies
   - `app/utils/jwt.py` - decode_token function
@@ -176,31 +176,31 @@ Create FastAPI dependency for JWT token validation. Extract user context from to
 **Priority**: P1 (High)
 **Epic**: EPIC-001
 **Estimate**: 8 SP
-**Status**: 🔴 Not Started
+**Status**: ✅ Complete
 
 **Description**:
 Implement RESTful API endpoints for workflow management: create, list, get single, update, delete. Includes multi-tenant filtering, step creation, screenshot references.
 
 **Acceptance Criteria**:
-- [ ] POST /api/workflows - Create workflow with steps
-- [ ] GET /api/workflows - List workflows (filtered by company_id)
-- [ ] GET /api/workflows/:id - Get single workflow with steps
-- [ ] PUT /api/workflows/:id - Update workflow metadata
-- [ ] DELETE /api/workflows/:id - Delete workflow (cascade steps)
-- [ ] All endpoints enforce multi-tenant isolation
-- [ ] Proper validation of input data (Pydantic schemas)
-- [ ] Returns 404 for non-existent workflows
-- [ ] Returns 403 for unauthorized access (different company)
-- [ ] Steps created in correct order (step_number)
-- [ ] Screenshot references validated
-- [ ] Tests for all CRUD operations
+- [x] POST /api/workflows - Create workflow with steps
+- [x] GET /api/workflows - List workflows (filtered by company_id)
+- [x] GET /api/workflows/:id - Get single workflow with steps
+- [x] PUT /api/workflows/:id - Update workflow metadata
+- [x] DELETE /api/workflows/:id - Delete workflow (cascade steps)
+- [x] All endpoints enforce multi-tenant isolation
+- [x] Proper validation of input data (Pydantic schemas)
+- [x] Returns 404 for non-existent workflows
+- [x] Returns 403 for unauthorized access (different company)
+- [x] Steps created in correct order (step_number)
+- [x] Screenshot references validated
+- [x] Tests for all CRUD operations
 
 **Technical Context**:
 - **Dependencies**: BE-001 (Database models), BE-003 (Auth middleware)
 - **Affected Components**:
-  - `packages/backend/app/api/workflows.py` - Workflow endpoints
-  - `packages/backend/app/schemas/workflow.py` - Workflow schemas
-  - `packages/backend/app/services/workflow.py` - Workflow business logic
+  - `backend/app/api/workflows.py` - Workflow endpoints
+  - `backend/app/schemas/workflow.py` - Workflow schemas
+  - `backend/app/services/workflow.py` - Workflow business logic
 - **Key Files**:
   - `app/api/workflows.py` - FastAPI router
   - `app/schemas/workflow.py` - CreateWorkflowRequest, WorkflowResponse, etc.
@@ -228,30 +228,30 @@ Implement RESTful API endpoints for workflow management: create, list, get singl
 **Priority**: P1 (High)
 **Epic**: EPIC-001
 **Estimate**: 5 SP
-**Status**: 🔴 Not Started
+**Status**: ✅ Complete
 
 **Description**:
 Implement screenshot upload endpoint with S3 storage, deduplication via SHA-256 hash, multipart form handling. Returns screenshot_id for client to reference in workflow steps.
 
 **Acceptance Criteria**:
-- [ ] POST /api/screenshots - Upload screenshot (multipart/form-data)
-- [ ] Validates image format (JPEG, PNG only)
-- [ ] Calculates SHA-256 hash of image
-- [ ] Checks if hash exists (deduplication)
-- [ ] If exists, returns existing screenshot_id
-- [ ] If new, uploads to S3
-- [ ] Stores record in screenshots table
-- [ ] Returns screenshot_id and storage_url
-- [ ] Generates S3 pre-signed URLs (15-min expiration)
-- [ ] Proper error handling for S3 failures
-- [ ] Tests with sample images
+- [x] POST /api/screenshots - Upload screenshot (multipart/form-data)
+- [x] Validates image format (JPEG, PNG only)
+- [x] Calculates SHA-256 hash of image
+- [x] Checks if hash exists (deduplication)
+- [x] If exists, returns existing screenshot_id
+- [x] If new, uploads to S3
+- [x] Stores record in screenshots table
+- [x] Returns screenshot_id and storage_url
+- [x] Generates S3 pre-signed URLs (15-min expiration)
+- [x] Proper error handling for S3 failures
+- [x] Tests with sample images
 
 **Technical Context**:
 - **Dependencies**: BE-001 (Database models), BE-003 (Auth middleware)
 - **Affected Components**:
-  - `packages/backend/app/api/screenshots.py` - Screenshot endpoints
-  - `packages/backend/app/schemas/screenshot.py` - Screenshot schemas
-  - `packages/backend/app/utils/s3.py` - S3 utilities
+  - `backend/app/api/screenshots.py` - Screenshot endpoints
+  - `backend/app/schemas/screenshot.py` - Screenshot schemas
+  - `backend/app/utils/s3.py` - S3 utilities
 - **Key Files**:
   - `app/api/screenshots.py` - POST /api/screenshots endpoint
   - `app/schemas/screenshot.py` - UploadScreenshotRequest, ScreenshotResponse
@@ -305,12 +305,12 @@ Configure Vite for Chrome extension build. Set up TypeScript config. Configure T
 **Technical Context**:
 - **Dependencies**: None (foundational task)
 - **Affected Components**:
-  - `packages/extension/` - All extension files
+  - `extension/` - All extension files
 - **Key Files**:
-  - `packages/extension/vite.config.ts` - Vite configuration
-  - `packages/extension/tsconfig.json` - TypeScript configuration
-  - `packages/extension/tailwind.config.js` - Tailwind configuration
-  - `packages/extension/postcss.config.js` - PostCSS configuration
+  - `extension/vite.config.ts` - Vite configuration
+  - `extension/tsconfig.json` - TypeScript configuration
+  - `extension/tailwind.config.js` - Tailwind configuration
+  - `extension/postcss.config.js` - PostCSS configuration
 - **Considerations**:
   - Use @crxjs/vite-plugin or custom Vite config for extension
   - Ensure content scripts use IIFE format (no module format for injected scripts)
@@ -322,7 +322,7 @@ Configure Vite for Chrome extension build. Set up TypeScript config. Configure T
 - npm run build creates production bundle
 - Extension loads in Chrome successfully
 - No console errors in extension pages
-- Documentation in packages/extension/README.md
+- Documentation in extension/README.md
 
 ---
 
@@ -349,7 +349,7 @@ Create shared TypeScript types matching backend Pydantic schemas. Build API clie
 **Technical Context**:
 - **Dependencies**: BE-002 (Auth endpoints), FE-001 (Build config)
 - **Affected Components**:
-  - `packages/extension/src/shared/` - Shared utilities
+  - `extension/src/shared/` - Shared utilities
 - **Key Files**:
   - `src/shared/types.ts` - Domain type definitions
   - `src/shared/api.ts` - API client class
@@ -392,7 +392,7 @@ Implement background service worker for message passing, screenshot capture, sta
 **Technical Context**:
 - **Dependencies**: FE-001 (Build config), FE-002 (API client)
 - **Affected Components**:
-  - `packages/extension/src/background/` - Background worker
+  - `extension/src/background/` - Background worker
 - **Key Files**:
   - `src/background/index.ts` - Main service worker
   - `src/background/messaging.ts` - Message handler
@@ -438,7 +438,7 @@ Build extension popup with login form, recording start/stop controls, workflow l
 **Technical Context**:
 - **Dependencies**: FE-002 (API client), BE-002 (Auth endpoints)
 - **Affected Components**:
-  - `packages/extension/src/popup/` - Popup UI
+  - `extension/src/popup/` - Popup UI
 - **Key Files**:
   - `src/popup/App.tsx` - Main popup component
   - `src/popup/components/LoginForm.tsx` - Login form
@@ -489,7 +489,7 @@ Implement content script for capturing user interactions (clicks, inputs, naviga
 **Technical Context**:
 - **Dependencies**: FE-003 (Background worker), BE-004 (Workflow endpoints)
 - **Affected Components**:
-  - `packages/extension/src/content/` - Content scripts
+  - `extension/src/content/` - Content scripts
 - **Key Files**:
   - `src/content/recorder.ts` - Main recorder logic
   - `src/content/utils/selectors.ts` - Selector extraction
@@ -544,11 +544,11 @@ Configure Vite + React for dashboard. Set up React Router for navigation. Config
 **Technical Context**:
 - **Dependencies**: None (foundational task)
 - **Affected Components**:
-  - `packages/dashboard/` - All dashboard files
+  - `dashboard/` - All dashboard files
 - **Key Files**:
-  - `packages/dashboard/vite.config.ts` - Vite config
-  - `packages/dashboard/tsconfig.json` - TypeScript config
-  - `packages/dashboard/tailwind.config.js` - Tailwind config
+  - `dashboard/vite.config.ts` - Vite config
+  - `dashboard/tsconfig.json` - TypeScript config
+  - `dashboard/tailwind.config.js` - Tailwind config
   - `src/App.tsx` - Main app with routes
   - `src/components/Layout.tsx` - Layout component
 - **Considerations**:
@@ -561,7 +561,7 @@ Configure Vite + React for dashboard. Set up React Router for navigation. Config
 - Routing works
 - Layout renders correctly
 - Production build successful
-- Documentation in packages/dashboard/README.md
+- Documentation in dashboard/README.md
 
 ---
 
@@ -590,8 +590,8 @@ Build login and signup pages. Form validation. API integration. Token storage in
 **Technical Context**:
 - **Dependencies**: FE-006 (Routing setup), BE-002 (Auth endpoints)
 - **Affected Components**:
-  - `packages/dashboard/src/pages/` - Auth pages
-  - `packages/dashboard/src/store/` - Auth store
+  - `dashboard/src/pages/` - Auth pages
+  - `dashboard/src/store/` - Auth store
 - **Key Files**:
   - `src/pages/Login.tsx` - Login page
   - `src/pages/Signup.tsx` - Signup page

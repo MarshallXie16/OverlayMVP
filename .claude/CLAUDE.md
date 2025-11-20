@@ -22,6 +22,37 @@ Before any significant task, engage in recursive self-prompting:
 4. **EXECUTE**: Implement systematically, one logical unit at a time
 5. **REFLECT**: After implementation, ask: "What did I learn? What should be documented? What edge cases remain?"
 
+### Working with Subagents
+
+**CRITICAL: When using parallel subagents for implementation:**
+
+1. **Pass Workflow Prompts**: ALWAYS pass the relevant workflow prompt to subagents
+   - For feature implementation: Pass `workflow_prompts/implement_user_stories.md`
+   - For code review: Pass `workflow_prompts/code_review.md`
+   - For sprint planning: Pass `workflow_prompts/sprint_planning.md`
+   - Include instruction: "Read and follow this workflow exactly"
+
+2. **Request Design Decision Reports**: Explicitly ask subagents to report back:
+   - "When complete, return a summary including:"
+   - "1. All files created/modified"
+   - "2. Key design decisions made and why"
+   - "3. Any deviations from spec (with justification)"
+   - "4. Test coverage summary"
+
+3. **Code Review After Subagent Work**: ALWAYS review subagent output using code_review.md
+   - Read key files yourself (don't blindly trust subagents)
+   - Run tests to verify functionality
+   - Check for security issues, performance problems
+   - Verify acceptance criteria are met
+   - Document any issues found in fixed_bugs.md
+
+4. **Don't Assume Quality**: Subagents may:
+   - Miss edge cases
+   - Implement inefficient solutions
+   - Skip important validations
+   - Misunderstand requirements
+   - Your job: Catch these issues through review
+
 ## Documentation System
 
 ### Primary Documents (User-Provided)

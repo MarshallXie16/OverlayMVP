@@ -24,7 +24,7 @@ cd OverlayMVP
 npm install
 
 # Set up Python virtual environment
-cd packages/backend
+cd backend
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
@@ -44,7 +44,7 @@ cp .env.example .env
 
 4. **Initialize the database**
 ```bash
-cd packages/backend
+cd backend
 # Run migrations (once implemented)
 alembic upgrade head
 ```
@@ -53,37 +53,37 @@ alembic upgrade head
 
 **Terminal 1: Backend API**
 ```bash
-cd packages/backend
+cd backend
 source venv/bin/activate
 uvicorn app.main:app --reload --port 8000
 ```
 
 **Terminal 2: Celery Worker** (for AI labeling)
 ```bash
-cd packages/backend
+cd backend
 source venv/bin/activate
 celery -A app.tasks worker --loglevel=info
 ```
 
 **Terminal 3: Web Dashboard**
 ```bash
-cd packages/dashboard
+cd dashboard
 npm run dev
 # Opens at http://localhost:3000
 ```
 
 **Terminal 4: Chrome Extension**
 ```bash
-cd packages/extension
+cd extension
 npm run dev
-# Builds to packages/extension/dist/
+# Builds to extension/dist/
 ```
 
 Then load the extension in Chrome:
 1. Open Chrome → `chrome://extensions/`
 2. Enable "Developer mode"
 3. Click "Load unpacked"
-4. Select `packages/extension/dist/` folder
+4. Select `extension/dist/` folder
 
 ### Testing the Setup
 
@@ -107,10 +107,9 @@ curl http://localhost:8000
 
 ```
 workflow-platform/
-├── packages/
-│   ├── extension/       # Chrome extension (TypeScript + React)
-│   ├── backend/         # FastAPI server (Python)
-│   └── dashboard/       # Web dashboard (React)
+├── extension/           # Chrome extension (TypeScript + React)
+├── backend/             # FastAPI server (Python)
+├── dashboard/           # Web dashboard (React)
 ├── design_docs/         # Product specifications
 ├── memory.md            # Agent's project memory
 ├── tasks.md             # Current sprint tasks
