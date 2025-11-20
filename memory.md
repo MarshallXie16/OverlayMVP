@@ -252,6 +252,24 @@ Required variables (see `.env.example`):
 - **Fix**: Added `src/test/**/*` and `**/*.test.ts` to tsconfig exclude
 - **Integration**: All components wire together correctly, build succeeds, no TypeScript errors
 
+### Dashboard Implementation (FE-006, FE-007)
+- **Date**: 2025-11-20
+- **Lesson**: Vite requires explicit type definitions for `import.meta.env`
+- **Solution**: Created `vite-env.d.ts` with `ImportMetaEnv` interface
+- **Lesson**: `HeadersInit` type doesn't support bracket notation in TypeScript strict mode
+- **Solution**: Use `Record<string, string>` for headers, then pass to RequestInit
+- **Lesson**: API client pattern reusable between extension and dashboard
+- **Implementation**: Similar retry logic, token management, error handling
+- **Lesson**: Form validation should be pure functions returning `{ isValid, error }`
+- **Pattern**: Separate validators for email, password, name, confirmation
+- **Lesson**: Protected routes need loading states during auth check
+- **Implementation**: ProtectedRoute shows spinner while checkAuth() runs
+- **Lesson**: Zustand store pattern consistent across extension and dashboard
+- **Implementation**: Same action-based API, clear separation of concerns
+- **Test Coverage**: 15 tests for validation utilities (100% passing)
+- **Build**: Production build succeeds (191 KB JS, 14 KB CSS)
+- **Files Created**: 18 new files (~1,800 lines of code)
+
 ---
 
 ## Code Patterns & Conventions

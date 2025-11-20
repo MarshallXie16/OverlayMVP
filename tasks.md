@@ -526,20 +526,20 @@ Implement content script for capturing user interactions (clicks, inputs, naviga
 **Priority**: P1 (High)
 **Epic**: EPIC-003
 **Estimate**: 2 SP
-**Status**: 🔴 Not Started
+**Status**: ✅ Complete
 
 **Description**:
 Configure Vite + React for dashboard. Set up React Router for navigation. Configure Tailwind CSS. Create basic layout with navigation.
 
 **Acceptance Criteria**:
-- [ ] Vite dev server runs
-- [ ] React Router configured
-- [ ] Tailwind CSS working
-- [ ] Routes: /login, /dashboard, /workflows/:id
-- [ ] Basic layout component (navbar, content area)
-- [ ] TypeScript compilation working
-- [ ] No console errors
-- [ ] Production build works
+- [x] Vite dev server runs
+- [x] React Router configured
+- [x] Tailwind CSS working
+- [x] Routes: /login, /dashboard, /workflows/:id
+- [x] Basic layout component (navbar, content area)
+- [x] TypeScript compilation working
+- [x] No console errors
+- [x] Production build works
 
 **Technical Context**:
 - **Dependencies**: None (foundational task)
@@ -570,22 +570,22 @@ Configure Vite + React for dashboard. Set up React Router for navigation. Config
 **Priority**: P1 (High)
 **Epic**: EPIC-003
 **Estimate**: 3 SP
-**Status**: 🔴 Not Started
+**Status**: ✅ Complete
 
 **Description**:
 Build login and signup pages. Form validation. API integration. Token storage in localStorage. Redirect after authentication.
 
 **Acceptance Criteria**:
-- [ ] Login page with email/password form
-- [ ] Signup page with email/password/company invite form
-- [ ] Client-side validation (email format, password strength)
-- [ ] API integration with backend auth endpoints
-- [ ] Display server errors (invalid credentials, etc.)
-- [ ] Store JWT token in localStorage
-- [ ] Redirect to /dashboard after login
-- [ ] "Remember me" functionality
-- [ ] Loading states during API calls
-- [ ] Tests for form validation
+- [x] Login page with email/password form
+- [x] Signup page with email/password/company invite form
+- [x] Client-side validation (email format, password strength)
+- [x] API integration with backend auth endpoints
+- [x] Display server errors (invalid credentials, etc.)
+- [x] Store JWT token in localStorage
+- [x] Redirect to /dashboard after login
+- [x] "Remember me" functionality
+- [x] Loading states during API calls
+- [x] Tests for form validation
 
 **Technical Context**:
 - **Dependencies**: FE-006 (Routing setup), BE-002 (Auth endpoints)

@@ -576,6 +576,131 @@ Sprint 2 and beyond will be documented here.
 
 ---
 
+### FE-006: Dashboard Build & Routing Setup (2 SP)
+**Completed**: 2025-11-20
+**Time Taken**: ~1.5 hours
+
+**Implementation Summary**:
+- Configured Vite + React + TypeScript with strict mode
+- Set up React Router v6 with protected routes
+- Configured Tailwind CSS with custom primary color palette
+- Created Layout component with responsive navbar
+- Created ProtectedRoute component with loading states
+- Set up routes: /login, /signup, /dashboard, /workflows/:id
+- Created vite.config.ts with API proxy to backend
+- Created comprehensive tsconfig.json and vitest.config.ts
+
+**Files Created** (10 files):
+1. `vite.config.ts`, `tsconfig.json`, `tsconfig.node.json`
+2. `tailwind.config.js`, `postcss.config.js`
+3. `vitest.config.ts`, `index.html`
+4. `src/vite-env.d.ts`
+5. `src/components/Layout.tsx`
+6. `src/components/ProtectedRoute.tsx`
+
+**Key Decisions**:
+- React Router v6 for modern routing API
+- Protected routes with loading states
+- Vite dev server proxies `/api` to backend
+- Tailwind for rapid UI development
+
+**Challenges**:
+- TypeScript required explicit `import.meta.env` types → Created vite-env.d.ts
+
+**Acceptance Criteria**: 8/8 ✅
+
+---
+
+### FE-007: Dashboard Authentication Pages (3 SP)
+**Completed**: 2025-11-20
+**Time Taken**: ~2 hours
+
+**Implementation Summary**:
+- Login/Signup pages with full form validation
+- API client with retry logic and token management
+- Zustand auth store for state management
+- Form validation utilities (email, password, name)
+- JWT token storage in localStorage with expiration
+- Loading states with animated spinners
+- Dashboard and WorkflowDetail pages
+
+**Files Created** (12 files):
+1. `src/api/types.ts` - TypeScript types
+2. `src/api/client.ts` - HTTP client
+3. `src/store/auth.ts` - Auth store
+4. `src/utils/validation.ts` + tests
+5. `src/pages/Login.tsx`, `Signup.tsx`
+6. `src/pages/Dashboard.tsx`, `WorkflowDetail.tsx`
+7. `src/App.tsx`, `main.tsx`, `index.css`
+
+**Tests**: 15 tests (validation utilities, 100% passing)
+
+**Key Decisions**:
+- API client pattern reused from extension
+- Pure validation functions for testability
+- Exponential backoff retry (1s, 2s, 4s)
+- No retry for 4xx errors (fail fast)
+
+**Challenges**:
+- `HeadersInit` type issue → Used `Record<string, string>`
+
+**Acceptance Criteria**: 10/10 ✅
+
+**Production Build**:
+- JS: 191 KB (gzipped: 60 KB)
+- CSS: 14 KB (gzipped: 3.5 KB)
+- Zero TypeScript errors
+
+**Total**: ~1,800 lines of code, 18 files
+
+---
+
+## Sprint 1 Summary
+
+**Completed**: 2025-11-20
+**Total Story Points**: 53 SP (26 backend + 27 frontend)
+**Sprint Goal**: Build complete recording infrastructure and dashboard foundation ✅
+
+**Backend** (26 SP):
+- BE-001: Database models (5 SP)
+- BE-002: Auth endpoints (5 SP)
+- BE-003: Workflow CRUD API (8 SP)
+- BE-004: Step management (5 SP)
+- BE-005: Screenshot management (3 SP)
+
+**Extension** (22 SP):
+- FE-001: Build configuration (2 SP)
+- FE-002: Shared types & API client (2 SP)
+- FE-003: Background service worker (3 SP)
+- FE-004: Popup UI (5 SP)
+- FE-005: Content script recorder (8 SP)
+
+**Dashboard** (5 SP):
+- FE-006: Routing setup (2 SP)
+- FE-007: Auth pages (3 SP)
+
+**Tests Written**: 54 total
+- Backend: 0 (deferred to Sprint 2)
+- Extension: 39 (storage + API client)
+- Dashboard: 15 (validation utilities)
+
+**Code Metrics**:
+- Backend: ~2,500 lines
+- Extension: ~3,600 lines
+- Dashboard: ~1,800 lines
+- **Total**: ~7,900 lines of production code
+
+**Key Deliverables**:
+✅ Complete recording flow (extension → backend)
+✅ User authentication (signup/login)
+✅ Workflow management API
+✅ Dashboard with auth and workflow viewing
+✅ Comprehensive documentation
+
+**Sprint 1 Complete** - Ready for Sprint 2 (AI labeling, walkthrough mode)
+
+---
+
 ## Future Sprints
 
-Sprint 2 work will focus on AI labeling integration, web dashboard, and walkthrough mode.
+Sprint 2 work will focus on AI labeling integration, walkthrough mode, and enhanced testing.
