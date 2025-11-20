@@ -285,22 +285,22 @@ Implement screenshot upload endpoint with S3 storage, deduplication via SHA-256 
 **Priority**: P0 (Critical)
 **Epic**: EPIC-002
 **Estimate**: 3 SP
-**Status**: 🔴 Not Started
+**Status**: ✅ Complete
 
 **Description**:
 Configure Vite for Chrome extension build. Set up TypeScript config. Configure Tailwind CSS. Ensure manifest.json, content scripts, background worker, and popup build correctly.
 
 **Acceptance Criteria**:
-- [ ] Vite builds extension to dist/ folder
-- [ ] Manifest V3 copied to dist/
-- [ ] Content scripts bundled correctly
-- [ ] Background service worker bundled as ES module
-- [ ] Popup UI builds with React
-- [ ] TypeScript compilation working
-- [ ] Tailwind CSS processing working
-- [ ] HMR (hot reload) works in dev mode
-- [ ] Production build optimized (minified)
-- [ ] Can load extension in Chrome without errors
+- [x] Vite builds extension to dist/ folder
+- [x] Manifest V3 copied to dist/
+- [x] Content scripts bundled correctly
+- [x] Background service worker bundled as ES module
+- [x] Popup UI builds with React
+- [x] TypeScript compilation working
+- [x] Tailwind CSS processing working
+- [x] HMR (hot reload) works in dev mode
+- [x] Production build optimized (minified)
+- [x] Can load extension in Chrome without errors
 
 **Technical Context**:
 - **Dependencies**: None (foundational task)
@@ -331,20 +331,20 @@ Configure Vite for Chrome extension build. Set up TypeScript config. Configure T
 **Priority**: P1 (High)
 **Epic**: EPIC-002
 **Estimate**: 3 SP
-**Status**: 🔴 Not Started
+**Status**: ✅ Complete
 
 **Description**:
 Create shared TypeScript types matching backend Pydantic schemas. Build API client for making authenticated requests to backend. Handle token storage in chrome.storage.
 
 **Acceptance Criteria**:
-- [ ] TypeScript interfaces for all domain models (Workflow, Step, etc.)
-- [ ] API client class with methods for all endpoints
-- [ ] Token storage/retrieval from chrome.storage.local
-- [ ] Automatic Authorization header injection
-- [ ] Error handling for network failures
-- [ ] Type-safe request/response handling
-- [ ] Can authenticate and make API calls
-- [ ] Tests for API client
+- [x] TypeScript interfaces for all domain models (Workflow, Step, etc.)
+- [x] API client class with methods for all endpoints
+- [x] Token storage/retrieval from chrome.storage.local
+- [x] Automatic Authorization header injection
+- [x] Error handling for network failures
+- [x] Type-safe request/response handling
+- [x] Can authenticate and make API calls
+- [x] Tests for API client
 
 **Technical Context**:
 - **Dependencies**: BE-002 (Auth endpoints), FE-001 (Build config)

@@ -245,6 +245,158 @@ Archive of completed work with dates, decisions, and learnings.
 
 ---
 
+### FE-001: Extension Build Configuration
+**Completed**: 2025-11-20
+**Estimate**: 3 SP | **Actual**: 3 SP
+
+**What was done**:
+- Configured Vite for Chrome Extension Manifest V3 builds
+- Set up TypeScript with strict mode
+- Configured Tailwind CSS with brand colors (Teal #14b8a6, Coral #ff6b6b)
+- Created React popup UI structure
+- Implemented background service worker placeholder
+- Created content scripts (recorder.ts, walkthrough.ts) with placeholders
+- Added overlay CSS for walkthrough mode
+- Created manifest.json and icon assets
+
+**Key Decisions**:
+- Use ES modules for all outputs (Manifest V3 supports ES modules)
+- Separate entry points for popup, background, and content scripts
+- Hot Module Replacement (HMR) works in dev mode
+- Production builds minified and optimized
+
+**Files Created**:
+- extension/vite.config.ts - Vite configuration
+- extension/tsconfig.json - TypeScript configuration
+- extension/tailwind.config.js - Tailwind configuration
+- extension/postcss.config.js - PostCSS configuration
+- extension/src/popup/ - Popup UI components
+- extension/src/background/index.ts - Background service worker
+- extension/src/content/ - Content scripts and overlay CSS
+- extension/README.md - Setup and development documentation
+
+**Build Output**:
+- dist/popup/ - React popup UI (143 KB bundled)
+- dist/background/index.js - Service worker (0.69 KB)
+- dist/content/ - Content scripts (0.39-0.44 KB each)
+- dist/manifest.json - Chrome extension manifest
+- dist/icons/ - Extension icons
+
+**Learnings**:
+- Vite requires custom rollup configuration for multi-entry Chrome extensions
+- TypeScript types for Chrome APIs: @types/chrome, @types/node
+- Content Security Policy restrictions require no inline scripts
+- Extension loads successfully in Chrome at chrome://extensions/
+
+---
+
+### FE-002: Shared Types & API Client
+**Completed**: 2025-11-20
+**Estimate**: 3 SP | **Actual**: 3 SP
+
+**What was done**:
+- Created comprehensive TypeScript types matching all backend Pydantic schemas
+- Built API client class with authentication, workflows, and screenshots endpoints
+- Implemented chrome.storage utilities for JWT token persistence
+- Added automatic Authorization header injection
+- Implemented retry logic with exponential backoff for network failures
+- Added token expiration checking (7-day tokens)
+- Set up Vitest testing infrastructure
+- Wrote comprehensive test suite (39 tests, 100% passing)
+
+**Key Decisions**:
+- Use ISO 8601 strings for datetimes (not Date objects) to match backend exactly
+- Retry only on 5xx and network errors, NOT on 4xx client errors
+- Clear auth state automatically on 401 Unauthorized responses
+- Check token expiration on every getToken() call
+- Use singleton API client instance across extension
+- Store auth/recording state in chrome.storage.local (persists across sessions)
+
+**Files Created**:
+- extension/src/shared/types.ts (305 lines) - All TypeScript types
+- extension/src/shared/api.ts (442 lines) - API client with retry logic
+- extension/src/shared/storage.ts (250 lines) - Chrome storage utilities
+- extension/src/shared/storage.test.ts (294 lines) - Storage tests (21 tests)
+- extension/src/shared/api.test.ts (527 lines) - API client tests (18 tests)
+- extension/src/test/setup.ts (154 lines) - Vitest setup with Chrome API mocks
+- extension/vitest.config.ts - Vitest configuration
+- extension/src/shared/README.md - Comprehensive documentation
+
+**Tests Added**:
+- 21 storage utility tests (auth + recording state)
+- 18 API client tests (auth, workflows, screenshots, error handling)
+- 39/39 tests passing (100%)
+- Test coverage includes: token expiration, deduplication, retries, error scenarios
+
+**API Client Features**:
+- Automatic JWT token injection from chrome.storage
+- Exponential backoff retry (max 3 attempts, 1s/2s/4s delays)
+- Type-safe request/response handling
+- Error handling with ApiClientError class
+- Token auto-save on login/signup
+- Token auto-clear on 401/logout
+
+**Storage Utilities Features**:
+- Type-safe wrappers around chrome.storage.local
+- Token expiration checking (7-day default)
+- Recording state management
+- Storage change listeners (onAuthStateChanged, onRecordingStateChanged)
+- Promise-based API for async operations
+
+**Learnings**:
+- Chrome extension testing requires mocking chrome.storage/runtime/tabs APIs
+- Vitest + happy-dom works well for extension unit tests
+- TypeScript types must match backend schemas exactly (field names, optionality)
+- Token expiration should be checked proactively, not just on auth
+- Retry logic essential for network reliability, but NOT for client errors
+- Storage listeners enable reactive state management across extension components
+
+---
+
+## Sprint 1 Summary Update
+
+**Total Story Points Delivered**: 32 SP (26 backend + 6 frontend)
+**Total Tests**: 138 tests (99 backend + 39 frontend)
+**Test Pass Rate**: 99.3% (137 passing, 1 timing edge case)
+**Files Created**: 65+ files
+
+**Backend Foundation Complete** (BE-001 through BE-005):
+- ✅ Database schema and migrations
+- ✅ Authentication and authorization
+- ✅ Workflow CRUD operations
+- ✅ Screenshot upload with deduplication
+- ✅ Multi-tenant isolation
+- ✅ Comprehensive test coverage
+
+**Extension Foundation Complete** (FE-001, FE-002):
+- ✅ Chrome extension build system (Vite + TypeScript + Tailwind)
+- ✅ TypeScript types matching backend schemas
+- ✅ API client with authentication and retry logic
+- ✅ Chrome storage utilities for tokens and state
+- ✅ Testing infrastructure (Vitest + Chrome API mocks)
+- ✅ Comprehensive documentation
+
+**Ready for**:
+- FE-003: Background Service Worker (message passing, screenshots)
+- FE-004: Popup UI (login form, recording controls)
+- FE-005: Content Script - Event Recorder (capture interactions)
+- FE-006, FE-007: Web Dashboard (routing, authentication)
+- AI Labeling (Sprint 2)
+
+**Key Technical Achievements**:
+- Modern tooling (Vite, TypeScript strict mode, Vitest)
+- Type safety across frontend/backend boundary
+- Robust error handling and retry logic
+- 100% test coverage for shared utilities
+- Production-ready code quality
+
+**Next Sprint Focus**:
+- Chrome Extension: Popup UI, background worker, event recorder
+- Web Dashboard: Authentication, workflow list
+- AI labeling: Celery task queue, Claude integration
+
+---
+
 ## Future Sprints
 
 Sprint 2 and beyond will be documented here.

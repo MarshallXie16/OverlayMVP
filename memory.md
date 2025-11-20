@@ -222,6 +222,18 @@ Required variables (see `.env.example`):
 - **Lesson**: Start with comprehensive .gitignore to avoid committing secrets/databases
 - **Action**: Created .gitignore before any code
 
+### Extension Development (FE-002)
+- **Date**: 2025-11-20
+- **Lesson**: Chrome extension testing requires mocking chrome APIs carefully
+- **Solution**: Created comprehensive test setup with Vitest + happy-dom, mocked chrome.storage/runtime/tabs APIs
+- **Lesson**: TypeScript types should match backend Pydantic schemas exactly (field names, optionality, types)
+- **Action**: Created `types.ts` with all backend schemas; use ISO 8601 strings for datetimes (not Date objects)
+- **Lesson**: API client needs robust retry logic for network failures, but NOT for client errors (4xx)
+- **Implementation**: Exponential backoff for 5xx/network errors, immediate failure for 4xx
+- **Lesson**: Token expiration should be checked on every `getToken()` call, not just on auth
+- **Implementation**: `getToken()` automatically clears expired tokens before returning null
+- **Test Coverage**: 39 tests (21 storage + 18 API client), 100% passing
+
 ---
 
 ## Code Patterns & Conventions
