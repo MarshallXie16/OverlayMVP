@@ -234,6 +234,24 @@ Required variables (see `.env.example`):
 - **Implementation**: `getToken()` automatically clears expired tokens before returning null
 - **Test Coverage**: 39 tests (21 storage + 18 API client), 100% passing
 
+### Extension Core Features (FE-003, FE-004, FE-005)
+- **Date**: 2025-11-20
+- **Lesson**: Parallel subagent implementation works well for large features (3 features, 16 SP, ~3000 lines)
+- **Approach**: Launched 3 specialized agents with clear specs, consolidated and tested integration
+- **Lesson**: Background service workers must be stateless (Manifest V3 limitation)
+- **Solution**: Persist all state to chrome.storage, design for interrupted recordings
+- **Lesson**: Content scripts should use capture phase listeners for reliable event interception
+- **Implementation**: `addEventListener(..., true)` to catch events before page handlers
+- **Lesson**: Dynamic framework IDs (React `:r[0-9]+:`, MUI, Ember) must be filtered out
+- **Solution**: Pattern matching to reject unstable selectors, fall back to CSS/XPath
+- **Lesson**: IndexedDB better than chrome.storage for buffering recorded steps (no 5MB limit)
+- **Implementation**: Created indexeddb.ts wrapper with proper error handling
+- **Lesson**: Zustand works great for extension popup state management (simpler than Redux)
+- **Implementation**: Created authStore and recordingStore with clean actions
+- **Lesson**: TypeScript test paths must be excluded from build (tsconfig exclude)
+- **Fix**: Added `src/test/**/*` and `**/*.test.ts` to tsconfig exclude
+- **Integration**: All components wire together correctly, build succeeds, no TypeScript errors
+
 ---
 
 ## Code Patterns & Conventions

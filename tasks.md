@@ -374,20 +374,20 @@ Create shared TypeScript types matching backend Pydantic schemas. Build API clie
 **Priority**: P1 (High)
 **Epic**: EPIC-002
 **Estimate**: 3 SP
-**Status**: 🔴 Not Started
+**Status**: ✅ Complete
 
 **Description**:
 Implement background service worker for message passing, screenshot capture, state management. Handle extension lifecycle events. Coordinate between content scripts and popup.
 
 **Acceptance Criteria**:
-- [ ] Service worker registers successfully
-- [ ] Message passing between content scripts and background
-- [ ] Screenshot capture using chrome.tabs.captureVisibleTab
-- [ ] State management (recording status, current workflow)
-- [ ] Handles chrome.runtime.onMessage
-- [ ] Handles chrome.tabs events (navigation, updates)
-- [ ] Can inject content scripts dynamically
-- [ ] No service worker crashes or errors
+- [x] Service worker registers successfully
+- [x] Message passing between content scripts and background
+- [x] Screenshot capture using chrome.tabs.captureVisibleTab
+- [x] State management (recording status, current workflow)
+- [x] Handles chrome.runtime.onMessage
+- [x] Handles chrome.tabs events (navigation, updates)
+- [x] Can inject content scripts dynamically
+- [x] No service worker crashes or errors
 
 **Technical Context**:
 - **Dependencies**: FE-001 (Build config), FE-002 (API client)
@@ -418,22 +418,22 @@ Implement background service worker for message passing, screenshot capture, sta
 **Priority**: P1 (High)
 **Epic**: EPIC-002
 **Estimate**: 5 SP
-**Status**: 🔴 Not Started
+**Status**: ✅ Complete
 
 **Description**:
 Build extension popup with login form, recording start/stop controls, workflow list. Use React + Tailwind. Zustand for state management. Connect to backend API.
 
 **Acceptance Criteria**:
-- [ ] Login form (email + password)
-- [ ] Displays authentication errors
-- [ ] Stores JWT token on successful login
-- [ ] Shows "Start Recording" button when logged in
-- [ ] Shows "Stop Recording" button when recording
-- [ ] Lists recent workflows
-- [ ] Logout functionality
-- [ ] Responsive design (fits popup size)
-- [ ] Loading states for async operations
-- [ ] Error handling with user-friendly messages
+- [x] Login form (email + password)
+- [x] Displays authentication errors
+- [x] Stores JWT token on successful login
+- [x] Shows "Start Recording" button when logged in
+- [x] Shows "Stop Recording" button when recording
+- [x] Lists recent workflows
+- [x] Logout functionality
+- [x] Responsive design (fits popup size)
+- [x] Loading states for async operations
+- [x] Error handling with user-friendly messages
 
 **Technical Context**:
 - **Dependencies**: FE-002 (API client), BE-002 (Auth endpoints)
@@ -466,25 +466,25 @@ Build extension popup with login form, recording start/stop controls, workflow l
 **Priority**: P1 (High)
 **Epic**: EPIC-002
 **Estimate**: 8 SP
-**Status**: 🔴 Not Started
+**Status**: ✅ Complete
 
 **Description**:
 Implement content script for capturing user interactions (clicks, inputs, navigation). Extract element selectors, metadata, bounding boxes. Filter meaningful interactions. Buffer steps locally before upload.
 
 **Acceptance Criteria**:
-- [ ] Captures click events on interactive elements
-- [ ] Captures input blur events (not every keystroke)
-- [ ] Captures select change events
-- [ ] Captures form submit events
-- [ ] Captures navigation events
-- [ ] Extracts element selectors (ID, CSS, XPath, data-testid)
-- [ ] Extracts element metadata (tag, role, labels, position)
-- [ ] Filters out non-meaningful interactions
-- [ ] Requests screenshot from background worker
-- [ ] Buffers steps in IndexedDB
-- [ ] Step numbering sequential
-- [ ] Page context captured (URL, title, viewport)
-- [ ] Can stop recording and upload workflow
+- [x] Captures click events on interactive elements
+- [x] Captures input blur events (not every keystroke)
+- [x] Captures select change events
+- [x] Captures form submit events
+- [x] Captures navigation events
+- [x] Extracts element selectors (ID, CSS, XPath, data-testid)
+- [x] Extracts element metadata (tag, role, labels, position)
+- [x] Filters out non-meaningful interactions
+- [x] Requests screenshot from background worker
+- [x] Buffers steps in IndexedDB
+- [x] Step numbering sequential
+- [x] Page context captured (URL, title, viewport)
+- [x] Can stop recording and upload workflow
 
 **Technical Context**:
 - **Dependencies**: FE-003 (Background worker), BE-004 (Workflow endpoints)

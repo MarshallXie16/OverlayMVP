@@ -217,8 +217,9 @@ export function onAuthStateChanged(
   callback: (authState: AuthState | null) => void
 ): void {
   chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName === 'local' && changes[STORAGE_KEYS.AUTH]) {
-      const newValue = changes[STORAGE_KEYS.AUTH].newValue as AuthState | undefined;
+    const authChange = changes[STORAGE_KEYS.AUTH];
+    if (areaName === 'local' && authChange) {
+      const newValue = authChange.newValue as AuthState | undefined;
       callback(newValue || null);
     }
   });
@@ -231,8 +232,9 @@ export function onRecordingStateChanged(
   callback: (recordingState: RecordingState | null) => void
 ): void {
   chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName === 'local' && changes[STORAGE_KEYS.RECORDING]) {
-      const newValue = changes[STORAGE_KEYS.RECORDING].newValue as
+    const recordingChange = changes[STORAGE_KEYS.RECORDING];
+    if (areaName === 'local' && recordingChange) {
+      const newValue = recordingChange.newValue as
         | RecordingState
         | undefined;
       callback(newValue || null);
