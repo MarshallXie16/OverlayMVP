@@ -1,7 +1,26 @@
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
+
+const renamePopupHtml = (): Plugin => ({
+  name: 'rename-popup-html',
+  apply: 'build',
+  enforce: 'post',
+  generateBundle(_options, bundle) {
+    const originalFileName = 'src/popup/index.html';
+    const popupHtml = bundle[originalFileName];
+
+    if (popupHtml && popupHtml.type === 'asset') {
+      delete bundle[originalFileName];
+      bundle['popup/index.html'] = {
+        ...popupHtml,
+        fileName: 'popup/index.html',
+        name: 'popup/index.html',
+      };
+    }
+  },
+});
 
 /**
  * Vite configuration for Chrome Extension (Manifest V3)
@@ -25,6 +44,7 @@ export default defineConfig({
         },
       ],
     }),
+    renamePopupHtml(),
   ],
 
   build: {
