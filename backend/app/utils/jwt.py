@@ -11,6 +11,9 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 import os
 
+from app.db.session import get_db
+from app.models.user import User
+
 # JWT Configuration
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "dev-secret-key-change-in-production")
 ALGORITHM = "HS256"
@@ -106,7 +109,7 @@ def verify_token(token: str) -> bool:
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(lambda: None),  # Will be overridden when used
+    db: Session = Depends(get_db),
 ):
     """
     FastAPI dependency to extract and validate the current user from JWT token.
@@ -121,13 +124,6 @@ async def get_current_user(
     Raises:
         HTTPException: If token is invalid or user not found
     """
-    from app.db.session import get_db
-    from app.models.user import User
-
-    # Get database session if not provided
-    if db is None:
-        db = next(get_db())
-
     token = credentials.credentials
 
     try:
