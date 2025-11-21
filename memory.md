@@ -270,6 +270,31 @@ Required variables (see `.env.example`):
 - **Build**: Production build succeeds (191 KB JS, 14 KB CSS)
 - **Files Created**: 18 new files (~1,800 lines of code)
 
+### Testing & Build Issues (Post-MVP Implementation)
+- **Date**: 2025-11-21
+- **Lesson**: **Build dependencies MUST be in package.json when using them in vite config**
+- **Issue**: Used `vite-plugin-static-copy` in vite.config.ts but forgot to add to devDependencies
+- **Consequence**: Extension dist/ missing manifest.json, overlay.css - Chrome rejected extension
+- **Solution**: Add `vite-plugin-static-copy` to extension/package.json, configure to copy all static files
+- **Prevention**: Pre-commit checklist to verify new imports have corresponding dependencies
+- **Lesson**: **FastAPI dependency injection must respect test overrides**
+- **Issue**: `get_current_user()` had `db: Session = Depends(lambda: None)` then manually created session with `next(get_db())`
+- **Consequence**: Test database overrides ignored, causing "User not found" errors in tests
+- **Solution**: Changed to `db: Session = Depends(get_db)` to properly use dependency injection
+- **Prevention**: Always use `Depends(get_db)` pattern, never manually call `next(get_db())`
+- **Lesson**: **Test coverage gaps allow bugs to slip through**
+- **Issue**: Only 39 tests (mostly shared utilities), zero API endpoint tests, no content script tests
+- **Consequence**: Build failures and API issues not caught until manual testing
+- **Solution**: Added 11 backend API tests (auth endpoints), improved extension tests to 48 total
+- **Test Coverage Now**: Extension 48 tests, Backend 11 tests (all passing)
+- **Lesson**: **TDD prevents manual testing cycles**
+- **Action**: Created PRE_COMMIT_CHECKLIST.md with comprehensive testing steps
+- **Pattern**: Run `npm test` and `pytest` before every commit
+- **Key Files**:
+  - `/home/user/OverlayMVP/backend/tests/test_api_auth.py` - Auth endpoint tests
+  - `/home/user/OverlayMVP/extension/src/content/utils/selectors.test.ts` - Selector extraction tests
+  - `/home/user/OverlayMVP/PRE_COMMIT_CHECKLIST.md` - Pre-commit verification steps
+
 ---
 
 ## Code Patterns & Conventions
