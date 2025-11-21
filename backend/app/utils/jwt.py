@@ -6,12 +6,18 @@ Tokens have 7-day expiration and include user_id, company_id, role, and email.
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 from jose import JWTError, jwt
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from sqlalchemy.orm import Session
 import os
 
 # JWT Configuration
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "dev-secret-key-change-in-production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_DAYS = 7
+
+# HTTP Bearer security scheme
+security = HTTPBearer()
 
 
 def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
@@ -96,3 +102,58 @@ def verify_token(token: str) -> bool:
         return True
     except JWTError:
         return False
+
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(lambda: None),  # Will be overridden when used
+):
+    """
+    FastAPI dependency to extract and validate the current user from JWT token.
+
+    Args:
+        credentials: HTTP Bearer credentials
+        db: Database session
+
+    Returns:
+        User object from database
+
+    Raises:
+        HTTPException: If token is invalid or user not found
+    """
+    from app.db.session import get_db
+    from app.models.user import User
+
+    # Get database session if not provided
+    if db is None:
+        db = next(get_db())
+
+    token = credentials.credentials
+
+    try:
+        payload = decode_token(token)
+        user_id: int = payload.get("user_id")
+
+        if user_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail={"code": "INVALID_TOKEN", "message": "Invalid authentication token"},
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "INVALID_TOKEN", "message": "Invalid authentication token"},
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    user = db.query(User).filter(User.id == user_id).first()
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "USER_NOT_FOUND", "message": "User not found"},
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    return user

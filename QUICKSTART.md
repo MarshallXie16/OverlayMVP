@@ -77,6 +77,7 @@ npm run dev
    - Name: Test User
    - Email: test@example.com
    - Password: password123
+   - Company Name: Test Company (REQUIRED)
 4. **Sign up** → You'll see the dashboard
 
 5. **Click extension icon** in Chrome

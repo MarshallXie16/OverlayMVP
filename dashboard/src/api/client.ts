@@ -9,7 +9,6 @@ import type {
   TokenResponse,
   WorkflowListResponse,
   WorkflowResponse,
-  ApiError,
 } from './types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -97,12 +96,27 @@ class ApiClient {
 
         // Handle HTTP errors
         if (!response.ok) {
-          const errorData: ApiError = await response.json().catch(() => ({
-            error: {
-              code: 'UNKNOWN_ERROR',
-              message: 'An unknown error occurred',
-            },
-          }));
+          let errorMessage = 'An unknown error occurred';
+
+          try {
+            const errorData = await response.json();
+
+            // FastAPI HTTPException returns { detail: { code, message } }
+            if (errorData.detail && typeof errorData.detail === 'object') {
+              errorMessage = errorData.detail.message || errorData.detail.code || errorMessage;
+            }
+            // Or sometimes just { detail: "error message" }
+            else if (errorData.detail && typeof errorData.detail === 'string') {
+              errorMessage = errorData.detail;
+            }
+            // Fallback to any message field
+            else if (errorData.message) {
+              errorMessage = errorData.message;
+            }
+          } catch {
+            // If JSON parsing fails, use default message
+            errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+          }
 
           // Don't retry client errors (4xx)
           if (response.status >= 400 && response.status < 500) {
@@ -110,7 +124,7 @@ class ApiClient {
             if (response.status === 401) {
               this.clearToken();
             }
-            throw new Error(errorData.error.message);
+            throw new Error(errorMessage);
           }
 
           // Retry server errors (5xx)
@@ -119,7 +133,7 @@ class ApiClient {
             continue;
           }
 
-          throw new Error(errorData.error.message);
+          throw new Error(errorMessage);
         }
 
         // Success

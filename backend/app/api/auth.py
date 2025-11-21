@@ -5,9 +5,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.schemas.auth import SignupRequest, LoginRequest, TokenResponse
+from app.schemas.auth import SignupRequest, LoginRequest, TokenResponse, UserResponse
 from app.services.auth import create_user, authenticate_user, get_user_response
-from app.utils.jwt import create_access_token
+from app.utils.jwt import create_access_token, get_current_user
+from app.models.user import User
 
 router = APIRouter()
 
@@ -102,3 +103,24 @@ async def login(login_data: LoginRequest, db: Session = Depends(get_db)):
         token_type="bearer",
         user=get_user_response(user),
     )
+
+
+@router.get("/me", response_model=UserResponse)
+async def get_me(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get current user information from JWT token.
+
+    **Authentication Required:**
+    - Requires valid JWT token in Authorization header
+
+    **Returns:**
+    - User data including company information
+
+    **Errors:**
+    - 401: Invalid or missing token
+    - 401: User not found
+    """
+    return get_user_response(current_user)

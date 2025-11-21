@@ -283,7 +283,7 @@ Now let's test the complete workflow from signup to recording.
    - **Email**: `test@example.com`
    - **Password**: `password123`
    - **Confirm Password**: `password123`
-   - **Company Name**: `Test Company` (optional)
+   - **Company Name**: `Test Company` ← **REQUIRED** (creates your company)
    - **Invite Token**: (leave empty)
 4. Click **"Create account"**
 
