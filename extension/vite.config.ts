@@ -19,6 +19,10 @@ export default defineConfig({
           src: 'public/icons/*',
           dest: 'icons',
         },
+        {
+          src: 'src/content/overlay.css',
+          dest: 'content',
+        },
       ],
     }),
   ],
