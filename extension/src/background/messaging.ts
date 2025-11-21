@@ -135,29 +135,46 @@ async function handleStartRecording(
  * Stops recording and uploads workflow to backend
  */
 async function handleStopRecording(
-  _message: ExtensionMessage,
+  message: ExtensionMessage,
   sendResponse: (response?: any) => void
 ): Promise<void> {
   try {
-    // Stop recording
+    // Get recording state
     const recordingState = await stopRecording();
 
     if (!recordingState) {
       throw new Error('No active recording to stop');
     }
 
-    // Upload workflow to backend
-    console.log(`Uploading workflow "${recordingState.workflowName}" with ${recordingState.steps.length} steps`);
+    // Get steps and screenshots from message payload (sent from content script)
+    const payload = message.payload || {};
+    const steps = payload.steps || recordingState.steps || [];
+    const screenshots = payload.screenshots || [];
 
+    console.log(`Uploading workflow "${recordingState.workflowName}" with ${steps.length} steps and ${screenshots.length} screenshots`);
+
+    // Step 1: Create workflow first (to get workflow_id)
     const workflowResponse = await apiClient.createWorkflow({
       name: recordingState.workflowName || 'Untitled Workflow',
       description: null,
-      starting_url: recordingState.startingUrl || '',
+      starting_url: payload.startingUrl || recordingState.startingUrl || '',
       tags: [],
-      steps: recordingState.steps,
+      steps: steps, // Steps with screenshot_id=null
     });
 
-    console.log('Workflow uploaded successfully:', workflowResponse);
+    console.log('Workflow created successfully:', workflowResponse);
+
+    // Step 2: Upload screenshots with workflow_id (in background, don't block response)
+    if (screenshots.length > 0) {
+      uploadScreenshotsAsync(workflowResponse.workflow_id, screenshots)
+        .then(() => {
+          console.log(`✅ All ${screenshots.length} screenshots uploaded successfully`);
+        })
+        .catch((error) => {
+          console.error('❌ Screenshot upload failed:', error);
+          // Don't fail the whole workflow creation - screenshots can be retried later
+        });
+    }
 
     // Clean up recording state
     await cleanupRecordingState();
@@ -180,6 +197,41 @@ async function handleStopRecording(
       },
     });
   }
+}
+
+/**
+ * Upload screenshots asynchronously in the background
+ * Returns after all uploads complete or fail
+ */
+async function uploadScreenshotsAsync(
+  workflowId: number,
+  screenshots: Array<{ step_number: number; dataUrl: string; timestamp: string }>
+): Promise<void> {
+  console.log(`Starting async upload of ${screenshots.length} screenshots for workflow ${workflowId}`);
+
+  const uploadPromises = screenshots.map(async (screenshot) => {
+    try {
+      // Convert dataUrl back to Blob
+      const response = await fetch(screenshot.dataUrl);
+      const blob = await response.blob();
+
+      // Upload to server
+      const uploadResponse = await apiClient.uploadScreenshot(
+        blob,
+        workflowId,
+        screenshot.step_number.toString()
+      );
+
+      console.log(`Screenshot uploaded for step ${screenshot.step_number}: ${uploadResponse.screenshot_id}`);
+      return uploadResponse;
+    } catch (error) {
+      console.error(`Failed to upload screenshot for step ${screenshot.step_number}:`, error);
+      throw error;
+    }
+  });
+
+  // Wait for all uploads to complete
+  await Promise.all(uploadPromises);
 }
 
 /**

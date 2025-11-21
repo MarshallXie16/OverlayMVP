@@ -42,6 +42,14 @@ export default defineConfig({
           src: 'src/content/overlay.css',
           dest: 'content',
         },
+        {
+          src: 'src/content/widget.css',
+          dest: 'content',
+        },
+        {
+          src: 'src/content/feedback.css',
+          dest: 'content',
+        },
       ],
     }),
     renamePopupHtml(),

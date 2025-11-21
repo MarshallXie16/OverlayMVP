@@ -381,6 +381,203 @@ interface Step {
 
 ---
 
+## Workflow Recording Implementation (Sprint 1 - Complete)
+
+### Architecture Overview
+
+The workflow recording system consists of three integrated components:
+
+```
+User Action → Content Script (Recorder) → IndexedDB (Buffer) → Background Worker → API Server
+                    ↓
+              Visual Feedback
+              Recording Widget
+```
+
+### Key Components
+
+#### 1. Content Script Recorder (`extension/src/content/recorder.ts`)
+- **Purpose**: Captures user interactions in real-time during workflow recording
+- **Events Captured**: clicks, inputs (blur), selects (change), form submissions, navigation
+- **Filtering**: Uses `isInteractionMeaningful()` to filter noise (non-interactive elements, framework IDs)
+- **Storage**: Buffers steps in IndexedDB with screenshot blobs
+- **Visual Feedback**: Flashes captured elements with CSS animation (300ms)
+- **Widget**: Shows floating recording widget with step counter and stop/pause buttons
+
+#### 2. IndexedDB Storage (`extension/src/content/storage/indexeddb.ts`)
+- **Database**: WorkflowRecorderDB (version 2)
+- **Object Stores**:
+  - `steps`: Stores step data (StepCreate objects)
+  - `screenshots`: Stores screenshot blobs (keyed by step_number)
+- **Purpose**: Buffers recorded data locally before upload (handles network issues, quota exceeded)
+- **Cleanup**: Cleared after successful upload to backend
+
+#### 3. Recording Widget (`extension/src/content/widget.ts`)
+- **UI**: Floating widget (bottom-right, draggable)
+- **Features**:
+  - Pulsing red dot indicator
+  - Real-time step counter ("5 steps")
+  - Stop button (triggers upload)
+  - Pause button (placeholder for future)
+- **Styling**: Gradient purple background, glassmorphism effect, smooth animations
+- **Position**: Fixed, z-index 999999 (non-intrusive but always visible)
+
+#### 4. Visual Feedback (`extension/src/content/feedback.ts`)
+- **Animation**: 300ms flash effect on captured elements
+- **Effect**: Glowing blue outline that fades out
+- **Purpose**: Immediate user feedback that action was recorded
+
+#### 5. Background Worker Upload (`extension/src/background/messaging.ts`)
+- **Flow**:
+  1. Receives STOP_RECORDING message with steps + screenshots (as dataUrls)
+  2. Creates workflow via API (returns workflow_id)
+  3. Uploads screenshots asynchronously with workflow_id
+  4. Returns success to content script
+  5. Content script clears IndexedDB
+- **Error Handling**: Screenshots upload in background; failure doesn't block workflow creation
+
+#### 6. API Client Retry Logic (`extension/src/shared/api.ts`)
+- **Retries**: Up to 3 attempts
+- **Backoff**: Exponential (1s, 2s, 4s)
+- **Retryable**: Server errors (5xx), network errors, timeouts
+- **Non-Retryable**: Auth errors (401, 403), client errors (4xx)
+- **Already Implemented**: No changes needed
+
+### Data Flow: Recording to Upload
+
+```
+1. User clicks "Start Recording" in extension popup
+   ↓
+2. Background worker sends START_RECORDING to content script
+   ↓
+3. Content script (recorder.ts):
+   - Clears IndexedDB (steps + screenshots)
+   - Shows recording widget
+   - Attaches event listeners
+   ↓
+4. User performs actions on page
+   ↓
+5. For each meaningful interaction:
+   - Extract selectors + metadata
+   - Capture screenshot (background worker)
+   - Store step in IndexedDB.steps
+   - Store screenshot blob in IndexedDB.screenshots
+   - Flash element (visual feedback)
+   - Update widget step counter
+   ↓
+6. User clicks "Stop" in widget or popup
+   ↓
+7. Content script (recorder.ts):
+   - Hides widget
+   - Retrieves all steps from IndexedDB
+   - Retrieves all screenshots from IndexedDB
+   - Converts screenshot blobs → dataUrls (for message passing)
+   - Sends STOP_RECORDING message to background
+   ↓
+8. Background worker (messaging.ts):
+   - Creates workflow via API (steps with screenshot_id=null)
+   - Gets workflow_id from response
+   - Uploads screenshots async with workflow_id
+   - Cleans up recording state
+   - Returns success
+   ↓
+9. Content script:
+   - Clears IndexedDB (steps + screenshots)
+   - Recording complete!
+   ↓
+10. Backend:
+    - Workflow status="processing"
+    - AI labeling job queued (future sprint)
+    - Screenshots stored in S3 (companies/{id}/workflows/{id}/screenshots/{id}.jpg)
+```
+
+### Screenshot Handling
+
+**Why not upload during recording?**
+- API requires workflow_id (chicken-and-egg problem)
+- User shouldn't wait for uploads during recording
+
+**Solution:**
+1. Capture screenshots as blobs, store in IndexedDB
+2. Create workflow first (get workflow_id)
+3. Upload screenshots with workflow_id after workflow creation
+
+**Deduplication:**
+- Backend calculates SHA-256 hash of each screenshot
+- Identical screenshots stored once, referenced multiple times
+- Saves storage space and upload time
+
+### Testing
+
+**Extension Tests** (68 total):
+- Widget tests (12): UI creation, show/hide, step counter, button callbacks
+- Feedback tests (8): Flash animation, timing, multiple elements
+- Selector tests (9): Dynamic ID filtering, stable attribute extraction
+- Storage tests (21): IndexedDB operations, quota handling
+- API client tests (18): Retry logic, error handling, authentication
+
+**Backend Tests** (108+ total):
+- Workflow API tests: CRUD, multi-tenancy, pagination
+- Screenshot API tests: Upload, deduplication, presigned URLs
+- Auth API tests: Signup, login, JWT validation
+
+### Known Limitations & Future Improvements
+
+**Current MVP Limitations:**
+- Pause functionality not implemented (UI shows placeholder)
+- No retry UI if upload fails (background logs error)
+- Screenshots uploaded sequentially (could parallelize in batches)
+- No progress indicator for screenshot uploads
+
+**Planned Enhancements (Post-MVP):**
+- Screenshot upload progress bar in widget
+- Retry mechanism with user notification
+- Batch screenshot upload (5 at a time)
+- Pause/resume recording
+- Edit recording before upload (delete unwanted steps)
+
+### Code Files Changed/Added
+
+**New Files:**
+- `extension/src/content/widget.ts` - Recording widget UI
+- `extension/src/content/widget.css` - Widget styling
+- `extension/src/content/feedback.ts` - Visual feedback module
+- `extension/src/content/feedback.css` - Flash animation
+- `extension/src/content/widget.test.ts` - Widget tests
+- `extension/src/content/feedback.test.ts` - Feedback tests
+
+**Modified Files:**
+- `extension/src/content/recorder.ts` - Integrated widget, feedback, screenshot storage
+- `extension/src/content/storage/indexeddb.ts` - Added screenshots object store
+- `extension/src/background/messaging.ts` - Screenshot upload logic
+- `extension/src/shared/api.ts` - Fixed form field name (image vs file)
+- `extension/vite.config.ts` - Copy widget.css and feedback.css
+- `dashboard/src/pages/Dashboard.tsx` - Enhanced empty state with instructions
+- `backend/app/api/screenshots.py` - (No changes, already correct)
+
+### Lessons Learned
+
+**Build Configuration:**
+- Always add new CSS files to vite-plugin-static-copy targets
+- Static imports (import './widget.css') bundle into JS, explicit copy needed for debugging
+
+**IndexedDB:**
+- Supports Blob storage natively (no serialization needed)
+- Version bumps required for schema changes
+- Separate object stores cleaner than nested data structures
+
+**Chrome Extension Messaging:**
+- Can't send Blobs via runtime.sendMessage (uses JSON)
+- Convert Blob → dataUrl for message passing, then back to Blob for upload
+- Background worker can access content script data only via messages
+
+**Testing:**
+- Visual components need real DOM (happy-dom works great)
+- Async timers (setTimeout) need proper awaits in tests
+- Mock callbacks with vi.fn() for event testing
+
+---
+
 ## Next Steps
 
 See `tasks.md` for current sprint plan and `roadmap.md` for long-term milestones.

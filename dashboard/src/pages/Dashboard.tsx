@@ -89,7 +89,7 @@ export const Dashboard: React.FC = () => {
       {workflows.length === 0 ? (
         <div className="text-center py-12">
           <svg
-            className="mx-auto h-12 w-12 text-gray-400"
+            className="mx-auto h-16 w-16 text-gray-400"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -98,15 +98,40 @@ export const Dashboard: React.FC = () => {
               strokeLinecap="round"
               strokeLinejoin="round"
               strokeWidth={2}
-              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
             />
           </svg>
-          <h3 className="mt-2 text-sm font-medium text-gray-900">
+          <h3 className="mt-4 text-lg font-medium text-gray-900">
             No workflows yet
           </h3>
-          <p className="mt-1 text-sm text-gray-500">
-            Get started by recording a workflow using the Chrome extension.
+          <p className="mt-2 text-sm text-gray-500 max-w-md mx-auto">
+            Create your first workflow by recording your actions using the Chrome extension.
+            It's easy: just click the extension icon and hit "Start Recording"!
           </p>
+          <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4 max-w-lg mx-auto">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3 flex-1">
+                <h4 className="text-sm font-medium text-blue-900">
+                  How to create a workflow
+                </h4>
+                <div className="mt-2 text-sm text-blue-700">
+                  <ol className="list-decimal list-inside space-y-1 text-left">
+                    <li>Click the extension icon in your Chrome toolbar</li>
+                    <li>Enter a name for your workflow</li>
+                    <li>Click "Start Recording" to begin</li>
+                    <li>Perform the actions you want to record</li>
+                    <li>Click "Stop Recording" when finished</li>
+                    <li>Your workflow will appear here automatically</li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       ) : (
         <div className="bg-white shadow overflow-hidden sm:rounded-md">

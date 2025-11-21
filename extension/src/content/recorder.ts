@@ -14,7 +14,9 @@ import type { StepCreate, ExtensionMessage } from '@/shared/types';
 import { extractSelectors } from './utils/selectors';
 import { extractMetadata, extractActionData } from './utils/metadata';
 import { isInteractionMeaningful, getActionType, InputDebouncer } from './utils/filters';
-import { addStep, getSteps, clearSteps, getStepCount } from './storage/indexeddb';
+import { addStep, getSteps, clearSteps, getStepCount, addScreenshot, getScreenshots, clearScreenshots } from './storage/indexeddb';
+import { showRecordingWidget, hideRecordingWidget, updateWidgetStepCount, onWidgetStop, onWidgetPause } from './widget';
+import { flashElement } from './feedback';
 
 console.log('📝 Workflow Recorder: Content script (recorder) loaded');
 
@@ -174,8 +176,8 @@ async function recordInteraction(event: Event, element: Element): Promise<void> 
     // Build page context
     const pageContext = buildPageContext();
 
-    // Request screenshot from background
-    const screenshotId = await captureScreenshot();
+    // Request screenshot from background (stores blob in IndexedDB)
+    const screenshotId = await captureScreenshot(state.currentStepNumber);
 
     // Build step object
     const step: StepCreate = {
@@ -192,6 +194,12 @@ async function recordInteraction(event: Event, element: Element): Promise<void> 
 
     // Store in IndexedDB
     await addStep(step);
+
+    // Update widget step counter
+    updateWidgetStepCount(state.currentStepNumber);
+
+    // Flash element for visual feedback
+    flashElement(element);
 
     console.log(`✅ Step ${state.currentStepNumber} recorded:`, step);
   } catch (error) {
@@ -211,8 +219,8 @@ async function recordNavigation(): Promise<void> {
     // Build page context
     const pageContext = buildPageContext();
 
-    // Request screenshot from background
-    const screenshotId = await captureScreenshot();
+    // Request screenshot from background (stores blob in IndexedDB)
+    const screenshotId = await captureScreenshot(state.currentStepNumber);
 
     // Build step object
     const step: StepCreate = {
@@ -229,6 +237,9 @@ async function recordNavigation(): Promise<void> {
 
     // Store in IndexedDB
     await addStep(step);
+
+    // Update widget step counter
+    updateWidgetStepCount(state.currentStepNumber);
 
     console.log(`✅ Navigation step ${state.currentStepNumber} recorded`);
   } catch (error) {
@@ -256,27 +267,57 @@ function buildPageContext(): Record<string, any> {
 }
 
 /**
- * Requests screenshot from background worker
- * Returns screenshot ID (for now, returns null - will be implemented later)
+ * Requests screenshot from background worker and stores it in IndexedDB
+ * Returns null for screenshot_id (will be assigned after upload)
  */
-async function captureScreenshot(): Promise<number | null> {
+async function captureScreenshot(stepNumber: number): Promise<number | null> {
   try {
     // Send message to background to capture screenshot
     const response = await chrome.runtime.sendMessage({
       type: 'CAPTURE_SCREENSHOT',
     });
 
-    if (response && response.screenshotId) {
-      return response.screenshotId;
+    if (response && response.type === 'SCREENSHOT_CAPTURED' && response.payload) {
+      // Convert dataUrl to Blob
+      const dataUrl = response.payload.dataUrl;
+      const blob = await dataUrlToBlob(dataUrl);
+
+      // Store screenshot blob in IndexedDB
+      await addScreenshot({
+        step_number: stepNumber,
+        blob,
+        timestamp: new Date().toISOString(),
+      });
+
+      console.log(`Screenshot captured and stored for step ${stepNumber}`);
     }
 
-    // For MVP, screenshots are captured but not yet uploaded
-    // Return null for now
+    // Return null for screenshot_id (will be filled after upload to server)
     return null;
   } catch (error) {
     console.error('Error capturing screenshot:', error);
     return null;
   }
+}
+
+/**
+ * Convert data URL to Blob
+ */
+async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
+  const response = await fetch(dataUrl);
+  return await response.blob();
+}
+
+/**
+ * Convert Blob to data URL
+ */
+async function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
 }
 
 // ============================================================================
@@ -295,8 +336,9 @@ async function startRecording(): Promise<void> {
 
     console.log('🎬 Starting workflow recording');
 
-    // Clear any existing steps
+    // Clear any existing steps and screenshots
     await clearSteps();
+    await clearScreenshots();
 
     // Initialize state
     state.isRecording = true;
@@ -309,6 +351,22 @@ async function startRecording(): Promise<void> {
     document.addEventListener('change', handleChange, true);
     document.addEventListener('submit', handleSubmit, true);
     window.addEventListener('beforeunload', handleNavigation, true);
+
+    // Show recording widget
+    showRecordingWidget();
+    updateWidgetStepCount(0);
+
+    // Wire up widget callbacks
+    onWidgetStop(() => {
+      console.log('Stop button clicked in widget');
+      stopRecording();
+    });
+
+    onWidgetPause(() => {
+      console.log('Pause button clicked in widget');
+      // TODO: Implement pause functionality in future sprint
+      alert('Pause functionality coming soon!');
+    });
 
     console.log('✅ Recording started on:', state.startingUrl);
   } catch (error) {
@@ -332,6 +390,9 @@ async function stopRecording(): Promise<void> {
     // Stop recording
     state.isRecording = false;
 
+    // Hide recording widget
+    hideRecordingWidget();
+
     // Remove event listeners
     document.removeEventListener('click', handleClick, true);
     document.removeEventListener('blur', handleBlur, true);
@@ -342,27 +403,39 @@ async function stopRecording(): Promise<void> {
     // Clear debouncer
     state.debouncer.clear();
 
-    // Get all steps from IndexedDB
+    // Get all steps and screenshots from IndexedDB
     const steps = await getSteps();
+    const screenshots = await getScreenshots();
     const stepCount = await getStepCount();
 
-    console.log(`📤 Uploading ${stepCount} steps to background worker`);
+    console.log(`📤 Uploading ${stepCount} steps and ${screenshots.length} screenshots to background worker`);
 
-    // Send steps to background for upload
+    // Convert screenshot blobs to dataUrls for message passing
+    const screenshotsWithDataUrls = await Promise.all(
+      screenshots.map(async (screenshot) => ({
+        step_number: screenshot.step_number,
+        dataUrl: await blobToDataUrl(screenshot.blob),
+        timestamp: screenshot.timestamp,
+      }))
+    );
+
+    // Send steps and screenshots to background for upload
     const response = await chrome.runtime.sendMessage({
       type: 'STOP_RECORDING',
       payload: {
         startingUrl: state.startingUrl,
         steps,
+        screenshots: screenshotsWithDataUrls,
       },
     });
 
     if (response && response.success) {
-      console.log('✅ Steps sent to background worker for upload');
+      console.log('✅ Steps and screenshots sent to background worker for upload');
 
       // Clear IndexedDB after successful upload
       await clearSteps();
-      console.log('🗑️ Local steps cleared');
+      await clearScreenshots();
+      console.log('🗑️ Local steps and screenshots cleared');
     } else {
       console.error('❌ Failed to send steps to background worker');
       // Keep steps in IndexedDB for retry

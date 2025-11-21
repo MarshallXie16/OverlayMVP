@@ -344,7 +344,7 @@ export class ApiClient {
     stepId?: string
   ): Promise<ScreenshotResponse> {
     const formData = new FormData();
-    formData.append('file', imageBlob, 'screenshot.jpg');
+    formData.append('image', imageBlob, 'screenshot.jpg'); // Backend expects 'image', not 'file'
     formData.append('workflow_id', workflowId.toString());
     if (stepId) {
       formData.append('step_id', stepId);

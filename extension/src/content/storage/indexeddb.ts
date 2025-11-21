@@ -16,8 +16,9 @@
 import type { StepCreate } from '@/shared/types';
 
 const DB_NAME = 'WorkflowRecorderDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2; // Incremented for schema change
 const STORE_NAME = 'steps';
+const SCREENSHOTS_STORE_NAME = 'screenshots';
 
 /**
  * Opens or creates the IndexedDB database
@@ -38,10 +39,11 @@ export function initDB(): Promise<IDBDatabase> {
       };
 
       request.onupgradeneeded = (event) => {
-        console.log('IndexedDB upgrade needed, creating object store');
+        console.log('IndexedDB upgrade needed, creating object stores');
         const db = (event.target as IDBOpenDBRequest).result;
+        const oldVersion = event.oldVersion;
 
-        // Create object store if it doesn't exist
+        // Create steps object store if it doesn't exist
         if (!db.objectStoreNames.contains(STORE_NAME)) {
           const objectStore = db.createObjectStore(STORE_NAME, {
             keyPath: 'id',
@@ -59,6 +61,20 @@ export function initDB(): Promise<IDBDatabase> {
           });
 
           console.log('Object store created:', STORE_NAME);
+        }
+
+        // Create screenshots object store (version 2+)
+        if (oldVersion < 2 && !db.objectStoreNames.contains(SCREENSHOTS_STORE_NAME)) {
+          const screenshotsStore = db.createObjectStore(SCREENSHOTS_STORE_NAME, {
+            keyPath: 'step_number', // Screenshot for each step
+          });
+
+          // Create index on timestamp
+          screenshotsStore.createIndex('timestamp', 'timestamp', {
+            unique: false,
+          });
+
+          console.log('Screenshots object store created:', SCREENSHOTS_STORE_NAME);
         }
       };
 
@@ -299,4 +315,148 @@ export function deleteDB(): Promise<void> {
       reject(error);
     }
   });
+}
+
+// ============================================================================
+// SCREENSHOT STORAGE
+// ============================================================================
+
+export interface StoredScreenshot {
+  step_number: number;
+  blob: Blob;
+  timestamp: string;
+  dataUrl?: string; // Optional for debugging
+}
+
+/**
+ * Adds a screenshot to the database
+ */
+export async function addScreenshot(screenshot: StoredScreenshot): Promise<void> {
+  try {
+    const db = await initDB();
+
+    return new Promise((resolve, reject) => {
+      try {
+        const transaction = db.transaction([SCREENSHOTS_STORE_NAME], 'readwrite');
+        const store = transaction.objectStore(SCREENSHOTS_STORE_NAME);
+
+        const request = store.put(screenshot);
+
+        request.onsuccess = () => {
+          console.log(`Screenshot for step ${screenshot.step_number} stored`);
+          resolve();
+        };
+
+        request.onerror = () => {
+          console.error('Error adding screenshot:', request.error);
+          reject(new Error(`Failed to add screenshot: ${request.error?.message}`));
+        };
+
+        transaction.oncomplete = () => {
+          db.close();
+        };
+
+        transaction.onerror = () => {
+          console.error('Transaction error:', transaction.error);
+          db.close();
+          reject(new Error(`Transaction failed: ${transaction.error?.message}`));
+        };
+      } catch (error) {
+        db.close();
+        reject(error);
+      }
+    });
+  } catch (error) {
+    console.error('Error in addScreenshot:', error);
+    throw error;
+  }
+}
+
+/**
+ * Retrieves all screenshots from the database
+ */
+export async function getScreenshots(): Promise<StoredScreenshot[]> {
+  try {
+    const db = await initDB();
+
+    return new Promise((resolve, reject) => {
+      try {
+        const transaction = db.transaction([SCREENSHOTS_STORE_NAME], 'readonly');
+        const store = transaction.objectStore(SCREENSHOTS_STORE_NAME);
+
+        const request = store.getAll();
+
+        request.onsuccess = () => {
+          const screenshots = request.result as StoredScreenshot[];
+          console.log(`Retrieved ${screenshots.length} screenshots from IndexedDB`);
+          resolve(screenshots);
+        };
+
+        request.onerror = () => {
+          console.error('Error getting screenshots:', request.error);
+          reject(new Error(`Failed to get screenshots: ${request.error?.message}`));
+        };
+
+        transaction.oncomplete = () => {
+          db.close();
+        };
+
+        transaction.onerror = () => {
+          console.error('Transaction error:', transaction.error);
+          db.close();
+          reject(new Error(`Transaction failed: ${transaction.error?.message}`));
+        };
+      } catch (error) {
+        db.close();
+        reject(error);
+      }
+    });
+  } catch (error) {
+    console.error('Error in getScreenshots:', error);
+    throw error;
+  }
+}
+
+/**
+ * Clears all screenshots from the database
+ */
+export async function clearScreenshots(): Promise<void> {
+  try {
+    const db = await initDB();
+
+    return new Promise((resolve, reject) => {
+      try {
+        const transaction = db.transaction([SCREENSHOTS_STORE_NAME], 'readwrite');
+        const store = transaction.objectStore(SCREENSHOTS_STORE_NAME);
+
+        const request = store.clear();
+
+        request.onsuccess = () => {
+          console.log('All screenshots cleared from IndexedDB');
+          resolve();
+        };
+
+        request.onerror = () => {
+          console.error('Error clearing screenshots:', request.error);
+          reject(new Error(`Failed to clear screenshots: ${request.error?.message}`));
+        };
+
+        transaction.oncomplete = () => {
+          db.close();
+        };
+
+        transaction.onerror = () => {
+          console.error('Transaction error:', transaction.error);
+          db.close();
+          reject(new Error(`Transaction failed: ${transaction.error?.message}`));
+        };
+      } catch (error) {
+        db.close();
+        reject(error);
+      }
+    });
+  } catch (error) {
+    console.error('Error in clearScreenshots:', error);
+    throw error;
+  }
 }
