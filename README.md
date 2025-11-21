@@ -2,13 +2,35 @@
 
 AI-powered Chrome extension for recording, managing, and executing interactive web workflows.
 
+## 📚 Documentation
+
+- **[Quick Start Guide](./QUICKSTART.md)** - Get running in 5 minutes ⚡
+- **[Testing Guide](./TESTING_GUIDE.md)** - Comprehensive testing scenarios 🧪
+- **[Extension Docs](./extension/README.md)** - Chrome extension documentation
+- **[Dashboard Docs](./dashboard/README.md)** - Web dashboard documentation
+
+## 🎯 Current Status
+
+**Sprint 1 Complete** ✅ (53 Story Points)
+
+- ✅ Backend API with authentication and workflow management
+- ✅ Chrome extension with recording capabilities
+- ✅ Web dashboard with workflow viewing
+- ✅ ~7,900 lines of production code
+- ✅ 54 tests passing (100% pass rate)
+
+**Next**: Sprint 2 - AI labeling, walkthrough mode, enhanced testing
+
 ## Quick Start
+
+**For detailed step-by-step instructions, see [QUICKSTART.md](./QUICKSTART.md)**
 
 ### Prerequisites
 - **Node.js** 18+ and npm
 - **Python** 3.11+
-- **Redis** (for background jobs)
-- **AWS Account** (for S3 screenshot storage)
+- **Google Chrome** (for extension testing)
+
+*Note: Redis and AWS S3 are not required for MVP testing*
 
 ### Installation
 
@@ -55,27 +77,21 @@ alembic upgrade head
 ```bash
 cd backend
 source venv/bin/activate
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload
+# Runs at http://localhost:8000
 ```
 
-**Terminal 2: Celery Worker** (for AI labeling)
-```bash
-cd backend
-source venv/bin/activate
-celery -A app.tasks worker --loglevel=info
-```
-
-**Terminal 3: Web Dashboard**
+**Terminal 2: Web Dashboard**
 ```bash
 cd dashboard
 npm run dev
-# Opens at http://localhost:3000
+# Runs at http://localhost:3000
 ```
 
-**Terminal 4: Chrome Extension**
+**Terminal 3: Chrome Extension** (one-time build)
 ```bash
 cd extension
-npm run dev
+npm run build
 # Builds to extension/dist/
 ```
 
@@ -85,21 +101,13 @@ Then load the extension in Chrome:
 3. Click "Load unpacked"
 4. Select `extension/dist/` folder
 
-### Testing the Setup
+### Verify Everything Works
 
-1. **Backend Health Check**
-```bash
-curl http://localhost:8000
-# Should return: {"status": "healthy", "service": "Workflow Platform API"}
-```
+1. **Backend**: http://localhost:8000/docs (Swagger UI)
+2. **Dashboard**: http://localhost:3000 (Login page)
+3. **Extension**: Click icon in Chrome toolbar (Popup UI)
 
-2. **Extension Setup**
-- Click the extension icon in Chrome toolbar
-- You should see the popup UI (once implemented)
-
-3. **Dashboard Access**
-- Navigate to http://localhost:3000
-- You should see the login page (once implemented)
+**See [TESTING_GUIDE.md](./TESTING_GUIDE.md) for complete end-to-end testing scenarios.**
 
 ---
 
