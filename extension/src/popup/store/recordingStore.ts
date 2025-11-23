@@ -21,6 +21,7 @@ interface RecordingActions {
   setWorkflowName: (name: string) => void;
   startRecording: (name: string) => Promise<void>;
   stopRecording: () => Promise<void>;
+  checkRecordingState: () => Promise<void>;
   fetchWorkflows: () => Promise<void>;
   clearError: () => void;
 }
@@ -43,10 +44,20 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
   startRecording: async (name: string) => {
     set({ isLoading: true, error: null });
     try {
+      // Get current tab URL
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+      if (!activeTab || !activeTab.url) {
+        throw new Error('No active tab found. Please navigate to a webpage and try again.');
+      }
+
       // Send message to background worker to start recording
       const response = await chrome.runtime.sendMessage({
         type: 'START_RECORDING',
-        payload: { workflowName: name },
+        payload: {
+          workflowName: name,
+          startingUrl: activeTab.url
+        },
       });
 
       if (response?.success) {
@@ -91,6 +102,36 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
       const errorMessage = error.message || 'Failed to stop recording';
       set({ isLoading: false, error: errorMessage });
       throw error;
+    }
+  },
+
+  checkRecordingState: async () => {
+    try {
+      // Query background worker for current recording state
+      const response = await chrome.runtime.sendMessage({
+        type: 'GET_RECORDING_STATE',
+      });
+
+      if (response?.recordingState) {
+        const { isRecording, workflowName } = response.recordingState;
+        set({
+          isRecording: isRecording || false,
+          workflowName: workflowName || '',
+        });
+      } else {
+        // No recording state, ensure UI shows not recording
+        set({
+          isRecording: false,
+          workflowName: '',
+        });
+      }
+    } catch (error) {
+      console.error('Failed to check recording state:', error);
+      // Don't show error to user, just assume not recording
+      set({
+        isRecording: false,
+        workflowName: '',
+      });
     }
   },
 
