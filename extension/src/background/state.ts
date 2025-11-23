@@ -169,16 +169,26 @@ async function injectContentScripts(): Promise<void> {
 
     console.log(`Activating content scripts for tab ${activeTab.id}`);
 
+    // Send START_RECORDING message to content script
     // Content scripts are auto-injected via manifest.json
-    // Send message to activate recording mode (content scripts will be implemented in FE-004)
-    // This will be handled when content scripts are implemented
+    const response = await chrome.tabs.sendMessage(activeTab.id, {
+      type: 'START_RECORDING',
+    });
 
-    console.log('Content scripts ready for recording');
+    console.log('Content script activated:', response);
   } catch (error) {
     console.error('Failed to activate content scripts:', error);
 
     // Provide helpful error message
     if (error instanceof Error) {
+      // Content script not ready yet (page just loaded or needs refresh)
+      if (error.message.includes('Receiving end does not exist')) {
+        throw new Error(
+          'Content script not ready. Please refresh the page and try again.'
+        );
+      }
+
+      // Chrome internal or restricted pages
       if (error.message.includes('Cannot access') || error.message.includes('Cannot record')) {
         throw new Error(
           'Cannot record this page. Please start recording from a regular webpage ' +

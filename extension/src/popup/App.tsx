@@ -6,16 +6,20 @@
  */
 import React, { useEffect } from 'react';
 import { useAuthStore } from './store/authStore';
+import { useRecordingStore } from './store/recordingStore';
 import { LoginForm } from './components/LoginForm';
 import { RecordingControls } from './components/RecordingControls';
 import { WorkflowList } from './components/WorkflowList';
 
 const App: React.FC = () => {
   const { user, isLoading, checkAuth, logout } = useAuthStore();
+  const { checkRecordingState } = useRecordingStore();
 
   useEffect(() => {
     checkAuth();
-  }, [checkAuth]);
+    // Check recording state when popup opens
+    checkRecordingState();
+  }, [checkAuth, checkRecordingState]);
 
   const handleLogout = async () => {
     try {
