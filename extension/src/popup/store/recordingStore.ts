@@ -41,23 +41,38 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
   },
 
   startRecording: async (name: string) => {
+    const workflowName = name.trim();
     set({ isLoading: true, error: null });
     try {
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      const startingUrl = activeTab?.url;
+
+      if (!startingUrl) {
+        throw new Error('Please start recording from an open webpage tab.');
+      }
+
       // Send message to background worker to start recording
       const response = await chrome.runtime.sendMessage({
         type: 'START_RECORDING',
-        payload: { workflowName: name },
+        payload: { workflowName, startingUrl },
       });
 
-      if (response?.success) {
+      const responsePayload = response?.payload ?? response;
+      const success = responsePayload?.success === true;
+
+      if (success) {
         set({
           isRecording: true,
-          workflowName: name,
+          workflowName,
           isLoading: false,
           error: null
         });
       } else {
-        throw new Error(response?.error || 'Failed to start recording');
+        const errorMessage =
+          responsePayload?.error ||
+          response?.error ||
+          'Failed to start recording';
+        throw new Error(errorMessage);
       }
     } catch (error: any) {
       const errorMessage = error.message || 'Failed to start recording';
