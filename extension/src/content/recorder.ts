@@ -14,9 +14,12 @@ import type { StepCreate, ExtensionMessage } from '@/shared/types';
 import { extractSelectors } from './utils/selectors';
 import { extractMetadata, extractActionData } from './utils/metadata';
 import { isInteractionMeaningful, getActionType, InputDebouncer } from './utils/filters';
+import { EventDeduplicator } from './utils/event-deduplicator';
 import { addStep, getSteps, clearSteps, getStepCount, addScreenshot, getScreenshots, clearScreenshots } from './storage/indexeddb';
 import { showRecordingWidget, hideRecordingWidget, updateWidgetStepCount, onWidgetStop, onWidgetPause } from './widget';
 import { flashElement } from './feedback';
+
+// CSS is loaded via manifest.json content_scripts.css
 
 console.log('📝 Workflow Recorder: Content script (recorder) loaded');
 
@@ -36,6 +39,7 @@ interface RecorderState {
   currentStepNumber: number;
   startingUrl: string | null;
   debouncer: InputDebouncer;
+  deduplicator: EventDeduplicator;
 }
 
 const state: RecorderState = {
@@ -43,6 +47,7 @@ const state: RecorderState = {
   currentStepNumber: 0,
   startingUrl: null,
   debouncer: new InputDebouncer(),
+  deduplicator: new EventDeduplicator(),
 };
 
 // ============================================================================
@@ -50,13 +55,36 @@ const state: RecorderState = {
 // ============================================================================
 
 /**
- * Handles click events
+ * Handles focus events on inputs (to track value changes)
  */
-async function handleClick(event: MouseEvent): Promise<void> {
+function handleFocus(event: FocusEvent): void {
   if (!state.isRecording) return;
 
   try {
     const element = event.target as Element;
+    
+    if (element instanceof HTMLInputElement) {
+      state.deduplicator.onInputFocus(element);
+    }
+  } catch (error) {
+    console.error('Error handling focus:', error);
+  }
+}
+
+/**
+ * Handles click events
+ */
+function handleClick(event: MouseEvent): void {
+  if (!state.isRecording) return;
+
+  try {
+    const element = event.target as Element;
+
+    // Filter out clicks on the recording widget itself
+    if (element.closest('#workflow-recording-widget')) {
+      console.log('[ContentRecorder] Ignoring click on recording widget');
+      return;
+    }
 
     // Check if this is a meaningful interaction
     if (!isInteractionMeaningful(event, element)) {
@@ -64,7 +92,10 @@ async function handleClick(event: MouseEvent): Promise<void> {
     }
 
     console.log('Recording click on:', element);
-    await recordInteraction(event, element);
+    
+    // Add to deduplicator instead of recording immediately
+    const actionType = getActionType(event, element);
+    state.deduplicator.addEvent(event, element, actionType, recordInteraction);
   } catch (error) {
     console.error('Error handling click:', error);
   }
@@ -73,7 +104,7 @@ async function handleClick(event: MouseEvent): Promise<void> {
 /**
  * Handles blur events on inputs (captures final values)
  */
-async function handleBlur(event: FocusEvent): Promise<void> {
+function handleBlur(event: FocusEvent): void {
   if (!state.isRecording) return;
 
   try {
@@ -85,16 +116,19 @@ async function handleBlur(event: FocusEvent): Promise<void> {
     }
 
     console.log('Recording input blur on:', element);
-    await recordInteraction(event, element);
+    
+    // Add to deduplicator - it will check if value changed
+    const actionType = getActionType(event, element);
+    state.deduplicator.addEvent(event, element, actionType, recordInteraction);
   } catch (error) {
     console.error('Error handling blur:', error);
   }
 }
 
 /**
- * Handles change events on selects and checkboxes/radios
+ * Handles change events on selects and checkboxes
  */
-async function handleChange(event: Event): Promise<void> {
+function handleChange(event: Event): void {
   if (!state.isRecording) return;
 
   try {
@@ -106,7 +140,10 @@ async function handleChange(event: Event): Promise<void> {
     }
 
     console.log('Recording change on:', element);
-    await recordInteraction(event, element);
+    
+    // Add to deduplicator
+    const actionType = getActionType(event, element);
+    state.deduplicator.addEvent(event, element, actionType, recordInteraction);
   } catch (error) {
     console.error('Error handling change:', error);
   }
@@ -115,7 +152,7 @@ async function handleChange(event: Event): Promise<void> {
 /**
  * Handles form submit events
  */
-async function handleSubmit(event: Event): Promise<void> {
+function handleSubmit(event: Event): void {
   if (!state.isRecording) return;
 
   try {
@@ -127,7 +164,10 @@ async function handleSubmit(event: Event): Promise<void> {
     }
 
     console.log('Recording form submit on:', element);
-    await recordInteraction(event, element);
+    
+    // Add to deduplicator (high priority - will suppress button clicks)
+    const actionType = getActionType(event, element);
+    state.deduplicator.addEvent(event, element, actionType, recordInteraction);
   } catch (error) {
     console.error('Error handling submit:', error);
   }
@@ -154,12 +194,12 @@ async function handleNavigation(_event: Event): Promise<void> {
 // ============================================================================
 
 /**
- * Records a user interaction
+ * Records a user interaction (called by deduplicator after event grouping)
  */
 async function recordInteraction(event: Event, element: Element): Promise<void> {
   try {
-    // Increment step number
-    state.currentStepNumber++;
+    // Atomically increment and capture step number to avoid race conditions
+    const stepNumber = ++state.currentStepNumber;
 
     // Extract selectors
     const selectors = extractSelectors(element);
@@ -177,11 +217,11 @@ async function recordInteraction(event: Event, element: Element): Promise<void> 
     const pageContext = buildPageContext();
 
     // Request screenshot from background (stores blob in IndexedDB)
-    const screenshotId = await captureScreenshot(state.currentStepNumber);
+    const screenshotId = await captureScreenshot(stepNumber);
 
     // Build step object
     const step: StepCreate = {
-      step_number: state.currentStepNumber,
+      step_number: stepNumber,
       timestamp: new Date().toISOString(),
       action_type: actionType,
       selectors,
@@ -195,13 +235,13 @@ async function recordInteraction(event: Event, element: Element): Promise<void> 
     // Store in IndexedDB
     await addStep(step);
 
-    // Update widget step counter
+    // Update widget step counter with current max
     updateWidgetStepCount(state.currentStepNumber);
 
     // Flash element for visual feedback
     flashElement(element);
 
-    console.log(`✅ Step ${state.currentStepNumber} recorded:`, step);
+    console.log(`✅ Step ${stepNumber} recorded:`, step);
   } catch (error) {
     console.error('Error recording interaction:', error);
     // Don't throw - continue recording even if one step fails
@@ -213,18 +253,18 @@ async function recordInteraction(event: Event, element: Element): Promise<void> 
  */
 async function recordNavigation(): Promise<void> {
   try {
-    // Increment step number
-    state.currentStepNumber++;
+    // Atomically increment and capture step number
+    const stepNumber = ++state.currentStepNumber;
 
     // Build page context
     const pageContext = buildPageContext();
 
     // Request screenshot from background (stores blob in IndexedDB)
-    const screenshotId = await captureScreenshot(state.currentStepNumber);
+    const screenshotId = await captureScreenshot(stepNumber);
 
     // Build step object
     const step: StepCreate = {
-      step_number: state.currentStepNumber,
+      step_number: stepNumber,
       timestamp: new Date().toISOString(),
       action_type: 'navigate',
       selectors: {},
@@ -241,7 +281,7 @@ async function recordNavigation(): Promise<void> {
     // Update widget step counter
     updateWidgetStepCount(state.currentStepNumber);
 
-    console.log(`✅ Navigation step ${state.currentStepNumber} recorded`);
+    console.log(`✅ Navigation step ${stepNumber} recorded`);
   } catch (error) {
     console.error('Error recording navigation:', error);
   }
@@ -329,14 +369,17 @@ async function blobToDataUrl(blob: Blob): Promise<string> {
  */
 async function startRecording(): Promise<void> {
   try {
+    console.log('[ContentRecorder] startRecording called');
+    
     if (state.isRecording) {
-      console.warn('Already recording');
+      console.warn('[ContentRecorder] Already recording');
       return;
     }
 
-    console.log('🎬 Starting workflow recording');
+    console.log('[ContentRecorder] 🎬 Starting workflow recording');
 
     // Clear any existing steps and screenshots
+    console.log('[ContentRecorder] Clearing existing steps and screenshots');
     await clearSteps();
     await clearScreenshots();
 
@@ -344,8 +387,11 @@ async function startRecording(): Promise<void> {
     state.isRecording = true;
     state.currentStepNumber = 0;
     state.startingUrl = window.location.href;
+    console.log('[ContentRecorder] State initialized:', { startingUrl: state.startingUrl });
 
     // Add event listeners in capture phase (to catch events before page handlers)
+    console.log('[ContentRecorder] Adding event listeners');
+    document.addEventListener('focus', handleFocus, true);  // Track input focus for value changes
     document.addEventListener('click', handleClick, true);
     document.addEventListener('blur', handleBlur, true);
     document.addEventListener('change', handleChange, true);
@@ -353,24 +399,26 @@ async function startRecording(): Promise<void> {
     window.addEventListener('beforeunload', handleNavigation, true);
 
     // Show recording widget
+    console.log('[ContentRecorder] Showing recording widget');
     showRecordingWidget();
     updateWidgetStepCount(0);
+    console.log('[ContentRecorder] Widget should now be visible');
 
     // Wire up widget callbacks
     onWidgetStop(() => {
-      console.log('Stop button clicked in widget');
+      console.log('[ContentRecorder] Stop button clicked in widget');
       stopRecording();
     });
 
     onWidgetPause(() => {
-      console.log('Pause button clicked in widget');
+      console.log('[ContentRecorder] Pause button clicked in widget');
       // TODO: Implement pause functionality in future sprint
       alert('Pause functionality coming soon!');
     });
 
-    console.log('✅ Recording started on:', state.startingUrl);
+    console.log('[ContentRecorder] ✅ Recording started successfully on:', state.startingUrl);
   } catch (error) {
-    console.error('Error starting recording:', error);
+    console.error('[ContentRecorder] Error starting recording:', error);
     state.isRecording = false;
   }
 }
@@ -381,27 +429,35 @@ async function startRecording(): Promise<void> {
 async function stopRecording(): Promise<void> {
   try {
     if (!state.isRecording) {
-      console.warn('Not currently recording');
+      console.warn('[ContentRecorder] Not currently recording');
       return;
     }
 
-    console.log('⏹️ Stopping workflow recording');
+    console.log('[ContentRecorder] ⏹️ Stopping workflow recording');
 
-    // Stop recording
-    state.isRecording = false;
-
-    // Hide recording widget
-    hideRecordingWidget();
-
-    // Remove event listeners
+    // IMPORTANT: Remove event listeners FIRST to prevent recording the stop button click
+    document.removeEventListener('focus', handleFocus, true);
     document.removeEventListener('click', handleClick, true);
     document.removeEventListener('blur', handleBlur, true);
     document.removeEventListener('change', handleChange, true);
     document.removeEventListener('submit', handleSubmit, true);
     window.removeEventListener('beforeunload', handleNavigation, true);
 
-    // Clear debouncer
+    // Force flush any pending events before stopping
+    state.deduplicator.forceFlush(recordInteraction);
+    
+    // Wait a bit for flush to complete
+    await new Promise(resolve => setTimeout(resolve, 150));
+
+    // Stop recording state
+    state.isRecording = false;
+
+    // Hide recording widget
+    hideRecordingWidget();
+
+    // Clear debouncer and deduplicator
     state.debouncer.clear();
+    state.deduplicator.clear();
 
     // Get all steps and screenshots from IndexedDB
     const steps = await getSteps();
@@ -420,6 +476,8 @@ async function stopRecording(): Promise<void> {
     );
 
     // Send steps and screenshots to background for upload
+    console.log('[ContentRecorder] Sending message to background:', { stepCount: steps.length, screenshotCount: screenshotsWithDataUrls.length });
+    
     const response = await chrome.runtime.sendMessage({
       type: 'STOP_RECORDING',
       payload: {
@@ -429,16 +487,21 @@ async function stopRecording(): Promise<void> {
       },
     });
 
-    if (response && response.success) {
-      console.log('✅ Steps and screenshots sent to background worker for upload');
+    console.log('[ContentRecorder] Response from background:', response);
+
+    // Check response correctly - background returns {type: 'STOP_RECORDING', payload: {success: true, ...}}
+    if (response?.payload?.success) {
+      console.log('[ContentRecorder] ✅ Workflow uploaded successfully. ID:', response.payload.workflowId);
 
       // Clear IndexedDB after successful upload
       await clearSteps();
       await clearScreenshots();
-      console.log('🗑️ Local steps and screenshots cleared');
+      console.log('[ContentRecorder] 🗑️ Local steps and screenshots cleared');
     } else {
-      console.error('❌ Failed to send steps to background worker');
+      const errorMsg = response?.payload?.error || 'Unknown error';
+      console.error('[ContentRecorder] ❌ Failed to upload workflow:', errorMsg);
       // Keep steps in IndexedDB for retry
+      alert(`Failed to save workflow: ${errorMsg}\n\nYour recording has been saved locally. Please try again.`);
     }
 
     // Reset state
@@ -455,27 +518,33 @@ async function stopRecording(): Promise<void> {
 
 // Listen for messages from popup/background
 chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendResponse) => {
-  console.log('Recorder received message:', message);
+  console.log('[ContentRecorder] Received message:', message.type);
+  console.log('[ContentRecorder] Full message:', message);
 
   if (message.type === 'START_RECORDING') {
+    console.log('[ContentRecorder] Processing START_RECORDING message');
     startRecording().then(() => {
+      console.log('[ContentRecorder] START_RECORDING completed successfully');
       sendResponse({ success: true });
     }).catch((error) => {
-      console.error('Error starting recording:', error);
+      console.error('[ContentRecorder] Error in START_RECORDING:', error);
       sendResponse({ success: false, error: error.message });
     });
     return true; // Keep channel open for async response
   }
 
   if (message.type === 'STOP_RECORDING') {
+    console.log('[ContentRecorder] Processing STOP_RECORDING message');
     stopRecording().then(() => {
+      console.log('[ContentRecorder] STOP_RECORDING completed successfully');
       sendResponse({ success: true });
     }).catch((error) => {
-      console.error('Error stopping recording:', error);
+      console.error('[ContentRecorder] Error in STOP_RECORDING:', error);
       sendResponse({ success: false, error: error.message });
     });
     return true; // Keep channel open for async response
   }
 
+  console.log('[ContentRecorder] Unknown message type:', message.type);
   return true;
 });

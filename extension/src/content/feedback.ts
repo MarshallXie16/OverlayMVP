@@ -1,10 +1,9 @@
 /**
  * Visual Feedback Module
  * Provides visual feedback when elements are captured during recording
+ *
+ * Note: CSS is loaded via manifest.json content_scripts.css
  */
-
-// Import CSS
-import './feedback.css';
 
 const FLASH_DURATION = 300; // milliseconds
 const FLASH_CLASS = 'workflow-element-captured';

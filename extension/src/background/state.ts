@@ -155,19 +155,25 @@ export async function cleanupRecordingState(): Promise<void> {
  */
 async function injectContentScripts(): Promise<void> {
   try {
+    console.log('[BackgroundState] Injecting content scripts...');
+    
     // Get active tab
     const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
     if (!activeTab || !activeTab.id) {
+      console.error('[BackgroundState] No active tab found');
       throw new Error('No active tab found for content script activation');
     }
 
+    console.log(`[BackgroundState] Active tab: ${activeTab.id}, URL: ${activeTab.url}`);
+
     // Check if tab is recordable (can't record chrome:// pages)
     if (activeTab.url?.startsWith('chrome://') || activeTab.url?.startsWith('chrome-extension://')) {
+      console.error('[BackgroundState] Cannot record Chrome internal page:', activeTab.url);
       throw new Error('Cannot record Chrome internal pages. Please navigate to a regular webpage.');
     }
 
-    console.log(`Activating content scripts for tab ${activeTab.id}`);
+    console.log(`[BackgroundState] Sending START_RECORDING message to tab ${activeTab.id}`);
 
     // Send START_RECORDING message to content script
     // Content scripts are auto-injected via manifest.json
@@ -175,9 +181,16 @@ async function injectContentScripts(): Promise<void> {
       type: 'START_RECORDING',
     });
 
-    console.log('Content script activated:', response);
+    console.log('[BackgroundState] Content script activation response:', response);
+    
+    if (!response || !response.success) {
+      console.error('[BackgroundState] Content script did not confirm activation');
+      throw new Error('Content script failed to start recording');
+    }
+    
+    console.log('[BackgroundState] Content script successfully activated');
   } catch (error) {
-    console.error('Failed to activate content scripts:', error);
+    console.error('[BackgroundState] Failed to activate content scripts:', error);
 
     // Provide helpful error message
     if (error instanceof Error) {

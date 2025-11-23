@@ -153,16 +153,32 @@ async function handleStopRecording(
 
     console.log(`Uploading workflow "${recordingState.workflowName}" with ${steps.length} steps and ${screenshots.length} screenshots`);
 
-    // Step 1: Create workflow first (to get workflow_id)
-    const workflowResponse = await apiClient.createWorkflow({
+    // Validate that we have at least one step
+    if (steps.length === 0) {
+      console.error('[BackgroundMessaging] Cannot create workflow with 0 steps');
+      throw new Error('No steps were recorded. Please try recording again and interact with the page.');
+    }
+
+    // Build workflow creation request
+    const workflowRequest = {
       name: recordingState.workflowName || 'Untitled Workflow',
       description: null,
       starting_url: payload.startingUrl || recordingState.startingUrl || '',
       tags: [],
       steps: steps, // Steps with screenshot_id=null
+    };
+
+    console.log('[BackgroundMessaging] Creating workflow with request:', {
+      name: workflowRequest.name,
+      starting_url: workflowRequest.starting_url,
+      stepCount: workflowRequest.steps.length,
+      firstStep: workflowRequest.steps[0],
     });
 
-    console.log('Workflow created successfully:', workflowResponse);
+    // Step 1: Create workflow first (to get workflow_id)
+    const workflowResponse = await apiClient.createWorkflow(workflowRequest);
+
+    console.log('[BackgroundMessaging] Workflow created successfully:', workflowResponse);
 
     // Step 2: Upload screenshots with workflow_id (in background, don't block response)
     if (screenshots.length > 0) {
@@ -188,11 +204,51 @@ async function handleStopRecording(
       },
     });
   } catch (error) {
-    console.error('Failed to stop recording:', error);
+    console.error('[BackgroundMessaging] Failed to stop recording:', error);
+    
+    // Log detailed error information
+    let errorMessage = 'Failed to stop recording';
+    if (error && typeof error === 'object') {
+      const apiError = error as any;
+      
+      // Log all available error properties
+      console.error('[BackgroundMessaging] Error type:', apiError.name);
+      console.error('[BackgroundMessaging] Error message:', apiError.message);
+      console.error('[BackgroundMessaging] Error status:', apiError.status);
+      console.error('[BackgroundMessaging] Error details:', apiError.details);
+      
+      // Build user-friendly error message
+      if (apiError.status === 400) {
+        if (apiError.details && typeof apiError.details === 'object') {
+          // Pydantic validation error format
+          if (apiError.details.detail && Array.isArray(apiError.details.detail)) {
+            const validationErrors = apiError.details.detail.map((err: any) => 
+              `${err.loc?.join('.') || 'field'}: ${err.msg}`
+            ).join(', ');
+            errorMessage = `Validation error: ${validationErrors}`;
+          } else if (typeof apiError.details.detail === 'string') {
+            errorMessage = apiError.details.detail;
+          } else if (apiError.details.message) {
+            errorMessage = apiError.details.message;
+          }
+        } else if (typeof apiError.details === 'string') {
+          errorMessage = apiError.details;
+        }
+      } else {
+        errorMessage = apiError.message || errorMessage;
+      }
+    }
+    
+    console.error('[BackgroundMessaging] Final error message:', errorMessage);
+    
+    // Clean up recording state even on error to prevent stuck state
+    await cleanupRecordingState();
+    
     sendResponse({
-      type: 'ERROR',
+      type: 'STOP_RECORDING',
       payload: {
-        error: error instanceof Error ? error.message : 'Failed to stop recording',
+        success: false,
+        error: errorMessage,
         context: 'STOP_RECORDING',
       },
     });

@@ -8,10 +8,9 @@
  * - Stop and Pause buttons
  * - Draggable positioning
  * - Non-intrusive design
+ *
+ * Note: CSS is loaded via manifest.json content_scripts.css
  */
-
-// Import CSS
-import './widget.css';
 
 interface RecordingWidget {
   show(): void;
@@ -28,13 +27,16 @@ class RecordingWidgetImpl implements RecordingWidget {
   private pauseCallback: (() => void) | null = null;
 
   constructor() {
+    console.log('[Widget] Initializing RecordingWidget');
     this.createWidget();
   }
 
   private createWidget(): void {
+    console.log('[Widget] Creating widget element');
     // Create widget container
     this.widget = document.createElement('div');
     this.widget.id = 'workflow-recording-widget';
+    console.log('[Widget] Widget element created with ID:', this.widget.id);
 
     // Build widget HTML
     this.widget.innerHTML = `
@@ -85,6 +87,8 @@ class RecordingWidgetImpl implements RecordingWidget {
 
     // Make widget draggable
     this.makeDraggable();
+    
+    console.log('[Widget] Widget creation complete');
   }
 
   private makeDraggable(): void {
@@ -128,9 +132,31 @@ class RecordingWidgetImpl implements RecordingWidget {
   }
 
   public show(): void {
-    if (this.widget && !document.body.contains(this.widget)) {
-      document.body.appendChild(this.widget);
-      console.log('📍 Recording widget shown');
+    console.log('[Widget] show() called');
+    if (!this.widget) {
+      console.error('[Widget] Widget element is null, cannot show');
+      return;
+    }
+    
+    if (document.body.contains(this.widget)) {
+      console.log('[Widget] Widget already in DOM');
+      return;
+    }
+    
+    console.log('[Widget] Appending widget to document.body');
+    document.body.appendChild(this.widget);
+    console.log('[Widget] 📍 Recording widget shown successfully');
+    
+    // Verify widget is visible
+    const widgetElement = document.getElementById('workflow-recording-widget');
+    if (widgetElement) {
+      console.log('[Widget] Widget verified in DOM with styles:', {
+        display: window.getComputedStyle(widgetElement).display,
+        visibility: window.getComputedStyle(widgetElement).visibility,
+        opacity: window.getComputedStyle(widgetElement).opacity,
+      });
+    } else {
+      console.error('[Widget] Widget not found in DOM after appending!');
     }
   }
 
@@ -165,7 +191,10 @@ let widgetInstance: RecordingWidget | null = null;
  */
 export function getRecordingWidget(): RecordingWidget {
   if (!widgetInstance) {
+    console.log('[Widget] Creating new widget instance');
     widgetInstance = new RecordingWidgetImpl();
+  } else {
+    console.log('[Widget] Reusing existing widget instance');
   }
   return widgetInstance;
 }
@@ -174,6 +203,7 @@ export function getRecordingWidget(): RecordingWidget {
  * Show the recording widget
  */
 export function showRecordingWidget(): void {
+  console.log('[Widget] showRecordingWidget() called');
   const widget = getRecordingWidget();
   widget.show();
 }

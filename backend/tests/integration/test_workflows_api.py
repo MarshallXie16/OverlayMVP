@@ -227,6 +227,97 @@ class TestCreateWorkflow:
 
         assert response.status_code == 401
 
+    def test_create_workflow_from_extension_recording(
+        self,
+        client: TestClient,
+        db: Session,
+        token1: str,
+        user1: User
+    ):
+        """Test creating workflow with data structure from extension recording.
+        
+        This test validates the exact data format sent by the extension,
+        including null timestamps and screenshot_ids.
+        """
+        # Data structure as sent by the extension
+        extension_data = {
+            "name": "Test Extension Recording",
+            "description": None,
+            "starting_url": "http://localhost:3000/dashboard",
+            "tags": [],
+            "steps": [
+                {
+                    "step_number": 1,
+                    "timestamp": None,  # Extension sends null initially
+                    "action_type": "click",
+                    "selectors": {
+                        "primary": "#dashboard-link",
+                        "css": "a.dashboard-link"
+                    },
+                    "element_meta": {
+                        "tag_name": "A",
+                        "inner_text": "Dashboard"
+                    },
+                    "page_context": {
+                        "url": "http://localhost:3000/dashboard",
+                        "title": "Dashboard"
+                    },
+                    "action_data": None,
+                    "dom_context": None,
+                    "screenshot_id": None  # Screenshots uploaded separately
+                },
+                {
+                    "step_number": 2,
+                    "timestamp": None,
+                    "action_type": "click",
+                    "selectors": {
+                        "primary": ".refresh-btn"
+                    },
+                    "element_meta": {
+                        "tag_name": "BUTTON",
+                        "inner_text": "Refresh"
+                    },
+                    "page_context": {
+                        "url": "http://localhost:3000/dashboard",
+                        "title": "Dashboard"
+                    },
+                    "action_data": None,
+                    "dom_context": None,
+                    "screenshot_id": None
+                }
+            ]
+        }
+        
+        response = client.post(
+            "/api/workflows",
+            json=extension_data,
+            headers={"Authorization": f"Bearer {token1}"}
+        )
+        
+        # Should succeed with 201
+        assert response.status_code == 201, f"Expected 201, got {response.status_code}: {response.json()}"
+        data = response.json()
+        
+        assert "workflow_id" in data
+        assert data["status"] == "processing"
+        
+        # Verify workflow in database
+        workflow = db.query(Workflow).filter(Workflow.id == data["workflow_id"]).first()
+        assert workflow is not None
+        assert workflow.name == "Test Extension Recording"
+        assert workflow.company_id == user1.company_id
+        
+        # Verify steps were created with null values handled correctly
+        steps = db.query(Step).filter(Step.workflow_id == workflow.id).order_by(Step.step_number).all()
+        assert len(steps) == 2
+        
+        # Check steps handle null fields correctly
+        for step in steps:
+            assert step.timestamp is None
+            assert step.screenshot_id is None
+            assert step.action_data is None
+            assert step.dom_context is None
+    
     def test_create_workflow_without_steps_fails(
         self,
         client: TestClient,
