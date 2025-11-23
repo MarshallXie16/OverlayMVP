@@ -1,0 +1,35 @@
+{
+  "name": "@workflow-platform/extension",
+  "version": "0.1.0",
+  "description": "Chrome Extension for Workflow Recording and Playback",
+  "type": "module",
+  "scripts": {
+    "dev": "vite build --watch --mode development",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "zustand": "^4.4.7"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.253",
+    "@types/node": "^24.10.1",
+    "@types/react": "^18.2.43",
+    "@types/react-dom": "^18.2.17",
+    "@vitejs/plugin-react": "^4.2.1",
+    "@vitest/coverage-v8": "^1.0.4",
+    "autoprefixer": "^10.4.16",
+    "happy-dom": "^12.10.3",
+    "postcss": "^8.4.32",
+    "tailwindcss": "^3.3.6",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.8",
+    "vite-plugin-static-copy": "^1.0.6",
+    "vitest": "^1.0.4"
+  }
+}

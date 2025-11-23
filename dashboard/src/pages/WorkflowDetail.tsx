@@ -1,0 +1,185 @@
+/**
+ * Workflow Detail Page
+ * View workflow details and steps
+ */
+
+import { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { apiClient } from '@/api/client';
+import type { WorkflowResponse } from '@/api/types';
+
+export const WorkflowDetail: React.FC = () => {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const [workflow, setWorkflow] = useState<WorkflowResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (id) {
+      loadWorkflow(parseInt(id, 10));
+    }
+  }, [id]);
+
+  const loadWorkflow = async (workflowId: number) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const data = await apiClient.getWorkflow(workflowId);
+      setWorkflow(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load workflow');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!workflow || !confirm('Are you sure you want to delete this workflow?')) {
+      return;
+    }
+
+    try {
+      await apiClient.deleteWorkflow(workflow.id);
+      navigate('/dashboard');
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete workflow');
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+      </div>
+    );
+  }
+
+  if (error || !workflow) {
+    return (
+      <div className="rounded-md bg-red-50 p-4">
+        <div className="text-sm text-red-800">{error || 'Workflow not found'}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {/* Header */}
+      <div className="mb-8">
+        <button
+          onClick={() => navigate('/dashboard')}
+          className="text-sm text-gray-600 hover:text-gray-900 mb-4"
+        >
+          ← Back to workflows
+        </button>
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">{workflow.name}</h1>
+            {workflow.description && (
+              <p className="mt-2 text-sm text-gray-600">{workflow.description}</p>
+            )}
+          </div>
+          <button
+            onClick={handleDelete}
+            className="px-4 py-2 text-sm font-medium text-red-600 hover:text-red-700 border border-red-600 rounded-md hover:bg-red-50"
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+
+      {/* Metadata */}
+      <div className="bg-white shadow overflow-hidden sm:rounded-lg mb-8">
+        <div className="px-4 py-5 sm:px-6">
+          <h3 className="text-lg leading-6 font-medium text-gray-900">
+            Workflow Information
+          </h3>
+        </div>
+        <div className="border-t border-gray-200 px-4 py-5 sm:p-0">
+          <dl className="sm:divide-y sm:divide-gray-200">
+            <div className="py-4 sm:py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+              <dt className="text-sm font-medium text-gray-500">Status</dt>
+              <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+                {workflow.status}
+              </dd>
+            </div>
+            <div className="py-4 sm:py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+              <dt className="text-sm font-medium text-gray-500">Starting URL</dt>
+              <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+                <a
+                  href={workflow.starting_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary-600 hover:text-primary-700"
+                >
+                  {workflow.starting_url}
+                </a>
+              </dd>
+            </div>
+            <div className="py-4 sm:py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+              <dt className="text-sm font-medium text-gray-500">Total Steps</dt>
+              <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+                {workflow.step_count}
+              </dd>
+            </div>
+            <div className="py-4 sm:py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+              <dt className="text-sm font-medium text-gray-500">Total Uses</dt>
+              <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+                {workflow.total_uses}
+              </dd>
+            </div>
+            <div className="py-4 sm:py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+              <dt className="text-sm font-medium text-gray-500">Success Rate</dt>
+              <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+                {(workflow.success_rate * 100).toFixed(0)}%
+              </dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+
+      {/* Steps */}
+      <div className="bg-white shadow overflow-hidden sm:rounded-lg">
+        <div className="px-4 py-5 sm:px-6">
+          <h3 className="text-lg leading-6 font-medium text-gray-900">
+            Workflow Steps
+          </h3>
+        </div>
+        <div className="border-t border-gray-200">
+          <ul className="divide-y divide-gray-200">
+            {workflow.steps.map((step) => (
+              <li key={step.id} className="px-4 py-4 sm:px-6">
+                <div className="flex items-start">
+                  <div className="flex-shrink-0">
+                    <span className="inline-flex items-center justify-center h-8 w-8 rounded-full bg-primary-100 text-primary-600 font-semibold">
+                      {step.step_number}
+                    </span>
+                  </div>
+                  <div className="ml-4 flex-1">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium text-gray-900">
+                        {step.ai_label || step.action_type}
+                      </p>
+                      <span className="text-xs text-gray-500">
+                        {step.action_type}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-sm text-gray-600">
+                      {step.element_meta.tag_name}
+                      {step.element_meta.inner_text &&
+                        ` - "${step.element_meta.inner_text}"`}
+                    </p>
+                    <p className="mt-1 text-xs text-gray-500">
+                      {step.page_context.url}
+                    </p>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+};
