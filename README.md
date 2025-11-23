@@ -4,10 +4,20 @@ AI-powered Chrome extension for recording, managing, and executing interactive w
 
 ## 📚 Documentation
 
+### Getting Started
 - **[Quick Start Guide](./QUICKSTART.md)** - Get running in 5 minutes ⚡
-- **[Testing Guide](./TESTING_GUIDE.md)** - Comprehensive testing scenarios 🧪
-- **[Extension Docs](./extension/README.md)** - Chrome extension documentation
-- **[Dashboard Docs](./dashboard/README.md)** - Web dashboard documentation
+- **[Testing Guide](./docs/testing.md)** - Comprehensive testing scenarios 🧪
+
+### Technical Documentation
+- **[Architecture](./docs/architecture.md)** - System architecture and component interaction
+- **[Recording System](./docs/recording-system.md)** - Event recording and deduplication
+
+### Project Knowledge
+- **[Memory](./memory.md)** - Recent work summary and key lessons learned
+- **[Fixed Bugs](./fixed_bugs.md)** - Quick reference of bugs fixed and lessons
+
+### Design Documentation
+- **[Design Docs](./design_docs/)** - Business plan, product design, roadmap
 
 ## 🎯 Current Status
 
@@ -118,13 +128,14 @@ workflow-platform/
 ├── extension/           # Chrome extension (TypeScript + React)
 ├── backend/             # FastAPI server (Python)
 ├── dashboard/           # Web dashboard (React)
+├── docs/                # Technical documentation
 ├── design_docs/         # Product specifications
 ├── memory.md            # Agent's project memory
 ├── tasks.md             # Current sprint tasks
 └── README.md            # This file
 ```
 
-See `memory.md` for detailed architecture documentation.
+See `docs/architecture.md` for detailed system architecture.
 
 ---
 
@@ -150,12 +161,12 @@ See `memory.md` for detailed architecture documentation.
 
 ---
 
-## Documentation
+## Documentation Structure
 
-- **`memory.md`** - Project architecture and decisions
+- **`docs/`** - Technical documentation (architecture, components)
+- **`design_docs/`** - Business and product specifications
+- **`memory.md`** - Project knowledge and decisions
 - **`tasks.md`** - Current sprint plan
-- **`design_docs/`** - Business and technical specifications
-- **`docs/`** - Component and API documentation (to be created)
 
 ---
 

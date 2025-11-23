@@ -39,16 +39,8 @@ export default defineConfig({
           dest: 'icons',
         },
         {
-          src: 'src/content/overlay.css',
-          dest: 'content',
-        },
-        {
-          src: 'src/content/widget.css',
-          dest: 'content',
-        },
-        {
-          src: 'src/content/feedback.css',
-          dest: 'content',
+          src: 'src/content/styles/*.css',
+          dest: 'content/styles',
         },
       ],
     }),

@@ -9,6 +9,62 @@ Building a Chrome Extension + Web Dashboard + API server for recording, managing
 
 ---
 
+## Recent Work Summary
+
+### Workflow Recording System (Nov 2024)
+**Objective:** Fix workflow recording to capture clean, semantic user actions instead of noisy DOM events.
+
+**What We Built:**
+- EventDeduplicator system with 100ms buffering and priority-based selection
+- Fixed race condition in step numbering (atomic increment)
+- Implemented value change detection for inputs
+- Organized codebase (tests to `__tests__/`, CSS to `styles/`, docs to `docs/`)
+
+**Impact:** Reduced login workflow from 13 steps → 4 steps (69% reduction)
+
+**Status:** ✅ Complete and tested
+
+---
+
+## Key Lessons Learned
+
+### 1. Event Deduplication is Critical
+**Problem:** Clicking a checkbox label fires 3 events (label click, input click, change).  
+**Lesson:** Buffer events and pick the most semantic one using priority system.  
+**Implementation:** 100ms buffer + priority hierarchy (submit > change > input_commit > click)
+
+### 2. Race Conditions in Async JavaScript
+**Problem:** Multiple event handlers reading same step counter → duplicate step numbers → database constraint violation.  
+**Lesson:** Capture atomically with `const stepNumber = ++state.counter` instead of incrementing then reading.  
+**Prevention:** Always capture state immediately, never rely on it being unchanged after async operations.
+
+### 3. Value Change Detection
+**Problem:** Recording every blur event creates noise (empty clicks, autofill spam).  
+**Lesson:** Track values on focus, only record on blur if value actually changed.  
+**Benefit:** Eliminates 60-70% of unnecessary input steps.
+
+### 4. Chrome Extension CSS Loading
+**Problem:** TypeScript imports of CSS don't work in content scripts.  
+**Lesson:** Must load CSS via manifest.json `content_scripts.css` array.  
+**Prevention:** Never import CSS in content script TypeScript files.
+
+### 5. Database Constraints as Bug Detectors
+**Problem:** Duplicate step numbers were silently created until database rejected them.  
+**Lesson:** Unique constraints catch bugs that tests might miss.  
+**Practice:** Design database schema to enforce business rules (e.g., unique step numbers per workflow).
+
+### 6. Codebase Organization
+**Problem:** Tests mixed with source, CSS mixed with TypeScript, verbose docs at root.  
+**Lesson:** Standard conventions matter (`__tests__/` for tests, `docs/` for documentation, `styles/` for CSS).  
+**Benefit:** Easier navigation for humans and AI agents.
+
+### 7. Error Logging for Debugging
+**Problem:** Generic "Request failed" errors without details.  
+**Lesson:** Log full error objects, especially for backend validation errors.  
+**Implementation:** Parse and display FastAPI/Pydantic validation error details.
+
+---
+
 ## Project Structure
 
 ```

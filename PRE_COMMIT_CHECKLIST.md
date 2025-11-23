@@ -9,7 +9,7 @@ If you modified extension code (`extension/src/**`):
 ### Build Verification
 - [ ] Run `npm run build` in `extension/` directory
 - [ ] Verify `dist/manifest.json` exists
-- [ ] Verify `dist/content/overlay.css` exists (if modified)
+- [ ] Verify `dist/content/styles/` contains CSS files (if modified)
 - [ ] Verify `dist/icons/` contains icon files
 - [ ] Check build output for errors or warnings
 
@@ -102,8 +102,11 @@ If you changed authentication or core workflows:
 If your changes affect user-facing behavior or setup:
 - [ ] Update `README.md` if setup changed
 - [ ] Update `QUICKSTART.md` if quick start flow changed
-- [ ] Update `TESTING_GUIDE.md` if testing scenarios changed
-- [ ] Add entry to `memory.md` for significant architectural decisions
+- [ ] Update `docs/testing.md` if testing scenarios changed
+- [ ] Update `docs/architecture.md` if system structure changed
+- [ ] Update `docs/recording-system.md` if recording logic changed
+- [ ] Add entry to `memory.md` for key lessons learned
+- [ ] Add bug to `fixed_bugs.md` if you fixed an issue
 
 ---
 

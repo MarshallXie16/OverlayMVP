@@ -29,7 +29,7 @@
     {
       "matches": ["http://*/*", "https://*/*"],
       "js": ["content/recorder.js", "content/walkthrough.js"],
-      "css": ["content/overlay.css", "content/widget.css", "content/feedback.css"],
+      "css": ["content/styles/overlay.css", "content/styles/widget.css", "content/styles/feedback.css"],
       "run_at": "document_idle"
     }
   ],
