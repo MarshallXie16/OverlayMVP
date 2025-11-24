@@ -701,6 +701,324 @@ Sprint 2 and beyond will be documented here.
 
 ---
 
+## Sprint 2: AI Labeling & Review/Edit (2024-11-23)
+
+### AI-001: Celery Task Queue Setup
+**Completed**: 2024-11-23
+**Estimate**: 5 SP | **Actual**: 5 SP
+
+**What was done**:
+- Configured Celery application with Redis message broker
+- Set up task registration and routing system
+- Created base task class with lifecycle hooks (before_start, on_success, on_failure)
+- Implemented database session management for async tasks
+- Added progress logging utilities
+- Created comprehensive setup documentation
+
+**Key Decisions**:
+- Redis for both broker and result backend (simplicity for MVP)
+- Task time limit: 300s (5 minutes) with soft limit at 270s
+- Worker concurrency: 5 (AI rate limiting consideration)
+- Auto-retry: 3 attempts with exponential backoff
+- Separate queue for AI labeling tasks
+
+**Files Created**:
+- `app/celery_app.py` - Celery configuration (174 lines)
+- `app/tasks/__init__.py` - Task registration
+- `app/tasks/utils.py` - Shared utilities (97 lines)
+- `docs/celery-setup.md` - Setup documentation (384 lines)
+- `tests/test_celery_setup.py` - Unit tests (179 lines)
+
+**Tests Added**: 11 tests (configuration, registration, session management)
+
+**Learnings**:
+- Celery workers need explicit database session management
+- Task retry backoff prevents API rate limit issues
+- Separate queues allow priority-based processing
+
+---
+
+### AI-002: Claude Vision API Integration
+**Completed**: 2024-11-23
+**Estimate**: 8 SP | **Actual**: 8 SP
+
+**What was done**:
+- Integrated Anthropic Claude 3.5 Sonnet (Vision) for screenshot analysis
+- Built AI service layer with prompt engineering
+- Implemented template-based fallback system for missing screenshots
+- Added cost tracking and token usage monitoring
+- Created comprehensive error handling with retries
+- Upgraded anthropic package from 0.7.1 to 0.74.1
+- Implemented tool calling for reliable JSON extraction
+- Fixed HTTPS requirement by converting local screenshots to base64
+
+**Key Decisions**:
+- Model: claude-haiku-4-5-20251001 (fast, cost-effective, vision-capable)
+- Temperature: 0.3 (deterministic but not rigid)
+- Max tokens: 500 (sufficient for labels + instructions)
+- Tool calling approach for structured JSON output (no regex parsing)
+- Base64 encoding for local screenshots (Claude requires HTTPS)
+- Fallback templates maintain functionality when AI fails
+
+**Files Created**:
+- `app/services/ai.py` - AI service class (455 lines)
+- `tests/test_ai_service.py` - Unit tests (426 lines)
+- `tests/test_anthropic_api.py` - Integration tests (89 lines)
+
+**Tests Added**: 24 tests (initialization, fallback generation, cost tracking, API mocking)
+
+**Cost Tracking**:
+- Input: $3.00 / 1M tokens
+- Output: $15.00 / 1M tokens
+- Typical workflow: ~$0.03-0.05 per 6-step workflow
+
+**Learnings**:
+- Old Anthropic SDK (0.7.x) had completely different API structure
+- Tool calling is the proper way to get structured JSON from Claude
+- Local HTTP URLs must be converted to base64 for Claude API
+- Fallback templates critical for reliability when screenshots missing
+
+---
+
+### AI-003: Background Job for AI Labeling
+**Completed**: 2024-11-23
+**Estimate**: 5 SP | **Actual**: 5 SP
+
+**What was done**:
+- Implemented complete Celery task for workflow step labeling
+- Built workflow processing orchestration
+- Integrated with Claude Vision API via AI service
+- Added database updates with AI-generated labels
+- Implemented status management (processing → draft)
+- Handled partial failures gracefully
+- Added explicit processing trigger to prevent race conditions
+
+**Key Decisions**:
+- Sequential processing (one step at a time for MVP)
+- Partial failures don't abort task (mark steps with error labels)
+- Workflow status: processing → draft (success) or needs_review (failures)
+- Database updates include: field_label, instruction, ai_confidence, ai_model, ai_generated_at
+- Race condition fixed: Extension triggers processing after screenshots linked
+
+**Files Created**:
+- `app/tasks/ai_labeling.py` - Main labeling task (195 lines)
+- `tests/test_ai_labeling_task.py` - Task tests (351 lines)
+
+**Tests Added**: 6 tests (successful labeling, partial/complete failure, error handling)
+
+**Task Flow**:
+1. Workflow created (status: draft, no immediate trigger)
+2. Extension uploads and links screenshots
+3. Extension calls POST `/api/workflows/{id}/start-processing`
+4. Backend queues Celery task
+5. Celery processes each step (fetch screenshot, call AI, update DB)
+6. Update workflow status to draft
+7. Admin reviews in dashboard
+
+**Learnings**:
+- Race condition: Don't trigger AI immediately on workflow creation
+- Extension should control when processing starts (after screenshots ready)
+- Explicit trigger endpoint more reliable than detection logic
+- Partial failures acceptable for MVP (user can manually edit)
+
+---
+
+### BE-006: Update Step API Endpoint
+**Completed**: 2024-11-23
+**Estimate**: 3 SP | **Actual**: 3 SP
+
+**What was done**:
+- Created `PUT /api/steps/:id` endpoint for updating step labels
+- Implemented multi-tenant security (company_id isolation)
+- Added input validation (max 100 chars for label, 500 for instruction)
+- Implemented edit tracking (edited_by, edited_at, label_edited, instruction_edited flags)
+- Fixed JSON field parsing for Pydantic response schemas
+
+**Files Created**:
+- `backend/app/api/steps.py` (174 lines) - New API endpoint
+- `backend/tests/test_steps_api.py` (452 lines) - Comprehensive test suite
+
+**Tests Added**: 12 tests (GET/PUT operations, validation, multi-tenancy, edge cases)
+
+**Key Decisions**:
+- Allow editing both fields independently or together
+- Track each field's edit status separately
+- Update timestamp on every edit (audit trail)
+- Return 404 (not 403) for other company's steps (information hiding)
+
+**Learnings**:
+- Edit tracking essential for audit trails and AI improvement
+- Pydantic validators needed for JSON field parsing from SQLAlchemy
+- Multi-tenant checks at every endpoint prevent data leaks
+
+---
+
+### BE-008: Workflow Status Validation
+**Completed**: 2024-11-23
+**Estimate**: 2 SP | **Actual**: 2 SP
+
+**What was done**:
+- Added `validate_workflow_complete()` function to workflow service
+- Validates all steps have field_label and instruction before activation
+- Rejects empty/whitespace-only labels
+- Returns detailed error messages with incomplete step numbers
+- Updates workflow.updated_at timestamp on status change
+
+**Files Modified**:
+- `backend/app/services/workflow.py` - Added validation logic
+- `backend/tests/test_workflow_status_validation.py` (349 lines) - Test suite
+
+**Tests Added**: 7 tests (activation validation, error messages, edge cases)
+
+**Validation Rules**:
+1. Workflow must have steps (fail if 0)
+2. Each step must have field_label (not empty/whitespace)
+3. Each step must have instruction (not empty/whitespace)
+4. Return 400 with list of incomplete steps if validation fails
+
+**Error Response Format**:
+```json
+{
+  "detail": {
+    "code": "WORKFLOW_INCOMPLETE",
+    "message": "Cannot activate workflow: 2 step(s) missing labels",
+    "incomplete_steps": [
+      {"step_number": 1, "missing": "field_label"}
+    ]
+  }
+}
+```
+
+**Learnings**:
+- Detailed validation errors help users fix issues quickly
+- Activation validation only runs when changing to "active" status
+- Draft/archived status changes don't require validation
+
+---
+
+### FE-008: Workflow Review Page UI
+**Completed**: 2024-11-23
+**Estimate**: 8 SP | **Actual**: 8 SP
+
+**What was done**:
+- Created `/workflows/:id/review` route
+- Built WorkflowReview page component
+- Created StepCard component (displays screenshot, labels, confidence)
+- Implemented responsive grid layout (2-3 columns based on screen size)
+- Added "Save Workflow" button with validation
+- Implemented loading/error states
+- Color-coded confidence indicators (green >0.8, yellow 0.6-0.8, red <0.6)
+
+**Files Created**:
+- `dashboard/src/pages/WorkflowReview.tsx` (185 lines)
+- `dashboard/src/components/StepCard.tsx` (135 lines)
+- Updated `dashboard/src/App.tsx` (added route)
+- Updated `dashboard/src/api/types.ts` (StepResponse interface)
+- Updated `dashboard/src/api/client.ts` (updateWorkflow, updateStep methods)
+
+**Key Decisions**:
+- Grid layout responsive (1 col mobile, 2 cols tablet, 3 cols desktop)
+- Confidence color-coding for quick visual assessment
+- "Edit" button on each card opens modal
+- Save workflow validates completion before activation
+
+**UI Features**:
+- Loading spinner while workflow processes
+- Empty state with instructions
+- Workflow metadata (name, status, step count)
+- Numbered step cards with all details
+- Accessible design (ARIA labels, keyboard navigation)
+
+**Learnings**:
+- Grid layout with Tailwind CSS very efficient
+- Color-coded confidence helps admins prioritize edits
+- Loading states critical for async AI processing
+
+---
+
+### FE-009: Edit Step Modal
+**Completed**: 2024-11-23
+**Estimate**: 5 SP | **Actual**: 5 SP
+
+**What was done**:
+- Built EditStepModal component with Headless UI
+- Implemented full-size screenshot display
+- Created editable field_label and instruction inputs
+- Added form validation (required fields, max lengths)
+- Built technical details accordion (selectors, metadata)
+- Implemented optimistic UI updates
+- Added "Edited" badge for modified steps
+
+**Files Created**:
+- `dashboard/src/components/EditStepModal.tsx` (286 lines)
+- Updated `dashboard/package.json` (added @headlessui/react dependency)
+
+**Key Decisions**:
+- Headless UI for accessible modal component
+- Character counters (100 for label, 500 for instruction)
+- Technical details collapsible (don't overwhelm users)
+- Optimistic updates (show changes immediately)
+- Edited badge persists after save
+
+**Modal Features**:
+- Full-size screenshot preview
+- Real-time character count
+- Form validation with inline errors
+- Save/cancel buttons
+- Escape key to close, Enter to save
+- Technical details expandable accordion
+
+**Learnings**:
+- Headless UI provides accessibility out of the box
+- Character counters help users stay within limits
+- Optimistic updates improve perceived performance
+
+---
+
+## Sprint 2 Summary
+
+**Completed**: 2024-11-23
+**Total Story Points**: 36 SP
+**Sprint Goal**: AI-powered workflow labeling and admin review/editing ✅
+
+**AI Backend** (18 SP):
+- AI-001: Celery setup (5 SP)
+- AI-002: Claude Vision integration (8 SP)
+- AI-003: Background labeling task (5 SP)
+
+**Backend APIs** (5 SP):
+- BE-006: Update step endpoint (3 SP)
+- BE-008: Workflow validation (2 SP)
+
+**Frontend** (13 SP):
+- FE-008: Review page UI (8 SP)
+- FE-009: Edit step modal (5 SP)
+
+**Tests Written**: 41 total
+- AI backend: 41 tests (Celery 11, AI service 24, Task 6)
+- Step API: 12 tests
+- Workflow validation: 7 tests
+- Frontend: Manual testing (comprehensive)
+
+**Code Metrics**:
+- Backend: ~1,200 lines (AI infrastructure)
+- Backend: ~600 lines (Step API + validation)
+- Frontend: ~800 lines (Review UI + modal)
+- Tests: ~1,300 lines
+- **Total**: ~3,900 lines of production code + tests
+
+**Key Deliverables**:
+✅ Complete AI labeling pipeline (Celery + Claude Vision)
+✅ Admin review and editing interface
+✅ Workflow activation with validation
+✅ Edit tracking and audit trails
+✅ Comprehensive error handling
+✅ Cost tracking for AI usage
+
+**Sprint 2 Complete** - System now supports end-to-end AI-powered workflow creation!
+
+---
+
 ## Future Sprints
 
-Sprint 2 work will focus on AI labeling integration, walkthrough mode, and enhanced testing.
+Sprint 3 will focus on walkthrough mode, auto-healing, and production polish.

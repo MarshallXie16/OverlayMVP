@@ -153,7 +153,7 @@ def upload_screenshot(
     screenshot.storage_url = storage_url
 
     db.commit()
-    db.refresh(screenshot)
+    # No need to refresh - all values are already set
 
     return screenshot, False
 

@@ -3,9 +3,10 @@ Pydantic schemas for workflow steps.
 
 Steps represent individual actions in a workflow sequence (clicks, inputs, navigation, etc.).
 """
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, Dict, Any
 from datetime import datetime
+import json
 
 
 class StepCreate(BaseModel):
@@ -129,6 +130,17 @@ class StepResponse(BaseModel):
 
     # Timestamps
     created_at: datetime
+
+    @field_validator('selectors', 'element_meta', 'page_context', 'action_data', 'dom_context', 'healed_selectors', mode='before')
+    @classmethod
+    def parse_json_fields(cls, v):
+        """Parse JSON string fields to dicts."""
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                return {}
+        return v if v is not None else {}
 
     class Config:
         from_attributes = True  # Pydantic v2 (was orm_mode in v1)

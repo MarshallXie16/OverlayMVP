@@ -358,6 +358,43 @@ export class ApiClient {
   }
 
   // ==========================================================================
+  // STEPS
+  // ==========================================================================
+
+  /**
+   * Link screenshot to step
+   * Called after screenshot upload to associate screenshot_id with step
+   */
+  async linkScreenshotToStep(
+    stepId: number,
+    screenshotId: number
+  ): Promise<void> {
+    return makeRequest<void>(`/api/steps/${stepId}/screenshot?screenshot_id=${screenshotId}`, {
+      method: 'PATCH',
+    });
+  }
+
+  /**
+   * Start AI processing for workflow
+   * Called after all screenshots are uploaded and linked
+   */
+  async startWorkflowProcessing(workflowId: number): Promise<{
+    task_id: string;
+    workflow_id: number;
+    message: string;
+    status: string;
+  }> {
+    return makeRequest<{
+      task_id: string;
+      workflow_id: number;
+      message: string;
+      status: string;
+    }>(`/api/workflows/${workflowId}/start-processing`, {
+      method: 'POST',
+    });
+  }
+
+  // ==========================================================================
   // UTILITY METHODS
   // ==========================================================================
 

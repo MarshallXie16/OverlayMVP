@@ -80,12 +80,22 @@ export const WorkflowDetail: React.FC = () => {
               <p className="mt-2 text-sm text-gray-600">{workflow.description}</p>
             )}
           </div>
-          <button
-            onClick={handleDelete}
-            className="px-4 py-2 text-sm font-medium text-red-600 hover:text-red-700 border border-red-600 rounded-md hover:bg-red-50"
-          >
-            Delete
-          </button>
+          <div className="flex gap-3">
+            {(workflow.status === 'draft' || workflow.status === 'active') && (
+              <button
+                onClick={() => navigate(`/workflows/${workflow.id}/review`)}
+                className="px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-md"
+              >
+                {workflow.status === 'draft' ? 'Review & Edit' : 'Edit Workflow'}
+              </button>
+            )}
+            <button
+              onClick={handleDelete}
+              className="px-4 py-2 text-sm font-medium text-red-600 hover:text-red-700 border border-red-600 rounded-md hover:bg-red-50"
+            >
+              Delete
+            </button>
+          </div>
         </div>
       </div>
 
@@ -159,17 +169,17 @@ export const WorkflowDetail: React.FC = () => {
                   <div className="ml-4 flex-1">
                     <div className="flex items-center justify-between">
                       <p className="text-sm font-medium text-gray-900">
-                        {step.ai_label || step.action_type}
+                        {step.field_label || step.action_type}
                       </p>
                       <span className="text-xs text-gray-500">
                         {step.action_type}
                       </span>
                     </div>
-                    <p className="mt-1 text-sm text-gray-600">
-                      {step.element_meta.tag_name}
-                      {step.element_meta.inner_text &&
-                        ` - "${step.element_meta.inner_text}"`}
-                    </p>
+                    {step.instruction && (
+                      <p className="mt-1 text-sm text-gray-600">
+                        {step.instruction}
+                      </p>
+                    )}
                     <p className="mt-1 text-xs text-gray-500">
                       {step.page_context.url}
                     </p>

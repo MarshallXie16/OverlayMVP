@@ -108,48 +108,70 @@ def validate_image_format(file_content: bytes, allowed_formats: Tuple[str, ...] 
 
 def upload_to_s3(file_content: bytes, key: str) -> str:
     """
-    MOCK: Upload file to S3 and return storage URL.
+    Upload file to local storage (MVP) or S3 (production).
 
-    This is a mocked implementation for MVP. Returns a fake S3 URL.
+    For MVP, saves files to local filesystem under screenshots/ directory.
     In production, this will use boto3 to upload to real S3 bucket.
 
-    Expected S3 Key Structure:
-        companies/{company_id}/workflows/{workflow_id}/screenshots/{screenshot_id}.jpg
+    Expected Storage Structure:
+        screenshots/companies/{company_id}/workflows/{workflow_id}/{screenshot_id}.jpg
 
     Args:
         file_content: Raw bytes of the file to upload
-        key: S3 object key (path within bucket)
+        key: Storage key (path within bucket/directory)
 
     Returns:
-        Full S3 URL to the uploaded file
+        Storage URL (local path for MVP, S3 URL for production)
 
-    Real Implementation:
+    Real S3 Implementation:
         import boto3
         s3 = boto3.client('s3')
         bucket = os.getenv('S3_BUCKET_NAME', 'workflow-screenshots')
         s3.put_object(Bucket=bucket, Key=key, Body=file_content)
         return f"https://{bucket}.s3.amazonaws.com/{key}"
     """
-    # MOCK: Just return a fake URL for now
-    bucket_name = os.getenv('S3_BUCKET_NAME', 'workflow-screenshots')
-    return f"https://fake-s3.amazonaws.com/{bucket_name}/{key}"
+    # MVP: Use local file storage
+    use_local_storage = os.getenv('USE_LOCAL_STORAGE', 'true').lower() == 'true'
+    
+    if use_local_storage:
+        # Save to local filesystem
+        import pathlib
+        
+        # Create storage directory in project root
+        base_dir = pathlib.Path(__file__).parent.parent.parent  # backend/
+        storage_dir = base_dir / "screenshots"
+        file_path = storage_dir / key
+        
+        # Create parent directories
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Write file
+        file_path.write_bytes(file_content)
+        
+        # Return local URL (served via static files endpoint)
+        return f"/screenshots/{key}"
+    else:
+        # Production: Use real S3 (not implemented yet)
+        bucket_name = os.getenv('S3_BUCKET_NAME', 'workflow-screenshots')
+        # TODO: Implement real boto3 upload
+        return f"https://{bucket_name}.s3.amazonaws.com/{key}"
 
 
 def generate_presigned_url(storage_key: str, expiration: int = 900) -> str:
     """
-    MOCK: Generate pre-signed URL for temporary access to S3 object.
+    Generate URL for accessing screenshot.
 
-    This is a mocked implementation for MVP. Returns the same fake S3 URL.
-    In production, this will generate real pre-signed URLs with expiration.
+    For MVP with local storage, returns the local URL.
+    In production, generates real pre-signed S3 URLs with expiration.
 
     Args:
-        storage_key: S3 object key
+        storage_key: Storage key (S3 object key or local path)
         expiration: URL expiration time in seconds (default: 900 = 15 minutes)
 
     Returns:
-        Pre-signed URL with temporary access token
+        Access URL (local path for MVP, pre-signed S3 URL for production)
 
-    Real Implementation:
+    Real S3 Implementation:
         import boto3
         s3 = boto3.client('s3')
         bucket = os.getenv('S3_BUCKET_NAME', 'workflow-screenshots')
@@ -160,9 +182,17 @@ def generate_presigned_url(storage_key: str, expiration: int = 900) -> str:
         )
         return url
     """
-    # MOCK: Just return a fake presigned URL
-    bucket_name = os.getenv('S3_BUCKET_NAME', 'workflow-screenshots')
-    return f"https://fake-s3.amazonaws.com/{bucket_name}/{storage_key}?expires={expiration}"
+    # MVP: Use local file storage (no expiration needed)
+    use_local_storage = os.getenv('USE_LOCAL_STORAGE', 'true').lower() == 'true'
+    
+    if use_local_storage:
+        # Return local URL (no expiration for local files)
+        return f"/screenshots/{storage_key}"
+    else:
+        # Production: Generate real pre-signed URL (not implemented yet)
+        bucket_name = os.getenv('S3_BUCKET_NAME', 'workflow-screenshots')
+        # TODO: Implement real boto3 presigned URL generation
+        return f"https://{bucket_name}.s3.amazonaws.com/{storage_key}?expires={expiration}"
 
 
 def build_storage_key(company_id: int, workflow_id: int, screenshot_id: int, format: str = "jpg") -> str:

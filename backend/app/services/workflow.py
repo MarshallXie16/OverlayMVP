@@ -1,13 +1,13 @@
 """
-Workflow service layer for business logic and database operations.
+Workflow service layer for business logic.
 
-Handles CRUD operations for workflows with multi-tenant isolation,
-step creation, and transaction management.
+Handles CRUD operations with multi-tenant isolation and transaction management.
 """
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, select
 from fastapi import HTTPException, status
 from typing import List, Tuple
+from datetime import datetime, timezone
 import json
 
 from app.models.workflow import Workflow
@@ -251,6 +251,10 @@ def update_workflow(
     - Does NOT update steps (use separate step endpoints)
     - Only updates fields that are provided (partial update)
 
+    **Status Validation (BE-008):**
+    - When changing status to "active", validates all steps have labels
+    - Returns 400 if activating workflow with incomplete steps
+
     Args:
         db: Database session
         workflow_id: ID of workflow to update
@@ -262,6 +266,7 @@ def update_workflow(
 
     Raises:
         HTTPException: 404 if workflow not found or access denied
+        HTTPException: 400 if activating incomplete workflow
     """
     # Get workflow with multi-tenant check
     workflow = get_workflow_by_id(db, workflow_id, company_id)
@@ -277,13 +282,68 @@ def update_workflow(
         workflow.tags = json.dumps(workflow_data.tags)
 
     if workflow_data.status is not None:
+        # BE-008: Validate workflow is complete before activating
+        if workflow_data.status == "active":
+            validate_workflow_complete(db, workflow)
+        
         workflow.status = workflow_data.status
+        workflow.updated_at = datetime.now(timezone.utc)
 
     # Commit changes
     db.commit()
     db.refresh(workflow)
 
     return workflow
+
+
+def validate_workflow_complete(db: Session, workflow: Workflow) -> None:
+    """
+    Validate that all steps in a workflow have labels and instructions.
+    
+    Called before activating a workflow to ensure it's ready for use.
+    
+    Args:
+        db: Database session
+        workflow: Workflow object to validate
+    
+    Raises:
+        HTTPException: 400 if any step is missing labels
+    """
+    from app.models.step import Step
+    
+    # Check if workflow has steps
+    if not workflow.steps:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "WORKFLOW_INCOMPLETE",
+                "message": "Cannot activate workflow with no steps"
+            }
+        )
+    
+    # Find steps with missing labels
+    incomplete_steps = []
+    for step in workflow.steps:
+        if not step.field_label or not step.field_label.strip():
+            incomplete_steps.append({
+                "step_number": step.step_number,
+                "missing": "field_label"
+            })
+        elif not step.instruction or not step.instruction.strip():
+            incomplete_steps.append({
+                "step_number": step.step_number,
+                "missing": "instruction"
+            })
+    
+    if incomplete_steps:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "WORKFLOW_INCOMPLETE",
+                "message": f"Cannot activate workflow: {len(incomplete_steps)} step(s) missing labels",
+                "incomplete_steps": incomplete_steps
+            }
+        )
 
 
 def delete_workflow(
