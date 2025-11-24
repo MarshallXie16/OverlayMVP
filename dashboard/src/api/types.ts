@@ -76,14 +76,47 @@ export interface StepResponse {
   id: number;
   workflow_id: number;
   step_number: number;
+  timestamp: string | null;
   action_type: 'click' | 'input_commit' | 'select_change' | 'submit' | 'navigate';
-  ai_label: string | null;
   selectors: Selectors;
   element_meta: ElementMeta;
-  action_data: Record<string, any>;
   page_context: PageContext;
+  action_data: Record<string, any> | null;
+  dom_context: Record<string, any> | null;
   screenshot_id: number | null;
+  
+  // AI-generated labels
+  field_label: string | null;
+  instruction: string | null;
+  ai_confidence: number | null;
+  ai_model: string | null;
+  ai_generated_at: string | null;
+  
+  // Admin edits
+  label_edited: boolean;
+  instruction_edited: boolean;
+  edited_by: number | null;
+  edited_at: string | null;
+  
+  // Auto-healing (future)
+  healed_selectors: Record<string, any> | null;
+  healed_at: string | null;
+  healing_confidence: number | null;
+  healing_method: string | null;
+  
   created_at: string;
+}
+
+export interface UpdateStepRequest {
+  field_label?: string;
+  instruction?: string;
+}
+
+export interface UpdateWorkflowRequest {
+  name?: string;
+  description?: string;
+  tags?: string[];
+  status?: 'draft' | 'active' | 'archived' | 'needs_review' | 'broken';
 }
 
 export interface Selectors {

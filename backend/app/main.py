@@ -3,10 +3,12 @@ FastAPI application entry point for Workflow Automation Platform.
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 # Import routers
-from app.api import auth, screenshots, workflows
+from app.api import auth, screenshots, workflows, steps
 
 
 @asynccontextmanager
@@ -53,3 +55,9 @@ async def root():
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(screenshots.router, prefix="/api", tags=["Screenshots"])
 app.include_router(workflows.router, prefix="/api/workflows", tags=["Workflows"])
+app.include_router(steps.router, prefix="/api/steps", tags=["Steps"])
+
+# Mount static files for screenshot storage (MVP only)
+screenshots_dir = Path(__file__).parent.parent / "screenshots"
+screenshots_dir.mkdir(exist_ok=True)
+app.mount("/screenshots", StaticFiles(directory=str(screenshots_dir)), name="screenshots")

@@ -48,17 +48,38 @@ export const Dashboard: React.FC = () => {
   };
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
+    try {
+      const date = new Date(dateString);
+      
+      // Validate date is valid
+      if (isNaN(date.getTime())) {
+        return 'Invalid date';
+      }
+      
+      const now = new Date();
+      const diffMs = now.getTime() - date.getTime();
+      
+      // Handle negative diff (future dates)
+      if (diffMs < 0) {
+        return 'Just now';
+      }
+      
+      const diffSecs = Math.floor(diffMs / 1000);
+      const diffMins = Math.floor(diffMs / 60000);
+      const diffHours = Math.floor(diffMs / 3600000);
+      const diffDays = Math.floor(diffMs / 86400000);
 
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-    return date.toLocaleDateString();
+      if (diffSecs < 60) return 'Just now';
+      if (diffMins < 60) return `${diffMins}m ago`;
+      if (diffHours < 24) return `${diffHours}h ago`;
+      if (diffDays < 30) return `${diffDays}d ago`;
+      
+      // For older dates, show full date
+      return date.toLocaleDateString();
+    } catch (err) {
+      console.error('Error formatting date:', dateString, err);
+      return 'Unknown';
+    }
   };
 
   if (isLoading) {

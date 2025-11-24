@@ -136,8 +136,20 @@ class ApiClient {
           throw new Error(errorMessage);
         }
 
-        // Success
-        return await response.json();
+        // Success - check if response has content
+        // DELETE requests often return 204 No Content
+        if (response.status === 204 || response.headers.get('content-length') === '0') {
+          return undefined as T;
+        }
+        
+        // Check if response is JSON
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          return await response.json();
+        }
+        
+        // Non-JSON response (shouldn't happen with our API)
+        return undefined as T;
       } catch (error) {
         // Network error - retry
         if (attempt < maxRetries - 1 && error instanceof TypeError) {
@@ -239,6 +251,37 @@ class ApiClient {
   async deleteWorkflow(id: number): Promise<void> {
     await this.request(`/api/workflows/${id}`, {
       method: 'DELETE',
+    });
+  }
+
+  async updateWorkflow(
+    id: number,
+    data: import('./types').UpdateWorkflowRequest
+  ): Promise<import('./types').WorkflowResponse> {
+    return this.request<import('./types').WorkflowResponse>(
+      `/api/workflows/${id}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }
+    );
+  }
+
+  // ============================================================================
+  // STEP ENDPOINTS
+  // ============================================================================
+
+  async getStep(id: number): Promise<import('./types').StepResponse> {
+    return this.request<import('./types').StepResponse>(`/api/steps/${id}`);
+  }
+
+  async updateStep(
+    id: number,
+    data: import('./types').UpdateStepRequest
+  ): Promise<import('./types').StepResponse> {
+    return this.request<import('./types').StepResponse>(`/api/steps/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
     });
   }
 }

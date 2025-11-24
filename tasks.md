@@ -4,641 +4,634 @@ Current sprint tasks, backlog, and technical debt tracking.
 
 ---
 
-## Sprint 1: Foundation & Core Infrastructure
+## Sprint 2: AI-Powered Review & Editing
 
-**Sprint Goal**: Establish backend API foundation, database schema, authentication system, and basic extension recording capability.
+**Sprint Goal**: Enable AI labeling of workflow steps and build admin review interface for editing/approving workflows.
 
 **Sprint Duration**: 2 weeks
-**Target Completion**: 2025-12-03
-**Committed Story Points**: 34 SP
+**Target Completion**: 2025-12-17
+**Committed Story Points**: 43 SP (37 P0 + 6 P1)
+
+**Status**: Sprint 1 Complete ✅ - 53 SP delivered
+- Backend API foundation ✅
+- Chrome extension recording ✅
+- Dashboard authentication ✅
 
 ---
 
-## EPIC-001: Backend Infrastructure
-**Goal**: Build production-ready backend API with authentication, database, and core endpoints
-**Success Metrics**: Backend running, auth working, database migrations functional
-**Target Completion**: Sprint 1
+## EPIC-003: AI-Powered Review & Editing
+**Goal**: Enable AI to automatically label workflow steps and provide admin UI for review/editing
+**Success Metrics**: AI labeling >75% accuracy, admin can review and save workflows
+**Target Completion**: Sprint 2
 
-### BE-001: Database Models & Migrations Setup
-**Type**: Backend Foundation
-**Priority**: P0 (Critical)
-**Epic**: EPIC-001
+### AI-001: Set Up Celery Task Queue
+**Type**: Backend Infrastructure
+**Priority**: P0 (Critical - blocks all AI features)
+**Epic**: EPIC-003
 **Estimate**: 5 SP
-**Status**: ✅ Complete
+**Status**: 📋 Todo
 
 **Description**:
-Set up SQLAlchemy models for all core tables (companies, users, workflows, steps, screenshots, health_logs, notifications). Configure Alembic for database migrations. Create initial migration script.
+Configure Celery + Redis for background job processing. Create worker setup, task registration, and error handling infrastructure. This is foundational for all AI labeling features.
 
 **Acceptance Criteria**:
-- [x] SQLAlchemy models created for all tables matching technical spec
-- [x] Alembic configured with proper migration directory
-- [x] Initial migration script created and tested
-- [x] Database relationships properly defined (foreign keys, cascades)
-- [x] Indexes created for common query patterns
-- [x] Migration can create SQLite database from scratch
-- [x] Migration can be rolled back cleanly
+- [ ] Celery worker starts and connects to Redis
+- [ ] Can queue and execute simple test tasks
+- [ ] Task results stored and retrievable
+- [ ] Failed tasks retry with exponential backoff (max 3 attempts)
+- [ ] Worker logs show task execution
+- [ ] Documentation in `docs/celery-setup.md`
 
 **Technical Context**:
 - **Dependencies**: None (foundational task)
 - **Affected Components**:
-  - `backend/app/models/` - SQLAlchemy models
-  - `backend/app/db/` - Database session management
-  - `backend/alembic/` - Migration scripts
+  - `backend/app/tasks/` - Celery tasks
+  - `backend/app/celery_app.py` - Celery configuration
+  - `backend/requirements.txt` - Add celery, redis dependencies
 - **Key Files**:
-  - `app/models/company.py` - Company model
-  - `app/models/user.py` - User model
-  - `app/models/workflow.py` - Workflow model
-  - `app/models/step.py` - Step model
-  - `app/models/screenshot.py` - Screenshot model
-  - `app/models/health_log.py` - HealthLog model
-  - `app/models/notification.py` - Notification model
-  - `app/db/session.py` - Database session factory
-  - `app/db/base.py` - Base model class
-  - `alembic.ini` - Alembic configuration
-  - `alembic/env.py` - Migration environment
+  - `app/celery_app.py` - Celery app initialization
+  - `app/tasks/__init__.py` - Task registration
+  - `app/tasks/base.py` - Base task classes
+  - `app/main.py` - Integrate Celery with FastAPI
 - **Considerations**:
-  - Use TEXT fields for JSON in SQLite (will migrate to JSONB in PostgreSQL)
-  - Ensure proper timezone handling for timestamps
-  - Multi-tenancy: All models except Company/User need company_id
-  - Follow naming convention: table names plural, snake_case
+  - Use Redis as both broker and result backend
+  - Configure task time limits (5 min per AI labeling task)
+  - Set concurrency=5 for AI rate limiting
+  - Use `task_always_eager=True` for testing
+
+**Implementation Tasks**:
+1. Install and configure Redis (local dev + production)
+2. Set up Celery app configuration with FastAPI
+3. Create base task classes with retry logic
+4. Configure task routing and worker concurrency (max 5 parallel for AI)
+5. Add Celery monitoring/logging
+6. Create documentation for running workers
 
 **Definition of Done**:
-- Code complete and reviewed
-- Can run `alembic upgrade head` successfully
-- Can run `alembic downgrade base` successfully
-- Database schema matches technical requirements spec
-- models/__init__.py exports all models
-- Documentation updated in memory.md
+- Celery worker runs without errors
+- Test task executes successfully
+- Retry logic tested with failing task
+- Documentation complete
+- Integration tests passing
 
 ---
 
-### BE-002: Authentication System (Signup/Login)
-**Type**: Backend Feature
+### AI-002: Claude Vision API Integration
+**Type**: Backend AI Service
 **Priority**: P0 (Critical)
-**Epic**: EPIC-001
+**Epic**: EPIC-003
 **Estimate**: 5 SP
-**Status**: ✅ Complete
+**Status**: 📋 Todo
 
 **Description**:
-Implement user signup and login endpoints with JWT token generation. Password hashing with bcrypt. Email validation. Multi-tenant company isolation.
+Integrate Anthropic Claude 3.5 Sonnet for vision-based step labeling. Build prompt templates, response parsing, and cost tracking.
 
 **Acceptance Criteria**:
-- [x] POST /api/auth/signup endpoint working
-- [x] POST /api/auth/login endpoint working
-- [x] Password hashing with bcrypt (cost factor 12)
-- [x] JWT token generation with 7-day expiration
-- [x] Email format validation
-- [x] Password strength validation (min 8 chars, contains letter + number)
-- [x] Company invite token validation on signup
-- [x] Returns user data + token on success
-- [x] Proper error messages for invalid credentials
-- [x] Tests for all auth endpoints
+- [ ] Can send screenshot + metadata to Claude API
+- [ ] Receives JSON response with label, instruction, confidence
+- [ ] Handles rate limits gracefully (retry with backoff)
+- [ ] Falls back to template labels if AI fails
+- [ ] Logs API costs (input/output tokens)
+- [ ] Unit tests with mocked API responses
+- [ ] Integration tests with real API (limited, use test data)
 
 **Technical Context**:
-- **Dependencies**: BE-001 (Database models must exist)
+- **Dependencies**: AI-001 (Celery must be set up)
 - **Affected Components**:
-  - `backend/app/api/auth.py` - Auth endpoints
-  - `backend/app/schemas/auth.py` - Pydantic schemas
-  - `backend/app/services/auth.py` - Auth business logic
-  - `backend/app/utils/security.py` - Password hashing
-  - `backend/app/utils/jwt.py` - JWT utilities
+  - `backend/app/services/` - AI service layer
+  - `backend/requirements.txt` - Add anthropic SDK
 - **Key Files**:
-  - `app/api/auth.py` - FastAPI router with signup/login endpoints
-  - `app/schemas/auth.py` - SignupRequest, LoginRequest, TokenResponse schemas
-  - `app/services/auth.py` - create_user, authenticate_user functions
-  - `app/utils/security.py` - hash_password, verify_password functions
-  - `app/utils/jwt.py` - create_access_token, decode_token functions
+  - `app/services/ai.py` - AI labeling service
+  - `app/services/prompts.py` - Prompt templates
+  - `app/utils/cost_tracker.py` - Track AI API costs
 - **Considerations**:
-  - JWT payload should include: user_id, company_id, role, email
-  - Use python-jose for JWT handling
-  - Use passlib with bcrypt for password hashing
-  - Ensure email uniqueness constraint
-  - Company invite token allows first user to create company (admin role)
+  - Use `anthropic.messages.create()` with vision model
+  - Max tokens: 1024 (keep responses concise)
+  - Temperature: 0.3 (deterministic but not rigid)
+  - Cost tracking: ~$0.03 per step (3.5 Sonnet pricing)
+  - Fallback templates for common fields (email, password, etc.)
+
+**Prompt Design**:
+```
+You are analyzing a recorded workflow step. Given:
+- Screenshot of the page
+- Element metadata: {tag, role, text, position}
+- Action type: {click, input, select}
+- Context: {page_url, page_title}
+
+Generate:
+1. field_label: Short name for the field (e.g., "Invoice Number")
+2. instruction: User-friendly instruction (e.g., "Enter the invoice number")
+3. confidence: 0.0-1.0 score
+
+Return as JSON.
+```
+
+**Implementation Tasks**:
+1. Set up Anthropic Python SDK
+2. Create AI service layer (`app/services/ai.py`)
+3. Design prompt template for step labeling
+4. Implement response parsing (extract field_label, instruction, confidence)
+5. Add error handling for API failures (rate limits, timeouts)
+6. Track AI costs per request (log tokens used)
+7. Create fallback template-based labeling
 
 **Definition of Done**:
-- All endpoints respond correctly
-- Password never stored in plain text
-- JWT tokens validate correctly
-- Unit tests for auth service (>80% coverage)
-- Integration tests for API endpoints
-- Can authenticate via curl and receive valid token
-- Error handling for duplicate emails, invalid tokens
-- Documentation added to docs/api/auth.md
+- AI service tested with real API
+- Falls back gracefully on failures
+- Cost tracking implemented
+- Unit and integration tests passing
+- Documentation in `docs/ai-service.md`
 
 ---
 
-### BE-003: JWT Authentication Middleware
-**Type**: Backend Feature
+### AI-003: Background Job for AI Labeling
+**Type**: Backend Task
 **Priority**: P0 (Critical)
-**Epic**: EPIC-001
-**Estimate**: 3 SP
-**Status**: ✅ Complete
+**Epic**: EPIC-003
+**Estimate**: 5 SP
+**Status**: 📋 Todo
 
 **Description**:
-Create FastAPI dependency for JWT token validation. Extract user context from token. Ensure all protected endpoints validate authentication. Add role-based access control helpers.
+Create Celery task that processes workflow steps asynchronously. Fetch screenshots from S3, call AI service, update step records with labels.
 
 **Acceptance Criteria**:
-- [x] JWT validation dependency created
-- [x] Token expiration checked
-- [x] User context extracted (user_id, company_id, role)
-- [x] Invalid/expired tokens return 401 Unauthorized
-- [x] Missing tokens return 401 Unauthorized
-- [x] Role-based helpers: require_admin, require_user
-- [x] Works with all API endpoints (except /auth/signup, /auth/login)
-- [x] Tests for valid/invalid/expired tokens
+- [ ] Task triggered automatically when workflow created
+- [ ] All steps processed sequentially or in batches
+- [ ] AI labels saved to database (field_label, instruction, ai_confidence)
+- [ ] Workflow status updated to "draft" when complete
+- [ ] Failed steps marked with error (can retry manually)
+- [ ] Admin notified when ready for review
+- [ ] Logs show processing progress
 
 **Technical Context**:
-- **Dependencies**: BE-002 (Auth system must exist)
+- **Dependencies**: AI-001 (Celery), AI-002 (AI service)
 - **Affected Components**:
-  - `backend/app/utils/dependencies.py` - Auth dependencies
-  - `backend/app/main.py` - Register global dependencies
+  - `backend/app/tasks/` - Celery tasks
+  - `backend/app/api/workflows.py` - Trigger task on workflow creation
 - **Key Files**:
-  - `app/utils/dependencies.py` - get_current_user, get_current_admin dependencies
-  - `app/utils/jwt.py` - decode_token function
+  - `app/tasks/labeling.py` - AI labeling task
+  - `app/tasks/utils.py` - Task utilities
 - **Considerations**:
-  - Use FastAPI Depends() for dependency injection
-  - Raise HTTPException with 401 for auth failures
-  - Extract Authorization header: "Bearer {token}"
-  - Cache user lookups if needed (future optimization)
+  - Process steps sequentially (avoid overwhelming AI API)
+  - Batch processing future optimization (5 at a time)
+  - Store AI model version for tracking
+  - Handle S3 presigned URL expiration
+
+**Task Flow**:
+```python
+@celery_app.task(bind=True, max_retries=3)
+def label_workflow_steps(self, workflow_id: int):
+    workflow = get_workflow(workflow_id)
+    steps = get_steps(workflow_id)
+    
+    for step in steps:
+        screenshot = get_screenshot(step.screenshot_id)
+        try:
+            labels = ai_service.generate_labels(screenshot, step.element_meta)
+            update_step_labels(step.id, labels)
+        except AIServiceError:
+            mark_step_low_confidence(step.id)
+    
+    update_workflow_status(workflow_id, "draft")
+    notify_admin(workflow_id, "ready_for_review")
+```
+
+**Implementation Tasks**:
+1. Create `label_workflow_steps` Celery task
+2. Fetch workflow steps from database
+3. For each step: fetch screenshot, call AI service, update database
+4. Update workflow status: "processing" → "draft"
+5. Handle partial failures
+6. Send notification when complete
+7. Add task progress tracking (optional)
 
 **Definition of Done**:
-- Dependency can be added to any endpoint
-- Invalid tokens properly rejected
-- User context available in endpoint handlers
-- Tests for all auth scenarios
-- All future API endpoints use this dependency
-- Documentation in docs/api/authentication.md
+- Task executes successfully
+- All steps labeled with AI
+- Workflow status updates correctly
+- Error handling works
+- Integration tests passing
+- Documentation updated
 
 ---
 
-### BE-004: Workflow CRUD Endpoints
-**Type**: Backend Feature
-**Priority**: P1 (High)
-**Epic**: EPIC-001
+### FE-008: Workflow Review Page UI
+**Type**: Frontend Feature
+**Priority**: P0 (Critical)
+**Epic**: EPIC-003
 **Estimate**: 8 SP
-**Status**: ✅ Complete
+**Status**: 📋 Todo
 
 **Description**:
-Implement RESTful API endpoints for workflow management: create, list, get single, update, delete. Includes multi-tenant filtering, step creation, screenshot references.
+Build dashboard page showing workflow steps in grid layout with AI-generated labels. Admin can view screenshots, labels, and instructions.
 
 **Acceptance Criteria**:
-- [x] POST /api/workflows - Create workflow with steps
-- [x] GET /api/workflows - List workflows (filtered by company_id)
-- [x] GET /api/workflows/:id - Get single workflow with steps
-- [x] PUT /api/workflows/:id - Update workflow metadata
-- [x] DELETE /api/workflows/:id - Delete workflow (cascade steps)
-- [x] All endpoints enforce multi-tenant isolation
-- [x] Proper validation of input data (Pydantic schemas)
-- [x] Returns 404 for non-existent workflows
-- [x] Returns 403 for unauthorized access (different company)
-- [x] Steps created in correct order (step_number)
-- [x] Screenshot references validated
-- [x] Tests for all CRUD operations
+- [ ] Review page accessible from dashboard workflow list
+- [ ] Shows all steps in numbered order
+- [ ] Each step card displays: screenshot, label, instruction, action type, value
+- [ ] Confidence indicators color-coded (green >0.8, yellow 0.6-0.8, red <0.6)
+- [ ] Loading spinner while workflow processes
+- [ ] Auto-refreshes when status changes from "processing" to "draft"
+- [ ] "Save Workflow" button visible at top and bottom
+- [ ] Responsive design (mobile, tablet, desktop)
 
 **Technical Context**:
-- **Dependencies**: BE-001 (Database models), BE-003 (Auth middleware)
+- **Dependencies**: AI-003 (or mock data for development)
 - **Affected Components**:
-  - `backend/app/api/workflows.py` - Workflow endpoints
-  - `backend/app/schemas/workflow.py` - Workflow schemas
-  - `backend/app/services/workflow.py` - Workflow business logic
+  - `dashboard/src/pages/` - Review page
+  - `dashboard/src/components/` - StepCard component
 - **Key Files**:
-  - `app/api/workflows.py` - FastAPI router
-  - `app/schemas/workflow.py` - CreateWorkflowRequest, WorkflowResponse, etc.
-  - `app/services/workflow.py` - create_workflow, get_workflows, etc.
+  - `src/pages/WorkflowReview.tsx` - Review page
+  - `src/components/StepCard.tsx` - Step card component
+  - `src/hooks/useWorkflowPolling.ts` - Polling hook for status updates
 - **Considerations**:
-  - Always filter by company_id from JWT token
-  - When creating workflow, also create step records
-  - Use transactions for workflow + steps creation
-  - Implement pagination for GET /api/workflows (limit/offset)
-  - Include step count and success_rate in list response
+  - Use React Query or SWR for data fetching
+  - Implement optimistic updates for edits
+  - Screenshot thumbnails: 200x150px (lazy load)
+  - Virtualize list if >50 steps (performance)
+
+**UI Design**:
+```
+┌─────────────────────────────────────────────┐
+│ Review Workflow: "Submit Expense Report"    │
+│ [Save Workflow] [Delete Workflow]           │
+└─────────────────────────────────────────────┘
+
+Step 1           Step 2           Step 3
+┌──────────┐    ┌──────────┐    ┌──────────┐
+│ [IMAGE]  │    │ [IMAGE]  │    │ [IMAGE]  │
+│          │    │          │    │          │
+└──────────┘    └──────────┘    └──────────┘
+✓ Invoice #     ✓ Amount        ⚠️ Date
+"Enter invoice" "Enter amount"  "Select date"
+click           input_commit    select_change
+[Edit]          [Edit]          [Edit]
+```
+
+**Implementation Tasks**:
+1. Create `/workflows/:id/review` route
+2. Fetch workflow + steps from API
+3. Build StepCard component
+4. Create grid layout (2-3 columns, responsive)
+5. Add loading states and error handling
+6. Show confidence indicators
+7. Add "Save Workflow" button
+8. Implement polling/websocket for status updates
 
 **Definition of Done**:
-- All CRUD operations work
-- Multi-tenant isolation verified
-- Unit tests for service layer
-- Integration tests for API endpoints
-- Proper error handling
-- Documentation in docs/api/workflows.md
-- Can create workflow via curl/Postman
-
----
-
-### BE-005: Screenshot Upload Endpoint
-**Type**: Backend Feature
-**Priority**: P1 (High)
-**Epic**: EPIC-001
-**Estimate**: 5 SP
-**Status**: ✅ Complete
-
-**Description**:
-Implement screenshot upload endpoint with S3 storage, deduplication via SHA-256 hash, multipart form handling. Returns screenshot_id for client to reference in workflow steps.
-
-**Acceptance Criteria**:
-- [x] POST /api/screenshots - Upload screenshot (multipart/form-data)
-- [x] Validates image format (JPEG, PNG only)
-- [x] Calculates SHA-256 hash of image
-- [x] Checks if hash exists (deduplication)
-- [x] If exists, returns existing screenshot_id
-- [x] If new, uploads to S3
-- [x] Stores record in screenshots table
-- [x] Returns screenshot_id and storage_url
-- [x] Generates S3 pre-signed URLs (15-min expiration)
-- [x] Proper error handling for S3 failures
-- [x] Tests with sample images
-
-**Technical Context**:
-- **Dependencies**: BE-001 (Database models), BE-003 (Auth middleware)
-- **Affected Components**:
-  - `backend/app/api/screenshots.py` - Screenshot endpoints
-  - `backend/app/schemas/screenshot.py` - Screenshot schemas
-  - `backend/app/utils/s3.py` - S3 utilities
-- **Key Files**:
-  - `app/api/screenshots.py` - POST /api/screenshots endpoint
-  - `app/schemas/screenshot.py` - UploadScreenshotRequest, ScreenshotResponse
-  - `app/utils/s3.py` - upload_to_s3, generate_presigned_url functions
-- **Considerations**:
-  - Use boto3 for S3 operations
-  - S3 bucket structure: companies/{company_id}/workflows/{workflow_id}/screenshots/{screenshot_id}.jpg
-  - Store both hash and storage_key in database
-  - Max file size: 5MB (FastAPI limit)
-  - Image optimization: Convert to JPEG, compress to ~80% quality
-
-**Definition of Done**:
-- Can upload screenshots successfully
-- Deduplication works (same image returns same ID)
-- S3 storage verified
-- Pre-signed URLs work
-- Unit tests for S3 utilities
-- Integration tests for upload endpoint
-- Error handling for network failures
-- Documentation in docs/api/screenshots.md
-
----
-
-## EPIC-002: Chrome Extension Foundation
-**Goal**: Build extension structure with recording capability and content script injection
-**Success Metrics**: Extension loads in Chrome, can inject content scripts, basic event capture works
-**Target Completion**: Sprint 1
-
-### FE-001: Extension Build Configuration
-**Type**: Frontend Setup
-**Priority**: P0 (Critical)
-**Epic**: EPIC-002
-**Estimate**: 3 SP
-**Status**: ✅ Complete
-
-**Description**:
-Configure Vite for Chrome extension build. Set up TypeScript config. Configure Tailwind CSS. Ensure manifest.json, content scripts, background worker, and popup build correctly.
-
-**Acceptance Criteria**:
-- [x] Vite builds extension to dist/ folder
-- [x] Manifest V3 copied to dist/
-- [x] Content scripts bundled correctly
-- [x] Background service worker bundled as ES module
-- [x] Popup UI builds with React
-- [x] TypeScript compilation working
-- [x] Tailwind CSS processing working
-- [x] HMR (hot reload) works in dev mode
-- [x] Production build optimized (minified)
-- [x] Can load extension in Chrome without errors
-
-**Technical Context**:
-- **Dependencies**: None (foundational task)
-- **Affected Components**:
-  - `extension/` - All extension files
-- **Key Files**:
-  - `extension/vite.config.ts` - Vite configuration
-  - `extension/tsconfig.json` - TypeScript configuration
-  - `extension/tailwind.config.js` - Tailwind configuration
-  - `extension/postcss.config.js` - PostCSS configuration
-- **Considerations**:
-  - Use @crxjs/vite-plugin or custom Vite config for extension
-  - Ensure content scripts use IIFE format (no module format for injected scripts)
-  - Background worker must be ES module for Manifest V3
-  - Chrome extension CSP restrictions (no inline scripts)
-
-**Definition of Done**:
-- npm run dev builds extension
-- npm run build creates production bundle
-- Extension loads in Chrome successfully
-- No console errors in extension pages
-- Documentation in extension/README.md
-
----
-
-### FE-002: Shared Types & API Client
-**Type**: Frontend Foundation
-**Priority**: P1 (High)
-**Epic**: EPIC-002
-**Estimate**: 3 SP
-**Status**: ✅ Complete
-
-**Description**:
-Create shared TypeScript types matching backend Pydantic schemas. Build API client for making authenticated requests to backend. Handle token storage in chrome.storage.
-
-**Acceptance Criteria**:
-- [x] TypeScript interfaces for all domain models (Workflow, Step, etc.)
-- [x] API client class with methods for all endpoints
-- [x] Token storage/retrieval from chrome.storage.local
-- [x] Automatic Authorization header injection
-- [x] Error handling for network failures
-- [x] Type-safe request/response handling
-- [x] Can authenticate and make API calls
-- [x] Tests for API client
-
-**Technical Context**:
-- **Dependencies**: BE-002 (Auth endpoints), FE-001 (Build config)
-- **Affected Components**:
-  - `extension/src/shared/` - Shared utilities
-- **Key Files**:
-  - `src/shared/types.ts` - Domain type definitions
-  - `src/shared/api.ts` - API client class
-  - `src/shared/storage.ts` - Chrome storage utilities
-- **Considerations**:
-  - Use chrome.storage.local for token persistence
-  - API base URL from environment or config
-  - Handle CORS (backend configured for extension origin)
-  - Retry logic for transient failures (3 attempts with backoff)
-
-**Definition of Done**:
-- Types match backend schemas exactly
-- API client works for all endpoints
-- Token persistence works across extension reload
-- Error handling tested
-- Documentation in src/shared/README.md
-
----
-
-### FE-003: Background Service Worker
-**Type**: Frontend Feature
-**Priority**: P1 (High)
-**Epic**: EPIC-002
-**Estimate**: 3 SP
-**Status**: ✅ Complete
-
-**Description**:
-Implement background service worker for message passing, screenshot capture, state management. Handle extension lifecycle events. Coordinate between content scripts and popup.
-
-**Acceptance Criteria**:
-- [x] Service worker registers successfully
-- [x] Message passing between content scripts and background
-- [x] Screenshot capture using chrome.tabs.captureVisibleTab
-- [x] State management (recording status, current workflow)
-- [x] Handles chrome.runtime.onMessage
-- [x] Handles chrome.tabs events (navigation, updates)
-- [x] Can inject content scripts dynamically
-- [x] No service worker crashes or errors
-
-**Technical Context**:
-- **Dependencies**: FE-001 (Build config), FE-002 (API client)
-- **Affected Components**:
-  - `extension/src/background/` - Background worker
-- **Key Files**:
-  - `src/background/index.ts` - Main service worker
-  - `src/background/messaging.ts` - Message handler
-  - `src/background/screenshot.ts` - Screenshot capture
-- **Considerations**:
-  - Service workers have limited lifetime (must be stateless)
-  - Use chrome.storage for persistent state
-  - Screenshot capture requires activeTab permission
-  - Handle async message passing correctly
-
-**Definition of Done**:
-- Service worker stable
-- Message passing works reliably
-- Screenshots captured successfully
-- State persists across worker restarts
-- Error handling for permission issues
-- Documentation in src/background/README.md
-
----
-
-### FE-004: Popup UI (Login/Recording Controls)
-**Type**: Frontend Feature
-**Priority**: P1 (High)
-**Epic**: EPIC-002
-**Estimate**: 5 SP
-**Status**: ✅ Complete
-
-**Description**:
-Build extension popup with login form, recording start/stop controls, workflow list. Use React + Tailwind. Zustand for state management. Connect to backend API.
-
-**Acceptance Criteria**:
-- [x] Login form (email + password)
-- [x] Displays authentication errors
-- [x] Stores JWT token on successful login
-- [x] Shows "Start Recording" button when logged in
-- [x] Shows "Stop Recording" button when recording
-- [x] Lists recent workflows
-- [x] Logout functionality
-- [x] Responsive design (fits popup size)
-- [x] Loading states for async operations
-- [x] Error handling with user-friendly messages
-
-**Technical Context**:
-- **Dependencies**: FE-002 (API client), BE-002 (Auth endpoints)
-- **Affected Components**:
-  - `extension/src/popup/` - Popup UI
-- **Key Files**:
-  - `src/popup/App.tsx` - Main popup component
-  - `src/popup/components/LoginForm.tsx` - Login form
-  - `src/popup/components/RecordingControls.tsx` - Recording controls
-  - `src/popup/store/auth.ts` - Zustand auth store
-  - `src/popup/index.html` - Popup HTML
-- **Considerations**:
-  - Popup size: 400px × 600px typical
-  - Use Zustand for global state (auth, workflows)
-  - Communicate with background worker for recording state
-  - Handle popup closing (state must persist)
-
-**Definition of Done**:
-- UI renders correctly
-- Login/logout works
-- Recording controls functional
-- State persists when popup closes
+- Review page renders correctly
+- All steps displayed with metadata
+- Confidence indicators work
+- Auto-refresh on status change
+- Responsive on all screen sizes
 - No console errors
-- Documentation in src/popup/README.md
+- Documentation updated
 
 ---
 
-### FE-005: Content Script - Event Recorder
+### FE-009: Edit Step Modal
 **Type**: Frontend Feature
-**Priority**: P1 (High)
-**Epic**: EPIC-002
-**Estimate**: 8 SP
-**Status**: ✅ Complete
+**Priority**: P0 (Critical)
+**Epic**: EPIC-003
+**Estimate**: 5 SP
+**Status**: 📋 Todo
 
 **Description**:
-Implement content script for capturing user interactions (clicks, inputs, navigation). Extract element selectors, metadata, bounding boxes. Filter meaningful interactions. Buffer steps locally before upload.
+Create modal dialog for editing step labels and instructions. Show full-size screenshot, editable fields, technical details.
 
 **Acceptance Criteria**:
-- [x] Captures click events on interactive elements
-- [x] Captures input blur events (not every keystroke)
-- [x] Captures select change events
-- [x] Captures form submit events
-- [x] Captures navigation events
-- [x] Extracts element selectors (ID, CSS, XPath, data-testid)
-- [x] Extracts element metadata (tag, role, labels, position)
-- [x] Filters out non-meaningful interactions
-- [x] Requests screenshot from background worker
-- [x] Buffers steps in IndexedDB
-- [x] Step numbering sequential
-- [x] Page context captured (URL, title, viewport)
-- [x] Can stop recording and upload workflow
+- [ ] "Edit" button on each step card opens modal
+- [ ] Modal shows full-size screenshot
+- [ ] Label input (max 100 chars)
+- [ ] Instruction textarea (max 500 chars)
+- [ ] Technical details expandable accordion
+- [ ] Save button updates database immediately
+- [ ] Cancel button discards changes
+- [ ] Validation errors shown inline
+- [ ] Can edit same step multiple times
+- [ ] Edited steps marked with badge
 
 **Technical Context**:
-- **Dependencies**: FE-003 (Background worker), BE-004 (Workflow endpoints)
+- **Dependencies**: FE-008 (Review page), BE-006 (Update endpoint)
 - **Affected Components**:
-  - `extension/src/content/` - Content scripts
+  - `dashboard/src/components/` - EditStepModal component
 - **Key Files**:
-  - `src/content/recorder.ts` - Main recorder logic
-  - `src/content/utils/selectors.ts` - Selector extraction
-  - `src/content/utils/metadata.ts` - Element metadata extraction
-  - `src/content/utils/filters.ts` - Meaningful interaction filter
-  - `src/content/storage/indexeddb.ts` - IndexedDB wrapper
+  - `src/components/EditStepModal.tsx` - Modal component
+  - `src/utils/validation.ts` - Form validation
 - **Considerations**:
-  - Use capture phase for event listeners (before other handlers)
-  - Debounce input events (capture on blur only)
-  - Handle dynamically added elements
-  - XPath generation for elements without IDs
-  - Bounding box: use getBoundingClientRect()
-  - Page state hash: hash of DOM structure for change detection
+  - Use Headless UI or Radix UI for modal
+  - Keyboard shortcuts: Escape to cancel, Enter to save
+  - Optimistic updates (UI updates immediately)
+
+**Implementation Tasks**:
+1. Create EditStepModal component
+2. Show full-size screenshot
+3. Add editable text inputs
+4. Display technical details (read-only)
+5. Implement save/cancel actions
+6. Validate inputs
+7. Show "Edited by you" badge after save
+8. Update API integration
 
 **Definition of Done**:
-- All interaction types captured
-- Selectors robust and accurate
-- Metadata complete
-- Steps stored locally
-- Can upload workflow successfully
-- No performance impact on host page
-- Tests with sample web pages
-- Documentation in src/content/README.md
+- Modal opens and closes correctly
+- Editing works for all fields
+- Validation prevents empty submissions
+- Optimistic updates work
+- Edited badge displayed
+- Tests for validation logic
 
 ---
 
-## EPIC-003: Web Dashboard Foundation
-**Goal**: Build dashboard with authentication, workflow list, basic navigation
-**Success Metrics**: Dashboard loads, login works, can view workflow list
-**Target Completion**: Sprint 1
+### BE-006: Update Step Endpoint
+**Type**: Backend Feature
+**Priority**: P0 (Critical)
+**Epic**: EPIC-003
+**Estimate**: 3 SP
+**Status**: 📋 Todo
 
-### FE-006: Dashboard Build & Routing Setup
-**Type**: Frontend Setup
-**Priority**: P1 (High)
+**Description**:
+Create API endpoint for updating step labels. Track edit history (edited_by, edited_at).
+
+**Acceptance Criteria**:
+- [ ] PUT /api/steps/:id accepts updates
+- [ ] Validates label (1-100 chars) and instruction (1-500 chars)
+- [ ] Updates database with new values
+- [ ] Sets edited_at to current timestamp
+- [ ] Sets edited_by to current user ID
+- [ ] Returns 403 if step belongs to different company
+- [ ] Returns 404 if step doesn't exist
+- [ ] Unit tests for validation and multi-tenancy
+
+**Technical Context**:
+- **Dependencies**: None (backend only)
+- **Affected Components**:
+  - `backend/app/api/steps.py` - Step endpoints
+  - `backend/app/schemas/step.py` - Update schema
+- **Key Files**:
+  - `app/api/steps.py` - PUT /api/steps/:id endpoint
+  - `app/schemas/step.py` - UpdateStepRequest schema
+  - `app/services/step.py` - Update service logic
+
+**API Endpoint**:
+```python
+PUT /api/steps/{step_id}
+{
+  "field_label": "Updated Label",
+  "instruction": "Updated instruction",
+  "label_edited": true,
+  "instruction_edited": true,
+  "edited_by": <user_id from JWT>
+}
+```
+
+**Implementation Tasks**:
+1. Create PUT /api/steps/:id endpoint
+2. Accept field_label and instruction updates
+3. Validate inputs (not empty, max length)
+4. Update edited_by, edited_at fields
+5. Return updated step data
+6. Enforce multi-tenant isolation
+
+**Definition of Done**:
+- Endpoint works correctly
+- Validation prevents invalid data
+- Multi-tenancy enforced
+- Unit tests passing
+- Integration tests passing
+- Documentation updated
+
+---
+
+### FE-011: Save Workflow Button
+**Type**: Frontend Feature
+**Priority**: P0 (Critical)
 **Epic**: EPIC-003
 **Estimate**: 2 SP
-**Status**: ✅ Complete
+**Status**: 📋 Todo
 
 **Description**:
-Configure Vite + React for dashboard. Set up React Router for navigation. Configure Tailwind CSS. Create basic layout with navigation.
+Implement "Save Workflow" button that changes status from "draft" to "active". Validate all steps have labels.
 
 **Acceptance Criteria**:
-- [x] Vite dev server runs
-- [x] React Router configured
-- [x] Tailwind CSS working
-- [x] Routes: /login, /dashboard, /workflows/:id
-- [x] Basic layout component (navbar, content area)
-- [x] TypeScript compilation working
-- [x] No console errors
-- [x] Production build works
+- [ ] Button disabled if any step missing label/instruction
+- [ ] Button shows validation error on click if incomplete
+- [ ] On click, updates workflow status to "active"
+- [ ] Success notification shown
+- [ ] Redirects to dashboard
+- [ ] Workflow now visible to all team members
 
 **Technical Context**:
-- **Dependencies**: None (foundational task)
+- **Dependencies**: FE-008 (Review page), BE-008 (Update endpoint)
 - **Affected Components**:
-  - `dashboard/` - All dashboard files
+  - `dashboard/src/pages/WorkflowReview.tsx` - Add save button
 - **Key Files**:
-  - `dashboard/vite.config.ts` - Vite config
-  - `dashboard/tsconfig.json` - TypeScript config
-  - `dashboard/tailwind.config.js` - Tailwind config
-  - `src/App.tsx` - Main app with routes
-  - `src/components/Layout.tsx` - Layout component
-- **Considerations**:
-  - Use React Router v6
-  - Protected routes for authenticated pages
-  - Redirect to /login if not authenticated
+  - `src/pages/WorkflowReview.tsx` - Save button logic
+  - `src/api/client.ts` - API call to update status
+
+**Implementation Tasks**:
+1. Add "Save Workflow" button (top and bottom)
+2. Validate all steps complete
+3. Show validation errors if incomplete
+4. Call PUT /api/workflows/:id with status="active"
+5. Show success notification
+6. Redirect to dashboard
 
 **Definition of Done**:
-- Dev server runs successfully
-- Routing works
-- Layout renders correctly
-- Production build successful
-- Documentation in dashboard/README.md
+- Button validates correctly
+- Saves workflow successfully
+- Redirects to dashboard
+- Success notification shown
+- Tests passing
 
 ---
 
-### FE-007: Dashboard Authentication Pages
-**Type**: Frontend Feature
-**Priority**: P1 (High)
+### BE-008: Update Workflow Status Endpoint
+**Type**: Backend Feature
+**Priority**: P0 (Critical)
 **Epic**: EPIC-003
-**Estimate**: 3 SP
-**Status**: ✅ Complete
+**Estimate**: 2 SP
+**Status**: 📋 Todo
 
 **Description**:
-Build login and signup pages. Form validation. API integration. Token storage in localStorage. Redirect after authentication.
+Update existing PUT /api/workflows/:id endpoint to support status changes. Validate all steps have labels before activating.
 
 **Acceptance Criteria**:
-- [x] Login page with email/password form
-- [x] Signup page with email/password/company invite form
-- [x] Client-side validation (email format, password strength)
-- [x] API integration with backend auth endpoints
-- [x] Display server errors (invalid credentials, etc.)
-- [x] Store JWT token in localStorage
-- [x] Redirect to /dashboard after login
-- [x] "Remember me" functionality
-- [x] Loading states during API calls
-- [x] Tests for form validation
+- [ ] PUT /api/workflows/:id accepts status updates
+- [ ] Returns 400 if activating workflow with incomplete steps
+- [ ] Updates database with new status
+- [ ] Sets updated_at to current timestamp
+- [ ] Returns complete workflow data
+- [ ] Unit tests for validation
 
 **Technical Context**:
-- **Dependencies**: FE-006 (Routing setup), BE-002 (Auth endpoints)
+- **Dependencies**: None (extends existing endpoint)
 - **Affected Components**:
-  - `dashboard/src/pages/` - Auth pages
-  - `dashboard/src/store/` - Auth store
+  - `backend/app/api/workflows.py` - Update endpoint
+  - `backend/app/services/workflow.py` - Validation logic
 - **Key Files**:
-  - `src/pages/Login.tsx` - Login page
-  - `src/pages/Signup.tsx` - Signup page
-  - `src/store/auth.ts` - Zustand auth store
-  - `src/api/client.ts` - API client
-- **Considerations**:
-  - Use Zustand for auth state
-  - API client similar to extension
-  - localStorage for token (or sessionStorage)
-  - Protected route wrapper checks auth state
+  - `app/api/workflows.py` - PUT /api/workflows/:id
+  - `app/services/workflow.py` - validate_workflow_complete()
+
+**Implementation Tasks**:
+1. Add status update to existing endpoint
+2. Validate all steps have field_label and instruction
+3. Update workflow.updated_at timestamp
+4. Return updated workflow data
 
 **Definition of Done**:
-- Login/signup forms work
-- Authentication successful
-- Token stored correctly
-- Redirects work
-- Error handling tested
-- Documentation in src/pages/README.md
+- Status updates work
+- Validation prevents incomplete activation
+- Unit tests passing
+- Integration tests passing
+
+---
+
+### FE-010: Delete Step Functionality (P1 - Should-Have)
+**Type**: Frontend Feature
+**Priority**: P1 (Should-have)
+**Epic**: EPIC-003
+**Estimate**: 3 SP
+**Status**: 📋 Todo
+
+**Description**:
+Add delete button to step cards with confirmation modal. Handle step renumbering on frontend.
+
+**Acceptance Criteria**:
+- [ ] Delete button on each step card
+- [ ] Confirmation modal shown
+- [ ] On confirm, step deleted from database
+- [ ] Remaining steps renumbered (UI updates immediately)
+- [ ] Cannot delete if only 1 step
+- [ ] Success notification shown
+- [ ] Error handling if deletion fails
+
+**Technical Context**:
+- **Dependencies**: FE-008 (Review page), BE-007 (Delete endpoint)
+- **Affected Components**:
+  - `dashboard/src/components/StepCard.tsx` - Delete button
+- **Key Files**:
+  - `src/components/DeleteStepModal.tsx` - Confirmation modal
+  - `src/api/client.ts` - DELETE API call
+
+**Implementation Tasks**:
+1. Add "Delete" button to StepCard
+2. Create confirmation modal
+3. Call DELETE /api/steps/:id endpoint
+4. Optimistically update UI
+5. Show success notification
+6. Disable delete if only 1 step
+
+**Definition of Done**:
+- Delete works correctly
+- Confirmation prevents accidents
+- UI updates optimistically
+- Error handling works
+- Tests passing
+
+---
+
+### BE-007: Delete Step Endpoint (P1 - Should-Have)
+**Type**: Backend Feature
+**Priority**: P1 (Should-have)
+**Epic**: EPIC-003
+**Estimate**: 3 SP
+**Status**: 📋 Todo
+
+**Description**:
+Create DELETE endpoint for steps. Renumber remaining steps after deletion.
+
+**Acceptance Criteria**:
+- [ ] DELETE /api/steps/:id deletes step
+- [ ] Remaining steps renumbered automatically
+- [ ] Returns 400 if only 1 step remains
+- [ ] Returns 403 if step belongs to different company
+- [ ] Returns 404 if step doesn't exist
+- [ ] Unit tests for renumbering logic
+
+**Technical Context**:
+- **Dependencies**: None (backend only)
+- **Affected Components**:
+  - `backend/app/api/steps.py` - Delete endpoint
+  - `backend/app/services/step.py` - Delete logic
+- **Key Files**:
+  - `app/api/steps.py` - DELETE /api/steps/:id
+  - `app/services/step.py` - delete_step_and_renumber()
+
+**Implementation Tasks**:
+1. Create DELETE /api/steps/:id endpoint
+2. Validate step exists and belongs to user's company
+3. Delete step from database
+4. Renumber remaining steps
+5. Return success response
+6. Handle edge case: cannot delete if only 1 step
+
+**Definition of Done**:
+- Endpoint works correctly
+- Renumbering tested
+- Multi-tenancy enforced
+- Unit tests passing
+- Integration tests passing
+
+---
+
+## Sprint 2 Summary
+
+**Total Story Points**: 43 SP
+- **P0 (Must-Have)**: 37 SP (8 tasks)
+- **P1 (Should-Have)**: 6 SP (2 tasks)
+
+**Epic 3 Complete Deliverables**:
+- AI labeling infrastructure (Celery + Claude API)
+- Background job processing workflows
+- Admin review page with AI-generated labels
+- Edit step labels and instructions
+- Save workflows (draft → active)
+- Optional: Delete unwanted steps
+
+**Success Criteria**:
+- [ ] AI labeling accuracy >75%
+- [ ] Review page loads <2 seconds
+- [ ] AI processing <2 minutes for 10-step workflow
+- [ ] Admin can edit and save workflows
+- [ ] Workflows available to team after activation
 
 ---
 
 ## Backlog (Future Sprints)
 
-### Sprint 2: AI Labeling & Walkthrough Mode
-- AI-001: Celery Task Queue Setup
-- AI-002: Claude Vision API Integration
-- AI-003: Step Labeling Background Job
-- FE-008: Walkthrough Mode Overlay UI
-- FE-009: Element Finding & Auto-Healing (Deterministic)
-
-### Sprint 3: Auto-Healing & Health Monitoring
-- FE-010: Auto-Healing AI Integration
-- BE-006: Health Monitoring Endpoints
-- BE-007: Notification System
-- FE-011: Dashboard Workflow Review Page
+### Sprint 3: Walkthrough Mode & Auto-Healing
+- FE-012: Walkthrough Mode Overlay UI
+- FE-013: Element Finding & Deterministic Auto-Healing
+- FE-014: AI-Assisted Auto-Healing Integration
+- BE-009: Health Monitoring Endpoints
+- BE-010: Notification System
 
 ### Sprint 4: Polish & Testing
 - TEST-001: End-to-End Testing Setup
-- PERF-001: Performance Optimization
+- PERF-001: Performance Optimization  
 - DOC-001: User Documentation
 - BUG-XXX: Bug fixes from testing
 
 ---
 
+## Sprint 1 Completed Tasks (Archived)
+
+**Sprint 1 delivered 53 SP across 13 tasks.** All Sprint 1 work is documented in `completed_tasks.md`.
+
+**Key Deliverables**:
+- Backend API (auth, workflows, screenshots) ✅
+- Chrome extension recording capability ✅
+- Dashboard with authentication ✅
+- 7,900+ lines of production code
+- 54 tests passing (100% pass rate)
+
+---
+
 ## Technical Debt
 
-None yet. Will track as project evolves.
+None currently identified.
 
 ---
 
@@ -650,6 +643,7 @@ None currently.
 
 ## Notes
 
-- **Sprint velocity**: TBD after Sprint 1 completion
-- **Risk areas**: S3 setup, Chrome extension permissions, AI API rate limits
-- **Next sprint planning**: After Sprint 1 completion
+- **Sprint 1 velocity**: 53 SP delivered over 2 weeks
+- **Sprint 2 target**: 43 SP (37 P0 + 6 P1)
+- **Risk areas**: AI labeling quality, Claude API rate limits, prompt engineering
+- **Next sprint planning**: After Sprint 2 completion

@@ -12,6 +12,7 @@ import { Login } from '@/pages/Login';
 import { Signup } from '@/pages/Signup';
 import { Dashboard } from '@/pages/Dashboard';
 import { WorkflowDetail } from '@/pages/WorkflowDetail';
+import { WorkflowReview } from '@/pages/WorkflowReview';
 
 function App() {
   const { checkAuth } = useAuthStore();
@@ -45,6 +46,16 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <WorkflowDetail />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/workflows/:id/review"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <WorkflowReview />
               </Layout>
             </ProtectedRoute>
           }

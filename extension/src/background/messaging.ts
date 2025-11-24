@@ -184,10 +184,10 @@ async function handleStopRecording(
     if (screenshots.length > 0) {
       uploadScreenshotsAsync(workflowResponse.workflow_id, screenshots)
         .then(() => {
-          console.log(`✅ All ${screenshots.length} screenshots uploaded successfully`);
+          console.log(`✅ All ${screenshots.length} screenshots uploaded and linked successfully`);
         })
         .catch((error) => {
-          console.error('❌ Screenshot upload failed:', error);
+          console.error('❌ Screenshot upload/linking failed:', error);
           // Don't fail the whole workflow creation - screenshots can be retried later
         });
     }
@@ -265,29 +265,63 @@ async function uploadScreenshotsAsync(
 ): Promise<void> {
   console.log(`Starting async upload of ${screenshots.length} screenshots for workflow ${workflowId}`);
 
-  const uploadPromises = screenshots.map(async (screenshot) => {
-    try {
-      // Convert dataUrl back to Blob
-      const response = await fetch(screenshot.dataUrl);
-      const blob = await response.blob();
+  try {
+    // Step 1: Fetch workflow details to get step IDs
+    const workflow = await apiClient.getWorkflow(workflowId);
+    console.log(`Fetched workflow ${workflowId} with ${workflow.steps.length} steps`);
 
-      // Upload to server
-      const uploadResponse = await apiClient.uploadScreenshot(
-        blob,
-        workflowId,
-        screenshot.step_number.toString()
-      );
+    // Create mapping of step_number -> step_id
+    const stepMap = new Map<number, number>();
+    workflow.steps.forEach(step => {
+      stepMap.set(step.step_number, step.id);
+    });
 
-      console.log(`Screenshot uploaded for step ${screenshot.step_number}: ${uploadResponse.screenshot_id}`);
-      return uploadResponse;
-    } catch (error) {
-      console.error(`Failed to upload screenshot for step ${screenshot.step_number}:`, error);
-      throw error;
-    }
-  });
+    // Step 2: Upload screenshots and link them to steps
+    const uploadPromises = screenshots.map(async (screenshot) => {
+      try {
+        // Convert dataUrl back to Blob
+        const response = await fetch(screenshot.dataUrl);
+        const blob = await response.blob();
 
-  // Wait for all uploads to complete
-  await Promise.all(uploadPromises);
+        // Upload to server
+        const uploadResponse = await apiClient.uploadScreenshot(
+          blob,
+          workflowId,
+          screenshot.step_number.toString()
+        );
+
+        console.log(`Screenshot uploaded for step ${screenshot.step_number}: ${uploadResponse.screenshot_id}`);
+
+        // Link screenshot to step
+        const stepId = stepMap.get(screenshot.step_number);
+        if (stepId) {
+          await apiClient.linkScreenshotToStep(stepId, uploadResponse.screenshot_id);
+          console.log(`✓ Linked screenshot ${uploadResponse.screenshot_id} to step ${stepId} (step_number ${screenshot.step_number})`);
+        } else {
+          console.warn(`Could not find step ID for step_number ${screenshot.step_number}`);
+        }
+
+        return uploadResponse;
+      } catch (error) {
+        console.error(`Failed to upload/link screenshot for step ${screenshot.step_number}:`, error);
+        throw error;
+      }
+    });
+
+    // Wait for all uploads to complete
+    await Promise.all(uploadPromises);
+    
+    console.log(`✅ All ${screenshots.length} screenshots uploaded and linked`);
+    
+    // Step 3: Trigger AI processing now that all screenshots are ready
+    console.log(`🧠 Starting AI processing for workflow ${workflowId}...`);
+    const processingResponse = await apiClient.startWorkflowProcessing(workflowId);
+    console.log(`✅ AI processing started: task_id=${processingResponse.task_id}`);
+    
+  } catch (error) {
+    console.error('Failed to upload/link screenshots:', error);
+    throw error;
+  }
 }
 
 /**

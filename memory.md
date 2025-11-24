@@ -11,6 +11,30 @@ Building a Chrome Extension + Web Dashboard + API server for recording, managing
 
 ## Recent Work Summary
 
+### Sprint 2: AI-Powered Workflow Labeling (2024-11-23)
+**Objective:** Implement complete AI labeling pipeline with Claude Vision API and admin review/edit interface.
+
+**What We Built:**
+- Celery + Redis task queue for background processing
+- Claude Vision API integration with tool calling for structured JSON
+- AI service with fallback templates and cost tracking
+- Screenshot linking fix (extension → backend PATCH endpoint)
+- Race condition fix (explicit processing trigger)
+- Local file storage for screenshots (MVP, no S3 needed)
+- Base64 conversion for local images (Claude HTTPS requirement)
+- Admin review page with step cards and confidence indicators
+- Edit modal with form validation and technical details
+- Workflow activation validation
+- Step update API with edit tracking
+
+**Impact:** 
+- AI generates smart labels: "Email Address" instead of "input"
+- Cost: ~$0.03-0.05 per workflow (6 steps)
+- Confidence: 0.70-0.95 for AI labels
+- Saves 10-15 minutes of manual editing per workflow
+
+**Status:** ✅ Complete - End-to-end AI labeling working!
+
 ### Workflow Recording System (Nov 2024)
 **Objective:** Fix workflow recording to capture clean, semantic user actions instead of noisy DOM events.
 
@@ -62,6 +86,60 @@ Building a Chrome Extension + Web Dashboard + API server for recording, managing
 **Problem:** Generic "Request failed" errors without details.  
 **Lesson:** Log full error objects, especially for backend validation errors.  
 **Implementation:** Parse and display FastAPI/Pydantic validation error details.
+
+### 8. Multi-Step Upload Flows Need Explicit Linking
+**Problem:** Extension uploaded screenshots but AI never used them (always fell back to templates).  
+**Root Cause:** Screenshots uploaded to backend but never associated with step records.  
+**Lesson:** Multi-step workflows need explicit linking - don't assume backend will auto-associate.  
+**Solution:** Added PATCH `/api/steps/{id}/screenshot` endpoint, extension calls after each upload.
+
+### 9. Race Conditions in Async Workflows
+**Problem:** Celery started AI processing before extension finished linking screenshots.  
+**Symptom:** All steps processed with no screenshots, $0.00 AI cost, fallback labels.  
+**Lesson:** Let client control async workflow timing when it has critical dependencies.  
+**Solution:** Removed immediate Celery trigger, added explicit POST `/api/workflows/{id}/start-processing` that extension calls.
+
+### 10. AI SDK Major Version Upgrades
+**Problem:** `'Anthropic' object has no attribute 'messages'` error.  
+**Root Cause:** Outdated anthropic package (0.7.1) had completely different API structure.  
+**Lesson:** AI SDKs have major breaking changes between versions - check docs carefully.  
+**Solution:** Upgraded to 0.74.1, changed all calls to `client.messages.create()`.
+
+### 11. Claude Tool Calling vs Prompt Engineering
+**Problem:** Claude returned plain text "Here's the JSON: {...}" instead of pure JSON.  
+**Initial Approach:** Tried regex to extract JSON from text (brittle).  
+**Lesson:** Use tool calling for guaranteed structured output, not prompt engineering.  
+**Solution:** Defined `record_workflow_labels` tool with explicit schema, forced tool use.
+
+### 12. Local Development HTTPS Requirements
+**Problem:** Claude API rejected local screenshot URLs: "Only HTTPS URLs supported".  
+**Workaround Considered:** Set up local HTTPS (complex).  
+**Lesson:** Convert local files to base64 for AI APIs with HTTPS requirements.  
+**Solution:** Read screenshot files, encode as base64, send in API request.
+
+### 13. Mocked Storage Breaks Dependent Features
+**Problem:** Screenshots showed as broken images in dashboard.  
+**Root Cause:** S3 utilities completely mocked, returned fake URLs, files never saved.  
+**Lesson:** MVP needs real storage implementation, even if local; mocks break integration.  
+**Solution:** Implemented local file storage with FastAPI StaticFiles serving.
+
+### 14. UI Navigation Must Ship With Features
+**Problem:** Review page existed but users couldn't find it (had to type URL manually).  
+**Root Cause:** Developer implemented page but forgot navigation button.  
+**Lesson:** ALWAYS add UI navigation in same commit as new page/feature.  
+**Solution:** Added "Review & Edit" button on workflow detail page.
+
+### 15. Empty Response Bodies
+**Problem:** DELETE workflow threw JSON parse error despite successful deletion.  
+**Root Cause:** 204 No Content returns empty body, client tried to parse JSON.  
+**Lesson:** Check response status and content-length before calling `.json()`.  
+**Solution:** Return `undefined` for 204 responses or empty bodies.
+
+### 16. Dependency Type Assumptions
+**Problem:** `TypeError: 'User' object is not subscriptable` when accessing `current_user["company_id"]`.  
+**Root Cause:** Assumed FastAPI dependency returned dict, but it returns User object.  
+**Lesson:** Verify what types dependencies actually return, don't assume.  
+**Solution:** Changed to `current_user.company_id` (attribute access).
 
 ---
 
@@ -224,28 +302,7 @@ DELETE /workflows/:id      - Delete workflow
 
 ---
 
-## Development Workflow
-
-### 1. Starting the Dev Environment
-```bash
-# Terminal 1: Backend API
-cd backend
-source venv/bin/activate
-uvicorn app.main:app --reload
-
-# Terminal 2: Celery Worker (when needed)
-cd backend
-celery -A app.tasks worker --loglevel=info
-
-# Terminal 3: Dashboard
-cd dashboard
-npm run dev
-
-# Terminal 4: Extension
-cd extension
-npm run dev
-# Then load unpacked extension from dist/ folder in Chrome
-```
+## AI Labeling Architecture (Sprint 2)\n\n### Processing Flow\n```\nExtension records workflow\n  ↓\nPOST /api/workflows (status: draft)\n  ↓\nExtension uploads screenshots\n  ↓\nExtension links screenshots (PATCH /api/steps/{id}/screenshot)\n  ↓\nExtension triggers processing (POST /api/workflows/{id}/start-processing)\n  ↓\nCelery task queued (label_workflow_steps)\n  ↓\nFor each step:\n  - Load screenshot from local storage\n  - Convert to base64 (Claude requires HTTPS)\n  - Call Claude Vision API with tool calling\n  - Extract structured JSON (field_label, instruction, confidence)\n  - Update step in database\n  ↓\nUpdate workflow status to draft\n  ↓\nAdmin reviews in dashboard (/workflows/:id/review)\n```\n\n### AI Service Details\n- **Model**: claude-haiku-4-5-20251001 (fast, cost-effective, vision)\n- **Tool Calling**: `record_workflow_labels` with explicit schema\n- **Cost**: ~$0.03-0.05 per 6-step workflow\n- **Fallback**: Template-based labels when AI fails or no screenshot\n- **Local Storage**: Screenshots in `backend/screenshots/companies/{id}/workflows/{id}/`\n- **Base64 Encoding**: Required for local files (Claude needs HTTPS URLs)\n\n### Key Endpoints Added\n- `POST /api/workflows/{id}/start-processing` - Trigger AI labeling\n- `PATCH /api/steps/{id}/screenshot?screenshot_id={id}` - Link screenshots\n- `GET /api/screenshots/{id}/image` - Serve screenshot files\n- `PUT /api/steps/{id}` - Update step labels (admin edits)\n- `PUT /api/workflows/{id}` - Update workflow status (with validation)\n\n---\n\n## Development Workflow\n\n### 1. Starting the Dev Environment\n```bash\n# Terminal 1: Backend API\ncd backend\nsource venv/bin/activate\nuvicorn app.main:app --reload\n\n# Terminal 2: Celery Worker (REQUIRED for AI labeling)\ncd backend\nsource venv/bin/activate\ncelery -A app.celery_app worker --loglevel=info\n\n# Terminal 3: Dashboard\ncd dashboard\nnpm run dev\n\n# Terminal 4: Extension\ncd extension\nnpm run dev\n# Then load unpacked extension from dist/ folder in Chrome\n```\n\n**Note**: Celery worker MUST be running for AI labeling to work!
 
 ### 2. Code Quality Checks
 - Python: Use Black for formatting, Ruff for linting (post-MVP)
@@ -395,9 +452,10 @@ interface Step {
 ### Backend
 - `fastapi` - Web framework
 - `sqlalchemy` - ORM
-- `anthropic` - AI vision API
+- `anthropic>=0.74.0` - AI vision API (upgraded from 0.7.1)
 - `celery` - Background jobs
-- `boto3` - AWS S3 client
+- `redis` - Celery message broker
+- `boto3` - AWS S3 client (not used in MVP - using local storage)
 
 ### Frontend (Extension + Dashboard)
 - `react` - UI framework

@@ -4,13 +4,15 @@ Workflow CRUD API endpoints.
 RESTful API for creating, reading, updating, and deleting workflows with
 multi-tenant isolation and async processing.
 """
-from fastapi import APIRouter, Depends, status, Query
+from fastapi import APIRouter, Depends, status, Query, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 import json
+import logging
 
 from app.db.session import get_db
 from app.models.user import User
+from app.models.workflow import Workflow
 from app.utils.dependencies import get_current_user
 from app.schemas.workflow import (
     CreateWorkflowRequest,
@@ -27,6 +29,9 @@ from app.services.workflow import (
     update_workflow,
     delete_workflow,
 )
+from app.tasks.ai_labeling import label_workflow_steps
+
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter()
@@ -69,7 +74,16 @@ def create_workflow_endpoint(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Create a new workflow with steps."""
+    """
+    Create a new workflow with steps.
+    
+    Process:
+    1. Create workflow and steps in database (status: "processing")
+    2. Queue AI labeling task asynchronously
+    3. Return immediately with workflow_id
+    4. AI labeling happens in background
+    5. Status updates to "draft" when complete
+    """
     # Create workflow with user's company_id
     workflow = create_workflow(
         db=db,
@@ -78,13 +92,18 @@ def create_workflow_endpoint(
         user_id=current_user.id
     )
 
-    # TODO: Queue AI labeling job here (Sprint 2)
-    # celery_app.send_task("tasks.label_workflow", args=[workflow.id])
-
-    return CreateWorkflowResponse(
-        workflow_id=workflow.id,
-        status="processing"
+    # NOTE: AI labeling task is NOT queued here anymore
+    # Extension will call POST /api/workflows/{id}/start-processing after uploading screenshots
+    # This prevents race condition where Celery starts before screenshots are linked
+    logger.info(
+        f"Workflow {workflow.id} created, awaiting screenshot upload and processing trigger"
     )
+
+    # Return response with workflow_id
+    return {
+        "workflow_id": workflow.id,
+        "status": "draft"  # Changed from "processing" - not processing yet
+    }
 
 
 @router.get(
@@ -322,6 +341,74 @@ def update_workflow_endpoint(
     }
 
     return WorkflowResponse(**workflow_dict)
+
+
+@router.post(
+    "/{workflow_id}/start-processing",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Start AI processing for workflow",
+    description="""
+    Trigger AI labeling task for a workflow after screenshots have been uploaded.
+    
+    **Use Case:**
+    Extension calls this endpoint after:
+    1. Creating workflow
+    2. Uploading all screenshots
+    3. Linking all screenshots to steps
+    
+    This prevents race condition where AI processing starts before screenshots are ready.
+    
+    **Multi-tenant Security:**
+    - Users can only process their own company's workflows
+    - Returns 403 Forbidden if workflow belongs to another company
+    - Returns 404 if workflow doesn't exist
+    
+    **Returns:**
+    - 202 Accepted: Task queued successfully
+    - task_id: Celery task ID for tracking
+    - message: Confirmation message
+    """
+)
+def start_workflow_processing(
+    workflow_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Start AI processing for workflow after screenshots are uploaded."""
+    # Verify workflow exists and belongs to user's company
+    workflow = db.query(Workflow).filter(
+        Workflow.id == workflow_id,
+        Workflow.company_id == current_user.company_id
+    ).first()
+    
+    if not workflow:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Workflow {workflow_id} not found or does not belong to your company"
+        )
+    
+    # Queue AI labeling job (async - runs in background)
+    try:
+        task = label_workflow_steps.delay(workflow.id)
+        logger.info(
+            f"AI labeling task queued for workflow {workflow.id}, "
+            f"task_id: {task.id}"
+        )
+        
+        return {
+            "task_id": str(task.id),
+            "workflow_id": workflow.id,
+            "message": "AI processing started",
+            "status": "processing"
+        }
+    except Exception as e:
+        logger.error(
+            f"Failed to queue AI labeling task for workflow {workflow.id}: {e}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to start AI processing: {str(e)}"
+        )
 
 
 @router.delete(
