@@ -4,144 +4,121 @@ Current sprint tasks, backlog, and technical debt tracking.
 
 ---
 
-## Sprint 2: AI-Powered Review & Editing
+## Sprint 3: Walkthrough Mode (Epic 4)
 
-**Sprint Goal**: Enable AI labeling of workflow steps and build admin review interface for editing/approving workflows.
+**Sprint Goal**: Enable users to follow recorded workflows with interactive step-by-step guidance via spotlight overlay.
 
 **Sprint Duration**: 2 weeks
-**Target Completion**: 2025-12-17
-**Committed Story Points**: 43 SP (37 P0 + 6 P1)
+**Target Completion**: 2025-12-31
+**Committed Story Points**: 51 SP (46 P0 + 5 P1)
 
-**Status**: Sprint 1 Complete ✅ - 53 SP delivered
-- Backend API foundation ✅
-- Chrome extension recording ✅
-- Dashboard authentication ✅
-
----
-
-## EPIC-003: AI-Powered Review & Editing
-**Goal**: Enable AI to automatically label workflow steps and provide admin UI for review/editing
-**Success Metrics**: AI labeling >75% accuracy, admin can review and save workflows
-**Target Completion**: Sprint 2
-
-### AI-001: Set Up Celery Task Queue
-**Type**: Backend Infrastructure
-**Priority**: P0 (Critical - blocks all AI features)
-**Epic**: EPIC-003
-**Estimate**: 5 SP
-**Status**: 📋 Todo
-
-**Description**:
-Configure Celery + Redis for background job processing. Create worker setup, task registration, and error handling infrastructure. This is foundational for all AI labeling features.
-
-**Acceptance Criteria**:
-- [ ] Celery worker starts and connects to Redis
-- [ ] Can queue and execute simple test tasks
-- [ ] Task results stored and retrievable
-- [ ] Failed tasks retry with exponential backoff (max 3 attempts)
-- [ ] Worker logs show task execution
-- [ ] Documentation in `docs/celery-setup.md`
-
-**Technical Context**:
-- **Dependencies**: None (foundational task)
-- **Affected Components**:
-  - `backend/app/tasks/` - Celery tasks
-  - `backend/app/celery_app.py` - Celery configuration
-  - `backend/requirements.txt` - Add celery, redis dependencies
-- **Key Files**:
-  - `app/celery_app.py` - Celery app initialization
-  - `app/tasks/__init__.py` - Task registration
-  - `app/tasks/base.py` - Base task classes
-  - `app/main.py` - Integrate Celery with FastAPI
-- **Considerations**:
-  - Use Redis as both broker and result backend
-  - Configure task time limits (5 min per AI labeling task)
-  - Set concurrency=5 for AI rate limiting
-  - Use `task_always_eager=True` for testing
-
-**Implementation Tasks**:
-1. Install and configure Redis (local dev + production)
-2. Set up Celery app configuration with FastAPI
-3. Create base task classes with retry logic
-4. Configure task routing and worker concurrency (max 5 parallel for AI)
-5. Add Celery monitoring/logging
-6. Create documentation for running workers
-
-**Definition of Done**:
-- Celery worker runs without errors
-- Test task executes successfully
-- Retry logic tested with failing task
-- Documentation complete
-- Integration tests passing
+**Previous Sprints**:
+- Sprint 1 Complete ✅ - 53 SP delivered (Backend API, Extension Recording, Dashboard Auth)
+- Sprint 2 Complete ✅ - 43 SP delivered (AI Labeling, Review Interface)
 
 ---
 
-### AI-002: Claude Vision API Integration
-**Type**: Backend AI Service
-**Priority**: P0 (Critical)
-**Epic**: EPIC-003
-**Estimate**: 5 SP
-**Status**: 📋 Todo
+## EPIC-004: Walkthrough Mode
+**Goal**: Enable users to launch and complete workflows with interactive step-by-step guidance
+**Success Metrics**: 
+- Users can launch walkthrough from workflow detail page
+- >90% walkthrough completion rate
+- Element finding works >85% of the time with selector fallback
+- Execution tracking logged to backend
+**Target Completion**: Sprint 3
+
+---
+
+### FE-012: Health Status Indicators (Story 4.1)
+**Type**: Frontend UI Enhancement
+**Priority**: P1 (Should-have)
+**Epic**: EPIC-004
+**Estimate**: 2 SP
+**Status**: ✅ Done
 
 **Description**:
-Integrate Anthropic Claude 3.5 Sonnet for vision-based step labeling. Build prompt templates, response parsing, and cost tracking.
+Add visual health status indicators to workflow cards and detail pages. Show ✓ Healthy, ⚠️ Needs Review, or ❌ Broken badges based on workflow status and success rate.
 
 **Acceptance Criteria**:
-- [ ] Can send screenshot + metadata to Claude API
-- [ ] Receives JSON response with label, instruction, confidence
-- [ ] Handles rate limits gracefully (retry with backoff)
-- [ ] Falls back to template labels if AI fails
-- [ ] Logs API costs (input/output tokens)
-- [ ] Unit tests with mocked API responses
-- [ ] Integration tests with real API (limited, use test data)
+- [ ] Workflow cards show health badge (green ✓, yellow ⚠️, red ❌)
+- [ ] Health determined by: status + success_rate + consecutive_failures
+- [ ] Logic: 
+  - Healthy: status='active' AND success_rate >0.9 AND consecutive_failures <3
+  - Needs Review: status='needs_review' OR success_rate 0.6-0.9
+  - Broken: status='broken' OR consecutive_failures ≥3
+- [ ] Tooltip on hover explains status
+- [ ] Detail page shows larger health indicator
+- [ ] Dashboard sorts broken workflows to top
 
 **Technical Context**:
-- **Dependencies**: AI-001 (Celery must be set up)
+- **Dependencies**: None (pure frontend)
 - **Affected Components**:
-  - `backend/app/services/` - AI service layer
-  - `backend/requirements.txt` - Add anthropic SDK
+  - `dashboard/src/pages/Dashboard.tsx` - Workflow cards
+  - `dashboard/src/pages/WorkflowDetail.tsx` - Detail page
+  - `dashboard/src/components/HealthBadge.tsx` - New component
 - **Key Files**:
-  - `app/services/ai.py` - AI labeling service
-  - `app/services/prompts.py` - Prompt templates
-  - `app/utils/cost_tracker.py` - Track AI API costs
-- **Considerations**:
-  - Use `anthropic.messages.create()` with vision model
-  - Max tokens: 1024 (keep responses concise)
-  - Temperature: 0.3 (deterministic but not rigid)
-  - Cost tracking: ~$0.03 per step (3.5 Sonnet pricing)
-  - Fallback templates for common fields (email, password, etc.)
-
-**Prompt Design**:
-```
-You are analyzing a recorded workflow step. Given:
-- Screenshot of the page
-- Element metadata: {tag, role, text, position}
-- Action type: {click, input, select}
-- Context: {page_url, page_title}
-
-Generate:
-1. field_label: Short name for the field (e.g., "Invoice Number")
-2. instruction: User-friendly instruction (e.g., "Enter the invoice number")
-3. confidence: 0.0-1.0 score
-
-Return as JSON.
-```
+  - `src/components/HealthBadge.tsx` - Reusable badge component
+  - `src/utils/workflowHealth.ts` - Health calculation logic
 
 **Implementation Tasks**:
-1. Set up Anthropic Python SDK
-2. Create AI service layer (`app/services/ai.py`)
-3. Design prompt template for step labeling
-4. Implement response parsing (extract field_label, instruction, confidence)
-5. Add error handling for API failures (rate limits, timeouts)
-6. Track AI costs per request (log tokens used)
-7. Create fallback template-based labeling
+1. Create HealthBadge component with icon + color logic
+2. Add getWorkflowHealth() utility function
+3. Update Dashboard workflow cards to show badge
+4. Update WorkflowDetail to show health status
+5. Add sorting to prioritize broken workflows
+6. Add unit tests for health calculation logic
 
 **Definition of Done**:
-- AI service tested with real API
-- Falls back gracefully on failures
-- Cost tracking implemented
-- Unit and integration tests passing
-- Documentation in `docs/ai-service.md`
+- Health badges render correctly on all workflows
+- Health calculation logic tested
+- Tooltips show helpful explanations
+- Dashboard sorts by health status
+- Visual design matches mockups
+
+---
+
+### FE-013: Start Walkthrough Button (Story 4.2)
+**Type**: Frontend UI
+**Priority**: P0 (Must-have)
+**Epic**: EPIC-004
+**Estimate**: 2 SP
+**Status**: ✅ Done
+
+**Description**:
+Add "Start Walkthrough" button to WorkflowDetail page. Button should be prominently displayed for active workflows and trigger walkthrough mode in extension.
+
+**Acceptance Criteria**:
+- [ ] "Start Walkthrough" button visible on workflow detail page
+- [ ] Button only enabled for status='active' workflows
+- [ ] Button opens workflow starting_url in new/current tab
+- [ ] Sends message to extension to activate walkthrough mode
+- [ ] Loading state shown while initializing
+- [ ] Error handling if extension not installed/active
+- [ ] Button follows UX principle: users don't need to type URLs
+
+**Technical Context**:
+- **Dependencies**: FE-012 (Health status), Extension walkthrough infrastructure
+- **Affected Components**:
+  - `dashboard/src/pages/WorkflowDetail.tsx` - Add button
+  - `dashboard/src/api/client.ts` - Extension messaging
+- **Key Files**:
+  - `src/pages/WorkflowDetail.tsx` - Start button logic
+  - `src/utils/extensionBridge.ts` - Extension communication
+
+**Implementation Tasks**:
+1. Add "Start Walkthrough" button to WorkflowDetail (primary CTA)
+2. Check workflow status (only show for 'active')
+3. Open starting_url in tab (window.open or current tab)
+4. Send message to extension with workflow_id
+5. Handle extension not installed case (show install prompt)
+6. Add loading and success states
+
+**Definition of Done**:
+- Button displays correctly
+- Only active workflows show button
+- Extension receives message correctly
+- Error handling works (no extension, etc.)
+- User feedback for all states
 
 ---
 
@@ -599,11 +576,180 @@ Create DELETE endpoint for steps. Renumber remaining steps after deletion.
 
 ---
 
+---
+
+### EXT-001: Walkthrough Messaging & Data Loading
+**Type**: Extension Infrastructure
+**Priority**: P0 (Must-have)
+**Epic**: EPIC-004
+**Estimate**: 5 SP
+**Status**: ✅ Done
+
+**Description**:
+Set up messaging system to receive walkthrough start commands. Load workflow data from API into content script.
+
+**Completed**: 2025-11-24
+
+---
+
+### EXT-002: Overlay UI Foundation
+**Type**: Extension UI
+**Priority**: P0 (Must-have)
+**Epic**: EPIC-004
+**Estimate**: 10 SP
+**Status**: ✅ Done
+
+**Description**:
+Build overlay UI: backdrop, spotlight, tooltip, progress indicator, controls.
+
+**Completed**: 2025-11-24
+
+---
+
+### EXT-003: Element Finder with Selector Fallback
+**Type**: Extension Core Logic
+**Priority**: P0 (Must-have)
+**Epic**: EPIC-004
+**Estimate**: 5 SP
+**Status**: ✅ Done
+
+**Description**:
+Element finding with cascading fallback (primary → CSS → XPath → data-testid), MutationObserver for dynamic content.
+
+**Completed**: 2025-11-24
+
+---
+
+### EXT-004: Step Progression & Action Detection
+**Type**: Extension Core Logic
+**Priority**: P0 (Must-have)
+**Epic**: EPIC-004
+**Estimate**: 10 SP
+**Status**: ✅ Done
+
+**Description**:
+Detect user actions, validate against expected action type, auto-advance on correct action.
+
+**Completed**: 2025-11-24
+
+---
+
+### EXT-005: Action Validation & Error Feedback
+**Type**: Extension UI + Logic
+**Priority**: P0 (Must-have)
+**Epic**: EPIC-004
+**Estimate**: 5 SP
+**Status**: ✅ Done
+
+**Description**:
+Show error messages when user performs incorrect action. Allow retry without losing progress.
+
+**Acceptance Criteria**:
+- [ ] Detect incorrect action (wrong element, wrong type)
+- [ ] Show error message in tooltip ("That's not quite right...")
+- [ ] Keep spotlight on correct element
+- [ ] Allow immediate retry (don't advance step)
+- [ ] Track retry attempts (max 3 per step)
+- [ ] After 3 failures: offer "Skip Step" or "Exit"
+- [ ] Format validation for inputs (date, email, etc.)
+- [ ] Show encouraging messages
+
+**Implementation Tasks**:
+1. Add error state to tooltip component
+2. Implement wrong element detection in validateAction
+3. Add retry counter to WalkthroughState
+4. Show error UI with helpful message
+5. Add "Skip Step" button after 3 failures
+6. Add format validation helpers
+7. Test with common error scenarios
+
+---
+
+### EXT-006: Execution Logging Integration
+**Type**: Extension Backend Integration
+**Priority**: P0 (Must-have)
+**Epic**: EPIC-004
+**Estimate**: 3 SP
+**Status**: ✅ Done
+
+**Description**:
+Call backend API to log execution results. Log on success, failure, and healing events.
+
+**Acceptance Criteria**:
+- [ ] On walkthrough complete: POST /api/workflows/:id/executions with status='success'
+- [ ] On element not found: log status='failed', error_type='element_not_found'
+- [ ] On timeout: log status='failed', error_type='timeout'
+- [ ] On healing success: log status='healed_deterministic'
+- [ ] Track execution time (start to completion)
+- [ ] Handle API failures gracefully (don't block UX)
+- [ ] Queue locally if offline (optional)
+
+**Implementation Tasks**:
+1. Add logExecution function to shared/api.ts
+2. Call on walkthrough completion in exitWalkthrough
+3. Call on element not found errors
+4. Call on user exit (early termination)
+5. Track execution time (Date.now() start/end)
+6. Add error handling for API failures
+7. Test with network offline
+
+---
+
 ## Backlog (Future Sprints)
 
-### Sprint 3: Walkthrough Mode & Auto-Healing
-- FE-012: Walkthrough Mode Overlay UI
-- FE-013: Element Finding & Deterministic Auto-Healing
+### UX Enhancements (Post-Sprint 3)
+
+#### EXT-007: Enter-to-Commit for Inputs
+**Type**: Extension UX Enhancement
+**Priority**: P2 (Nice-to-have)
+**Estimate**: 2 SP
+
+**Description**:
+Allow Enter key to commit input values (not just blur). Handle form submit vs input commit distinction.
+
+**Acceptance Criteria**:
+- [ ] Listen for Enter keydown on input fields
+- [ ] Validate value changed before committing
+- [ ] Don't double-advance if Enter triggers both input_commit and form submit
+- [ ] Only for text-based inputs (not checkboxes/radios)
+
+---
+
+#### EXT-008: Debounce Noisy Input Events
+**Type**: Extension UX Enhancement
+**Priority**: P3 (Nice-to-have)
+**Estimate**: 2 SP
+
+**Description**:
+Debounce blur/change events that fire frequently due to scripts. Prevent false auto-advances.
+
+**Acceptance Criteria**:
+- [ ] Add 100ms debounce to blur handler
+- [ ] Check if value actually differs from baseline
+- [ ] Don't advance if programmatic blur (no user action)
+- [ ] Test with React/Vue apps that trigger synthetic events
+
+---
+
+#### EXT-009: Accessibility Keyboard Shortcuts
+**Type**: Extension Accessibility
+**Priority**: P2 (Nice-to-have)
+**Estimate**: 3 SP
+
+**Description**:
+Add keyboard shortcuts for walkthrough navigation and focus trapping in tooltip.
+
+**Acceptance Criteria**:
+- [ ] N key: Next step
+- [ ] B key: Back step
+- [ ] Esc key: Exit walkthrough (with confirmation)
+- [ ] Focus trap: Tab cycles through tooltip buttons only
+- [ ] Screen reader announcements for step changes
+- [ ] High contrast mode support
+
+---
+
+### Sprint 4: Auto-Healing & Health Monitoring
 - FE-014: AI-Assisted Auto-Healing Integration
 - BE-009: Health Monitoring Endpoints
 - BE-010: Notification System

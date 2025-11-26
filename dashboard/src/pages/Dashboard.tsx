@@ -7,6 +7,8 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '@/api/client';
 import type { WorkflowListItem } from '@/api/types';
+import { HealthBadge } from '@/components/HealthBadge';
+import { compareByHealth } from '@/utils/workflowHealth';
 
 export const Dashboard: React.FC = () => {
   const [workflows, setWorkflows] = useState<WorkflowListItem[]>([]);
@@ -22,7 +24,9 @@ export const Dashboard: React.FC = () => {
     setError(null);
     try {
       const response = await apiClient.getWorkflows(50, 0);
-      setWorkflows(response.workflows);
+      // Sort workflows by health: broken first, then needs_review, then healthy
+      const sortedWorkflows = [...response.workflows].sort(compareByHealth);
+      setWorkflows(sortedWorkflows);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load workflows');
     } finally {
@@ -175,7 +179,11 @@ export const Dashboard: React.FC = () => {
                           </p>
                         )}
                       </div>
-                      <div className="ml-2 flex-shrink-0 flex">
+                      <div className="ml-2 flex-shrink-0 flex gap-2">
+                        {/* Health badge */}
+                        <HealthBadge workflow={workflow} size="small" showLabel={false} />
+                        
+                        {/* Status badge */}
                         <span
                           className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(
                             workflow.status

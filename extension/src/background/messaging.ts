@@ -51,12 +51,20 @@ export function handleMessage(
       handleStopRecording(message, sendResponse);
       break;
 
+    case 'START_WALKTHROUGH':
+      handleStartWalkthrough(message, sender, sendResponse);
+      break;
+
     case 'CAPTURE_SCREENSHOT':
       handleCaptureScreenshot(message, sendResponse);
       break;
 
     case 'GET_RECORDING_STATE':
       handleGetRecordingState(message, sendResponse);
+      break;
+
+    case 'LOG_EXECUTION':
+      handleLogExecution(message, sendResponse);
       break;
 
     default:
@@ -66,6 +74,48 @@ export function handleMessage(
         payload: { error: 'Unknown message type', messageType: message.type },
       });
   }
+
+/**
+ * Handle LOG_EXECUTION message (EXT-006)
+ * Proxies execution logging to backend so content scripts don't import API client
+ */
+async function handleLogExecution(
+  message: ExtensionMessage,
+  sendResponse: (response?: any) => void
+): Promise<void> {
+  try {
+    const payload = (message.payload || {}) as {
+      workflowId: number;
+      step_id?: number | null;
+      status: 'success' | 'healed_deterministic' | 'healed_ai' | 'failed';
+      error_type?: 'element_not_found' | 'timeout' | 'navigation_error' | 'user_exit' | null;
+      error_message?: string | null;
+      healing_confidence?: number | null;
+      deterministic_score?: number | null;
+      page_url?: string | null;
+      execution_time_ms?: number | null;
+    };
+
+    if (!payload.workflowId || typeof payload.workflowId !== 'number') {
+      throw new Error('workflowId is required');
+    }
+
+    const { workflowId, ...data } = payload;
+
+    const result = await apiClient.logExecution(workflowId, data);
+
+    sendResponse({
+      type: 'LOG_EXECUTION',
+      payload: { success: true, result },
+    });
+  } catch (error) {
+    console.error('[Background] LOG_EXECUTION failed:', error);
+    sendResponse({
+      type: 'LOG_EXECUTION',
+      payload: { success: false, error: error instanceof Error ? error.message : 'Failed to log execution' },
+    });
+  }
+}
 
   // Return true to indicate we'll send response asynchronously
   return true;
@@ -250,6 +300,91 @@ async function handleStopRecording(
         success: false,
         error: errorMessage,
         context: 'STOP_RECORDING',
+      },
+    });
+  }
+}
+
+/**
+ * Handle START_WALKTHROUGH message
+ * Fetches workflow from API and sends to content script
+ * EXT-001: Walkthrough Messaging & Data Loading
+ */
+async function handleStartWalkthrough(
+  message: ExtensionMessage,
+  _sender: chrome.runtime.MessageSender,
+  sendResponse: (response?: any) => void
+): Promise<void> {
+  try {
+    const { workflowId } = message.payload || {};
+
+    // Validate payload
+    if (!workflowId || typeof workflowId !== 'number') {
+      throw new Error('workflowId is required and must be a number');
+    }
+
+    console.log(`[Background] Starting walkthrough for workflow ${workflowId}`);
+
+    // Fetch workflow from API
+    const workflow = await apiClient.getWorkflow(workflowId);
+
+    console.log(`[Background] Fetched workflow "${workflow.name}" with ${workflow.steps.length} steps`);
+
+    // Validate workflow has steps
+    if (!workflow.steps || workflow.steps.length === 0) {
+      throw new Error('Workflow has no steps');
+    }
+
+    // Get the active tab (where dashboard opened the URL)
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tabs[0]?.id) {
+      throw new Error('No active tab found');
+    }
+
+    const tabId = tabs[0].id;
+
+    // Send workflow data to content script
+    // Wait a bit to ensure content script is loaded
+    setTimeout(() => {
+      chrome.tabs.sendMessage(
+        tabId,
+        {
+          type: 'WALKTHROUGH_DATA',
+          payload: {
+            workflowId: workflow.id,
+            workflowName: workflow.name,
+            startingUrl: workflow.starting_url,
+            steps: workflow.steps,
+            totalSteps: workflow.steps.length,
+          },
+        },
+        (response) => {
+          if (chrome.runtime.lastError) {
+            console.error('[Background] Failed to send workflow data to content script:', chrome.runtime.lastError);
+          } else {
+            console.log('[Background] Workflow data sent to content script:', response);
+          }
+        }
+      );
+    }, 1000); // Wait 1 second for content script to load
+
+    // Respond to dashboard immediately
+    sendResponse({
+      type: 'START_WALKTHROUGH',
+      payload: {
+        success: true,
+        workflowId: workflow.id,
+        workflowName: workflow.name,
+        stepCount: workflow.steps.length,
+      },
+    });
+  } catch (error) {
+    console.error('[Background] Failed to start walkthrough:', error);
+    sendResponse({
+      type: 'START_WALKTHROUGH',
+      payload: {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to start walkthrough',
       },
     });
   }

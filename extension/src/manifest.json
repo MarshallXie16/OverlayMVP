@@ -27,9 +27,9 @@
   },
   "content_scripts": [
     {
-      "matches": ["http://*/*", "https://*/*"],
-      "js": ["content/recorder.js", "content/walkthrough.js"],
-      "css": ["content/styles/overlay.css", "content/styles/widget.css", "content/styles/feedback.css"],
+      "matches": ["<all_urls>"],
+      "js": ["content/walkthrough.js"],
+      "css": ["content/styles/overlay.css", "content/styles/widget.css", "content/styles/feedback.css", "content/styles/walkthrough.css"],
       "run_at": "document_idle"
     }
   ],

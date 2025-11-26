@@ -80,6 +80,8 @@ export default defineConfig({
           return '[name]/[name].js';
         },
 
+        // Disable vendor/shared chunking for content scripts to ensure single-file outputs
+        manualChunks: undefined,
         chunkFileNames: 'chunks/[name]-[hash].js',
         assetFileNames: 'assets/[name]-[hash][extname]',
         format: 'es', // Use ES modules for all
