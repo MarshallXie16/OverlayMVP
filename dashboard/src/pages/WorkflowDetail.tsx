@@ -7,6 +7,9 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiClient } from '@/api/client';
 import type { WorkflowResponse } from '@/api/types';
+import { HealthBadge } from '@/components/HealthBadge';
+import { ExtensionNotInstalledModal } from '@/components/ExtensionNotInstalledModal';
+import { startWalkthrough, isExtensionInstalled } from '@/utils/extensionBridge';
 
 export const WorkflowDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -14,6 +17,11 @@ export const WorkflowDetail: React.FC = () => {
   const [workflow, setWorkflow] = useState<WorkflowResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Walkthrough state
+  const [isStartingWalkthrough, setIsStartingWalkthrough] = useState(false);
+  const [walkthroughError, setWalkthroughError] = useState<string | null>(null);
+  const [showExtensionModal, setShowExtensionModal] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -47,6 +55,33 @@ export const WorkflowDetail: React.FC = () => {
     }
   };
 
+  const handleStartWalkthrough = async () => {
+    if (!workflow) return;
+
+    // Clear previous errors
+    setWalkthroughError(null);
+
+    // Check extension installed
+    if (!isExtensionInstalled()) {
+      setShowExtensionModal(true);
+      return;
+    }
+
+    // Start walkthrough
+    setIsStartingWalkthrough(true);
+    try {
+      await startWalkthrough(workflow.id, workflow.starting_url);
+      // Success! Tab opened and extension notified
+      // User is now in the new tab following the walkthrough
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to start walkthrough';
+      setWalkthroughError(errorMessage);
+      console.error('Failed to start walkthrough:', err);
+    } finally {
+      setIsStartingWalkthrough(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -74,13 +109,38 @@ export const WorkflowDetail: React.FC = () => {
           ← Back to workflows
         </button>
         <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">{workflow.name}</h1>
+          <div className="flex-1">
+            <div className="flex items-center gap-3">
+              <h1 className="text-3xl font-bold text-gray-900">{workflow.name}</h1>
+              <HealthBadge workflow={workflow} size="large" showLabel={true} />
+            </div>
             {workflow.description && (
               <p className="mt-2 text-sm text-gray-600">{workflow.description}</p>
             )}
           </div>
           <div className="flex gap-3">
+            {/* Start Walkthrough button - only for active workflows */}
+            {workflow.status === 'active' && (
+              <button
+                onClick={handleStartWalkthrough}
+                disabled={isStartingWalkthrough}
+                className="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:bg-green-400 rounded-md flex items-center gap-2"
+              >
+                {isStartingWalkthrough ? (
+                  <>
+                    <span className="animate-spin">⏳</span>
+                    Starting...
+                  </>
+                ) : (
+                  <>
+                    <span>▶️</span>
+                    Start Walkthrough
+                  </>
+                )}
+              </button>
+            )}
+
+            {/* Review & Edit button */}
             {(workflow.status === 'draft' || workflow.status === 'active') && (
               <button
                 onClick={() => navigate(`/workflows/${workflow.id}/review`)}
@@ -89,6 +149,8 @@ export const WorkflowDetail: React.FC = () => {
                 {workflow.status === 'draft' ? 'Review & Edit' : 'Edit Workflow'}
               </button>
             )}
+            
+            {/* Delete button */}
             <button
               onClick={handleDelete}
               className="px-4 py-2 text-sm font-medium text-red-600 hover:text-red-700 border border-red-600 rounded-md hover:bg-red-50"
@@ -98,6 +160,33 @@ export const WorkflowDetail: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Walkthrough Error Display */}
+      {walkthroughError && (
+        <div className="mb-6 rounded-md bg-red-50 p-4">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-red-800">Failed to start walkthrough</h3>
+              <div className="mt-2 text-sm text-red-700">
+                <p>{walkthroughError}</p>
+              </div>
+              <div className="mt-4">
+                <button
+                  onClick={() => setWalkthroughError(null)}
+                  className="text-sm font-medium text-red-800 hover:text-red-900"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Metadata */}
       <div className="bg-white shadow overflow-hidden sm:rounded-lg mb-8">
@@ -190,6 +279,12 @@ export const WorkflowDetail: React.FC = () => {
           </ul>
         </div>
       </div>
+
+      {/* Extension Not Installed Modal */}
+      <ExtensionNotInstalledModal
+        isOpen={showExtensionModal}
+        onClose={() => setShowExtensionModal(false)}
+      />
     </div>
   );
 };

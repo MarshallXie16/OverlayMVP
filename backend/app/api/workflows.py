@@ -22,6 +22,7 @@ from app.schemas.workflow import (
     WorkflowListResponse,
 )
 from app.schemas.step import StepResponse
+from app.schemas.health import ExecutionLogRequest, ExecutionLogResponse
 from app.services.workflow import (
     create_workflow,
     get_workflows,
@@ -29,6 +30,7 @@ from app.services.workflow import (
     update_workflow,
     delete_workflow,
 )
+from app.services.health import log_workflow_execution
 from app.tasks.ai_labeling import label_workflow_steps
 
 logger = logging.getLogger(__name__)
@@ -451,3 +453,100 @@ def delete_workflow_endpoint(
 
     # Return 204 No Content (no response body)
     return None
+
+
+@router.post(
+    "/{workflow_id}/executions",
+    response_model=ExecutionLogResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Log workflow execution",
+    description="""
+    Log workflow execution result and update health metrics.
+    
+    **Use Cases:**
+    - Extension logs walkthrough completion (success/failure)
+    - Track element finding failures
+    - Record auto-healing events
+    - Monitor workflow health over time
+    
+    **Health Metrics Updated:**
+    - total_uses: Incremented by 1
+    - success_rate: Updated with exponential moving average
+    - consecutive_failures: Reset to 0 on success, incremented on failure
+    - last_successful_run / last_failed_run: Updated timestamps
+    - status: Changed to 'broken' if consecutive_failures >= 3
+    
+    **Multi-tenant Isolation:**
+    - Returns 404 if workflow doesn't exist or belongs to different company
+    
+    **Status Values:**
+    - success: Workflow completed without issues
+    - healed_deterministic: Element found with fallback selector
+    - healed_ai: Element found with AI-assisted healing (Epic 5)
+    - failed: Workflow failed (element not found, timeout, etc.)
+    
+    **Returns:**
+    - execution_id: ID of created health log entry
+    - workflow_status: Updated workflow status
+    - consecutive_failures: Updated count
+    - success_rate: Updated rate (0.0-1.0)
+    """
+)
+def log_execution_endpoint(
+    workflow_id: int,
+    execution_data: ExecutionLogRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Log workflow execution and update health metrics.
+    
+    Creates health log entry and updates workflow success rate,
+    consecutive failures counter, and status.
+    """
+    # Verify workflow exists and belongs to user's company
+    workflow = db.query(Workflow).filter(
+        Workflow.id == workflow_id,
+        Workflow.company_id == current_user.company_id
+    ).first()
+    
+    if not workflow:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Workflow {workflow_id} not found"
+        )
+    
+    # Log execution and update metrics
+    try:
+        health_log, updated_workflow = log_workflow_execution(
+            db=db,
+            workflow_id=workflow_id,
+            user_id=current_user.id,
+            execution_data=execution_data
+        )
+        
+        logger.info(
+            f"Logged execution for workflow {workflow_id}: "
+            f"status={execution_data.status}, "
+            f"success_rate={updated_workflow.success_rate:.2f}, "
+            f"consecutive_failures={updated_workflow.consecutive_failures}"
+        )
+        
+        return ExecutionLogResponse(
+            execution_id=health_log.id,
+            workflow_status=updated_workflow.status,
+            consecutive_failures=updated_workflow.consecutive_failures,
+            success_rate=updated_workflow.success_rate
+        )
+    
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Failed to log execution for workflow {workflow_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to log execution: {str(e)}"
+        )

@@ -245,10 +245,13 @@ export type MessageType =
   | 'START_RECORDING'
   | 'STOP_RECORDING'
   | 'START_WALKTHROUGH'
+  | 'WALKTHROUGH_DATA'
+  | 'WALKTHROUGH_ERROR'
   | 'CAPTURE_SCREENSHOT'
   | 'GET_RECORDING_STATE'
   | 'SAVE_STEP'
   | 'SCREENSHOT_CAPTURED'
+  | 'LOG_EXECUTION'
   | 'STEP_SAVED'
   | 'ERROR';
 
@@ -271,6 +274,27 @@ export interface RecordingState {
   startingUrl: string | null;
   steps: StepCreate[];
   currentStepNumber: number;
+}
+
+/**
+ * Walkthrough state for content script
+ * EXT-001: Walkthrough Messaging & Data Loading
+ * EXT-005: Error tracking and retry logic
+ * EXT-006: Execution timing
+ */
+export interface WalkthroughState {
+  workflowId: number;
+  workflowName: string;
+  startingUrl: string;
+  steps: StepResponse[];
+  currentStepIndex: number;
+  totalSteps: number;
+  status: 'initializing' | 'active' | 'completed' | 'error';
+  error: string | null;
+  // EXT-005: Retry tracking
+  retryAttempts: Map<number, number>; // stepIndex -> attempt count
+  // EXT-006: Execution timing
+  startTime: number | null; // Date.now() timestamp
 }
 
 /**

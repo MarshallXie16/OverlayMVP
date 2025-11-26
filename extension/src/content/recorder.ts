@@ -17,7 +17,17 @@ import { isInteractionMeaningful, getActionType, InputDebouncer } from './utils/
 import { EventDeduplicator } from './utils/event-deduplicator';
 import { addStep, getSteps, clearSteps, getStepCount, addScreenshot, getScreenshots, clearScreenshots } from './storage/indexeddb';
 import { showRecordingWidget, hideRecordingWidget, updateWidgetStepCount, onWidgetStop, onWidgetPause } from './widget';
-import { flashElement } from './feedback';
+// Minimal success flash without importing shared module (prevents code-splitting for content scripts)
+function flashElement(element: HTMLElement): void {
+  const prevTransition = element.style.transition;
+  const prevBoxShadow = element.style.boxShadow;
+  element.style.transition = 'box-shadow 0.2s ease';
+  element.style.boxShadow = '0 0 0 3px rgba(34,197,94,0.6)';
+  setTimeout(() => {
+    element.style.boxShadow = prevBoxShadow;
+    element.style.transition = prevTransition;
+  }, 500);
+}
 
 // CSS is loaded via manifest.json content_scripts.css
 
@@ -239,7 +249,9 @@ async function recordInteraction(event: Event, element: Element): Promise<void> 
     updateWidgetStepCount(state.currentStepNumber);
 
     // Flash element for visual feedback
-    flashElement(element);
+    if (element instanceof HTMLElement) {
+      flashElement(element);
+    }
 
     console.log(`✅ Step ${stepNumber} recorded:`, step);
   } catch (error) {

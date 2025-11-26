@@ -395,6 +395,40 @@ export class ApiClient {
   }
 
   // ==========================================================================
+  // HEALTH LOGGING (EXT-006)
+  // ==========================================================================
+
+  /**
+   * Log workflow execution result
+   * Called on walkthrough completion, failure, or healing events
+   */
+  async logExecution(workflowId: number, data: {
+    step_id?: number | null;
+    status: 'success' | 'healed_deterministic' | 'healed_ai' | 'failed';
+    error_type?: 'element_not_found' | 'timeout' | 'navigation_error' | 'user_exit' | null;
+    error_message?: string | null;
+    healing_confidence?: number | null;
+    deterministic_score?: number | null;
+    page_url?: string | null;
+    execution_time_ms?: number | null;
+  }): Promise<{ execution_id: number; workflow_status: string }> {
+    try {
+      return await makeRequest<{ execution_id: number; workflow_status: string }>(
+        `/api/workflows/${workflowId}/executions`,
+        {
+          method: 'POST',
+          body: data,
+        }
+      );
+    } catch (error) {
+      // Log error but don't throw - logging failures shouldn't break UX
+      console.error('[API] Failed to log execution:', error);
+      // Return dummy response
+      return { execution_id: -1, workflow_status: 'unknown' };
+    }
+  }
+
+  // ==========================================================================
   // UTILITY METHODS
   // ==========================================================================
 

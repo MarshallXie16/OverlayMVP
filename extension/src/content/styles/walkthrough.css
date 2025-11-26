@@ -1,0 +1,399 @@
+/**
+ * Walkthrough Overlay UI Styles
+ * 
+ * EXT-002: Overlay UI Foundation
+ * Loaded via manifest.json (not imported in TypeScript)
+ */
+
+/* ============================================================================
+   OVERLAY CONTAINER
+   ============================================================================ */
+
+.walkthrough-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 999999; /* Very high to appear above most content */
+  pointer-events: none; /* Allow clicks through to target element */
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ============================================================================
+   BACKDROP (Dark overlay with spotlight cutout)
+   ============================================================================ */
+
+.walkthrough-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.walkthrough-spotlight-mask {
+  width: 100%;
+  height: 100%;
+}
+
+/* ============================================================================
+   TOOLTIP (Instruction card)
+   ============================================================================ */
+
+.walkthrough-tooltip {
+  position: absolute;
+  width: 360px;
+  max-width: calc(100vw - 32px);
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25), 0 2px 8px rgba(0, 0, 0, 0.15);
+  pointer-events: auto; /* Restore pointer events for tooltip */
+  animation: slideUp 0.3s ease-out;
+  z-index: 1000000;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Tooltip Header */
+.walkthrough-tooltip-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.walkthrough-progress {
+  font-size: 14px;
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.walkthrough-close-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.walkthrough-close-btn:hover {
+  background-color: #f3f4f6;
+  color: #374151;
+}
+
+/* Tooltip Content */
+.walkthrough-tooltip-content {
+  padding: 16px;
+}
+
+.walkthrough-field-label {
+  font-size: 16px;
+  font-weight: 700;
+  color: #111827;
+  margin: 0 0 8px 0;
+}
+
+.walkthrough-instruction {
+  font-size: 14px;
+  color: #4b5563;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Tooltip Footer */
+.walkthrough-tooltip-footer {
+  display: flex;
+  gap: 8px;
+  padding: 16px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.walkthrough-btn {
+  flex: 1;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.walkthrough-btn-next {
+  background-color: #2563eb;
+  color: white;
+}
+
+.walkthrough-btn-next:hover {
+  background-color: #1d4ed8;
+}
+
+.walkthrough-btn-next:disabled {
+  background-color: #93c5fd;
+  cursor: not-allowed;
+}
+
+.walkthrough-btn-back {
+  background-color: #f3f4f6;
+  color: #374151;
+}
+
+.walkthrough-btn-back:hover {
+  background-color: #e5e7eb;
+}
+
+.walkthrough-btn-back:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.walkthrough-btn-exit {
+  background-color: transparent;
+  color: #6b7280;
+  border: 1px solid #d1d5db;
+  padding: 10px 12px;
+  flex: 0 0 auto;
+}
+
+.walkthrough-btn-exit:hover {
+  background-color: #f9fafb;
+  color: #374151;
+}
+
+/* ============================================================================
+   HIGHLIGHT BORDER (Optional animated border around target)
+   ============================================================================ */
+
+.walkthrough-highlight-border {
+  position: absolute;
+  border: 3px solid #2563eb;
+  border-radius: 8px;
+  pointer-events: none;
+  animation: pulse 2s ease-in-out infinite;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.2);
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.02);
+  }
+}
+
+/* ============================================================================
+   EXIT CONFIRMATION MODAL
+   ============================================================================ */
+
+.walkthrough-exit-modal {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 400px;
+  max-width: calc(100vw - 32px);
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  pointer-events: auto;
+  z-index: 1000001;
+  animation: scaleIn 0.2s ease-out;
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+.walkthrough-exit-modal-header {
+  padding: 20px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.walkthrough-exit-modal-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #111827;
+  margin: 0;
+}
+
+.walkthrough-exit-modal-content {
+  padding: 20px;
+}
+
+.walkthrough-exit-modal-text {
+  font-size: 14px;
+  color: #4b5563;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.walkthrough-exit-modal-footer {
+  display: flex;
+  gap: 8px;
+  padding: 20px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.walkthrough-exit-modal-btn-cancel {
+  flex: 1;
+  padding: 10px 16px;
+  background-color: #f3f4f6;
+  color: #374151;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.walkthrough-exit-modal-btn-cancel:hover {
+  background-color: #e5e7eb;
+}
+
+.walkthrough-exit-modal-btn-confirm {
+  flex: 1;
+  padding: 10px 16px;
+  background-color: #dc2626;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.walkthrough-exit-modal-btn-confirm:hover {
+  background-color: #b91c1c;
+}
+
+/* ============================================================================
+   ERROR STATE
+   ============================================================================ */
+
+.walkthrough-error {
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+}
+
+.walkthrough-error .walkthrough-tooltip-content {
+  color: #991b1b;
+}
+
+.walkthrough-error-icon {
+  display: inline-block;
+  margin-right: 8px;
+  font-size: 20px;
+}
+
+/* ============================================================================
+   RESPONSIVE STYLES
+   ============================================================================ */
+
+@media (max-width: 480px) {
+  .walkthrough-tooltip {
+    width: calc(100vw - 32px);
+    bottom: 16px;
+    left: 16px !important;
+    top: auto !important;
+  }
+
+  .walkthrough-tooltip-footer {
+    flex-direction: column;
+  }
+
+  .walkthrough-btn {
+    width: 100%;
+  }
+}
+
+/**
+ * Walkthrough Overlay Styles
+ * EXT-002: Overlay UI Foundation
+ * EXT-005: Error feedback UI
+ */
+
+/* =============================================================================
+   Utility Classes
+   ============================================================================= */
+
+.hidden {
+  display: none !important;
+}
+
+/* =============================================================================
+   Overlay Container
+   ============================================================================= */
+
+.walkthrough-overlay:focus-visible {
+  outline: none;
+}
+
+.walkthrough-btn:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .walkthrough-tooltip {
+    border: 2px solid #000;
+  }
+
+  .walkthrough-btn {
+    border: 2px solid currentColor;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .walkthrough-overlay,
+  .walkthrough-tooltip,
+  .walkthrough-exit-modal {
+    animation: none;
+  }
+
+  .walkthrough-highlight-border {
+    animation: none;
+  }
+}

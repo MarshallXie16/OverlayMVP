@@ -11,6 +11,29 @@ Building a Chrome Extension + Web Dashboard + API server for recording, managing
 
 ## Recent Work Summary
 
+### Sprint 3: Walkthrough Mode Foundation (2025-11-24)
+**Objective:** Implement foundation for walkthrough mode - health indicators, start button, messaging infrastructure, and element finding.
+
+**What We Built:**
+- Health status calculation and visual indicators (✓ Healthy, ⚠️ Needs Review, ❌ Broken)
+- Workflow health sorting (broken workflows appear first)
+- Health log execution endpoint with exponential moving average for success_rate
+- "Start Walkthrough" button with extension detection
+- Dashboard-to-extension communication bridge
+- Background orchestrator for walkthrough messaging
+- WalkthroughState management in content script
+- Element finder with cascading selector fallback (primary → CSS → XPath → data-testid)
+- MutationObserver-based waiting for dynamic content
+- Comprehensive unit tests for health calculation and element finding
+
+**Impact:**
+- Users can now discover workflow health at a glance
+- "Start Walkthrough" is one-click (no URL typing needed)
+- Element finder provides robustness for UI changes (MVP for auto-healing)
+- Health metrics automatically track workflow reliability
+
+**Status:** ✅ 5/5 tickets complete - Foundation ready for overlay UI (next session)
+
 ### Sprint 2: AI-Powered Workflow Labeling (2024-11-23)
 **Objective:** Implement complete AI labeling pipeline with Claude Vision API and admin review/edit interface.
 
@@ -98,6 +121,62 @@ Building a Chrome Extension + Web Dashboard + API server for recording, managing
 **Symptom:** All steps processed with no screenshots, $0.00 AI cost, fallback labels.  
 **Lesson:** Let client control async workflow timing when it has critical dependencies.  
 **Solution:** Removed immediate Celery trigger, added explicit POST `/api/workflows/{id}/start-processing` that extension calls.
+
+### 10. Reusable Component Pattern (Sprint 3)
+**Context:** Needed health indicators on both Dashboard cards and WorkflowDetail page.  
+**Lesson:** Extract components with variants (size, showLabel) instead of duplicating code.  
+**Implementation:** `HealthBadge` component with small/large sizes, reusable across pages.  
+**Benefit:** DRY principle, easier to maintain and extend.
+
+### 11. Service Layer Separation (Sprint 3)
+**Context:** Health logging has complex business logic (EMA calculation, threshold checks, status updates).  
+**Lesson:** Separate business logic from API routes using service layer.  
+**Implementation:** `health.py` service with `log_workflow_execution()` contains all logic, API route just validates and calls service.  
+**Benefit:** Easier to test, reusable from different contexts (API, CLI, tests).
+
+### 12. Extension Bridge Pattern (Sprint 3)
+**Context:** Dashboard needs to communicate with Chrome extension.  
+**Lesson:** Create utility module for extension communication instead of inline logic.  
+**Implementation:** `extensionBridge.ts` with `isExtensionInstalled()`, `sendMessageToExtension()`, `startWalkthrough()`.  
+**Benefit:** Error handling centralized, reusable across dashboard pages, easier to mock in tests.
+
+### 13. Background as Orchestrator (Sprint 3)
+**Context:** Need to coordinate between dashboard, API, and content script for walkthrough.  
+**Lesson:** Background service worker should orchestrate complex flows, not content scripts.  
+**Rationale:** Content scripts can't easily make authenticated API calls, background has more capabilities.  
+**Pattern:** Dashboard → Background (message) → API (fetch) → Background → Content Script (message)  
+**Benefit:** Clean separation of concerns, easier error handling.
+
+### 14. Delay for Content Script Loading (Sprint 3)
+**Problem:** Sending message immediately after opening tab fails because content script not loaded yet.  
+**Lesson:** Add explicit delay (500ms-1s) after opening tab before sending messages.  
+**Implementation:** `setTimeout(() => { chrome.tabs.sendMessage(...) }, 1000)`  
+**Note:** This is a known Chrome extension pattern, not a hack.
+
+### 15. Selector Fallback for Robustness (Sprint 3)
+**Context:** Need to find elements even if UI changes slightly.  
+**Lesson:** Try multiple selectors in priority order (stable → specific → generic).  
+**Implementation:** Primary (ID) → CSS (path) → XPath → data-testid, skip if not interactable.  
+**Benefit:** Works across UI changes, provides redundancy, prepares for Epic 5 auto-healing.
+
+### 16. MutationObserver for Dynamic Content (Sprint 3)
+**Context:** SPAs and lazy-loaded content may not have elements immediately.  
+**Lesson:** Combine immediate find (fast path) with MutationObserver (dynamic content path).  
+**Implementation:** Try querySelector first, if fails set up observer + polling, timeout after 5s.  
+**Benefit:** Handles both static and dynamic content elegantly, better than polling alone.
+
+### 17. Exponential Moving Average for Metrics (Sprint 3)
+**Context:** Need to track workflow success_rate that balances historical and recent data.  
+**Lesson:** Use EMA with α=0.1 (90% weight on history, 10% on new data).  
+**Formula:** `new_rate = 0.9 * old_rate + 0.1 * (success ? 1.0 : 0.0)`  
+**Benefit:** Smooth metric that responds to trends without being too sensitive to single failures.
+
+### 18. Always Run Builds After Implementation (Sprint 3)
+**Context:** TypeScript errors not caught until user tried to build extension.  
+**Lesson:** Run `npm run build` after implementing features to catch compilation errors immediately.  
+**Pattern:** After each ticket or significant change, run build command for affected packages.  
+**Benefit:** Catches unused variables, type errors, undefined access early before commit.  
+**Note:** Especially important for TypeScript projects with strict type checking.
 
 ### 10. AI SDK Major Version Upgrades
 **Problem:** `'Anthropic' object has no attribute 'messages'` error.  
