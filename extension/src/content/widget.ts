@@ -1,16 +1,25 @@
 /**
  * Recording Widget Module
- * Floating UI widget shown during workflow recording
+ * Floating pill-shaped UI widget shown during workflow recording
  *
  * Features:
  * - Shows recording status with pulsing indicator
- * - Displays step counter in real-time
- * - Stop and Pause buttons
+ * - Displays timer in real-time
+ * - Displays step counter
+ * - Stop and Pause/Resume buttons
  * - Draggable positioning
- * - Non-intrusive design
+ * - Glassmorphism design
  *
  * Note: CSS is loaded via manifest.json content_scripts.css
  */
+
+// SVG Icons (inline to avoid dependencies)
+const ICONS = {
+  gripVertical: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg>`,
+  pause: `<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>`,
+  play: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.14v14l11-7-11-7z"/></svg>`,
+  stop: `<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>`,
+};
 
 interface RecordingWidget {
   show(): void;
@@ -23,62 +32,150 @@ interface RecordingWidget {
 class RecordingWidgetImpl implements RecordingWidget {
   private widget: HTMLElement | null = null;
   private stepCountElement: HTMLElement | null = null;
+  private timerElement: HTMLElement | null = null;
+  private timerLabelElement: HTMLElement | null = null;
+  private pauseBtn: HTMLButtonElement | null = null;
   private stopCallback: (() => void) | null = null;
   private pauseCallback: (() => void) | null = null;
+  private isPaused: boolean = false;
+  private timerInterval: number | null = null;
+  private elapsedSeconds: number = 0;
 
   constructor() {
-    console.log('[Widget] Initializing RecordingWidget');
+    console.log("[Widget] Initializing RecordingWidget");
     this.createWidget();
   }
 
-  private createWidget(): void {
-    console.log('[Widget] Creating widget element');
-    // Create widget container
-    this.widget = document.createElement('div');
-    this.widget.id = 'workflow-recording-widget';
-    console.log('[Widget] Widget element created with ID:', this.widget.id);
+  private formatTime(seconds: number): string {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  }
 
-    // Build widget HTML
+  private startTimer(): void {
+    this.elapsedSeconds = 0;
+    this.updateTimerDisplay();
+    this.timerInterval = window.setInterval(() => {
+      if (!this.isPaused) {
+        this.elapsedSeconds++;
+        this.updateTimerDisplay();
+      }
+    }, 1000);
+  }
+
+  private stopTimer(): void {
+    if (this.timerInterval !== null) {
+      window.clearInterval(this.timerInterval);
+      this.timerInterval = null;
+    }
+    this.elapsedSeconds = 0;
+  }
+
+  private updateTimerDisplay(): void {
+    if (this.timerElement) {
+      this.timerElement.textContent = this.formatTime(this.elapsedSeconds);
+    }
+  }
+
+  private togglePause(): void {
+    this.isPaused = !this.isPaused;
+
+    // Update visual state
+    if (this.widget) {
+      if (this.isPaused) {
+        this.widget.classList.add("paused");
+      } else {
+        this.widget.classList.remove("paused");
+      }
+    }
+
+    // Update timer label
+    if (this.timerLabelElement) {
+      this.timerLabelElement.textContent = this.isPaused ? "Paused" : "Rec";
+    }
+
+    // Update pause/resume button
+    if (this.pauseBtn) {
+      if (this.isPaused) {
+        this.pauseBtn.innerHTML = ICONS.play;
+        this.pauseBtn.className = "icon-btn resume-btn";
+        this.pauseBtn.title = "Resume";
+      } else {
+        this.pauseBtn.innerHTML = ICONS.pause;
+        this.pauseBtn.className = "icon-btn pause-btn";
+        this.pauseBtn.title = "Pause";
+      }
+    }
+  }
+
+  private createWidget(): void {
+    console.log("[Widget] Creating widget element");
+    // Create widget container
+    this.widget = document.createElement("div");
+    this.widget.id = "workflow-recording-widget";
+    console.log("[Widget] Widget element created with ID:", this.widget.id);
+
+    // Build widget HTML with new design
     this.widget.innerHTML = `
       <div class="widget-container">
+        <!-- Drag Handle -->
         <div class="drag-handle" title="Drag to move">
-          <svg viewBox="0 0 24 24">
-            <path d="M9 5h2v2H9V5zm0 6h2v2H9v-2zm0 6h2v2H9v-2zm6-12h2v2h-2V5zm0 6h2v2h-2v-2zm0 6h2v2h-2v-2z"/>
-          </svg>
+          ${ICONS.gripVertical}
         </div>
-        <div class="recording-indicator">
-          <div class="pulse-dot"></div>
-          <span class="recording-text">Recording</span>
-          <span class="step-counter">0 steps</span>
+
+        <!-- Status Section (Recording indicator + Timer) -->
+        <div class="status-section">
+          <div class="recording-indicator">
+            <span class="pulse-ring"></span>
+            <span class="pulse-dot"></span>
+          </div>
+          <div class="timer-display">
+            <span class="timer-label">Rec</span>
+            <span class="timer-value">0:00</span>
+          </div>
         </div>
+
+        <!-- Step Counter -->
+        <div class="step-counter">
+          <span class="step-count">0</span>
+          <span class="step-label">Steps</span>
+        </div>
+
+        <!-- Actions -->
         <div class="widget-actions">
-          <button class="pause-btn" title="Pause recording">
-            Pause
+          <button class="icon-btn pause-btn" title="Pause">
+            ${ICONS.pause}
           </button>
-          <button class="stop-btn" title="Stop recording">
-            Stop
+          <button class="icon-btn stop-btn" title="Finish Recording">
+            ${ICONS.stop}
           </button>
         </div>
       </div>
     `;
 
     // Get references to elements
-    this.stepCountElement = this.widget.querySelector('.step-counter');
+    this.stepCountElement = this.widget.querySelector(".step-count");
+    this.timerElement = this.widget.querySelector(".timer-value");
+    this.timerLabelElement = this.widget.querySelector(".timer-label");
+    this.pauseBtn = this.widget.querySelector(
+      ".pause-btn",
+    ) as HTMLButtonElement;
+    const stopBtn = this.widget.querySelector(".stop-btn");
 
     // Attach event listeners
-    const stopBtn = this.widget.querySelector('.stop-btn');
-    const pauseBtn = this.widget.querySelector('.pause-btn');
-
     if (stopBtn) {
-      stopBtn.addEventListener('click', () => {
+      stopBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
         if (this.stopCallback) {
           this.stopCallback();
         }
       });
     }
 
-    if (pauseBtn) {
-      pauseBtn.addEventListener('click', () => {
+    if (this.pauseBtn) {
+      this.pauseBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.togglePause();
         if (this.pauseCallback) {
           this.pauseCallback();
         }
@@ -87,17 +184,17 @@ class RecordingWidgetImpl implements RecordingWidget {
 
     // Make widget draggable
     this.makeDraggable();
-    
-    console.log('[Widget] Widget creation complete');
+
+    console.log("[Widget] Widget creation complete");
   }
 
   private makeDraggable(): void {
     if (!this.widget) return;
 
-    const handle = this.widget.querySelector('.drag-handle') as HTMLElement;
-    const container = this.widget.querySelector('.widget-container') as HTMLElement;
+    const handle = this.widget.querySelector(".drag-handle") as HTMLElement;
+    const widgetEl = this.widget;
 
-    if (!handle || !container) return;
+    if (!handle) return;
 
     let isDragging = false;
     let currentX = 0;
@@ -105,72 +202,91 @@ class RecordingWidgetImpl implements RecordingWidget {
     let initialX = 0;
     let initialY = 0;
 
-    handle.addEventListener('mousedown', (e: MouseEvent) => {
+    handle.addEventListener("mousedown", (e: MouseEvent) => {
+      e.preventDefault();
       isDragging = true;
       initialX = e.clientX - currentX;
       initialY = e.clientY - currentY;
-      container.style.cursor = 'grabbing';
+      widgetEl.style.cursor = "grabbing";
     });
 
-    document.addEventListener('mousemove', (e: MouseEvent) => {
-      if (!isDragging || !this.widget) return;
+    document.addEventListener("mousemove", (e: MouseEvent) => {
+      if (!isDragging) return;
 
       e.preventDefault();
       currentX = e.clientX - initialX;
       currentY = e.clientY - initialY;
 
       // Update widget position
-      this.widget.style.transform = `translate(${currentX}px, ${currentY}px)`;
+      widgetEl.style.transform = `translate(${currentX}px, ${currentY}px)`;
     });
 
-    document.addEventListener('mouseup', () => {
+    document.addEventListener("mouseup", () => {
       if (isDragging) {
         isDragging = false;
-        container.style.cursor = 'move';
+        widgetEl.style.cursor = "auto";
       }
     });
   }
 
   public show(): void {
-    console.log('[Widget] show() called');
+    console.log("[Widget] show() called");
     if (!this.widget) {
-      console.error('[Widget] Widget element is null, cannot show');
+      console.error("[Widget] Widget element is null, cannot show");
       return;
     }
-    
+
     if (document.body.contains(this.widget)) {
-      console.log('[Widget] Widget already in DOM');
+      console.log("[Widget] Widget already in DOM");
       return;
     }
-    
-    console.log('[Widget] Appending widget to document.body');
+
+    // Reset state
+    this.isPaused = false;
+    this.widget.classList.remove("paused");
+    if (this.timerLabelElement) {
+      this.timerLabelElement.textContent = "Rec";
+    }
+    if (this.pauseBtn) {
+      this.pauseBtn.innerHTML = ICONS.pause;
+      this.pauseBtn.className = "icon-btn pause-btn";
+      this.pauseBtn.title = "Pause";
+    }
+
+    console.log("[Widget] Appending widget to document.body");
     document.body.appendChild(this.widget);
-    console.log('[Widget] 📍 Recording widget shown successfully');
-    
+
+    // Start timer
+    this.startTimer();
+
+    console.log("[Widget] 📍 Recording widget shown successfully");
+
     // Verify widget is visible
-    const widgetElement = document.getElementById('workflow-recording-widget');
+    const widgetElement = document.getElementById("workflow-recording-widget");
     if (widgetElement) {
-      console.log('[Widget] Widget verified in DOM with styles:', {
+      console.log("[Widget] Widget verified in DOM with styles:", {
         display: window.getComputedStyle(widgetElement).display,
         visibility: window.getComputedStyle(widgetElement).visibility,
         opacity: window.getComputedStyle(widgetElement).opacity,
       });
     } else {
-      console.error('[Widget] Widget not found in DOM after appending!');
+      console.error("[Widget] Widget not found in DOM after appending!");
     }
   }
 
   public hide(): void {
+    // Stop timer
+    this.stopTimer();
+
     if (this.widget && document.body.contains(this.widget)) {
       document.body.removeChild(this.widget);
-      console.log('📍 Recording widget hidden');
+      console.log("📍 Recording widget hidden");
     }
   }
 
   public updateStepCount(count: number): void {
     if (this.stepCountElement) {
-      const stepText = count === 1 ? 'step' : 'steps';
-      this.stepCountElement.textContent = `${count} ${stepText}`;
+      this.stepCountElement.textContent = String(count);
     }
   }
 
@@ -191,10 +307,10 @@ let widgetInstance: RecordingWidget | null = null;
  */
 export function getRecordingWidget(): RecordingWidget {
   if (!widgetInstance) {
-    console.log('[Widget] Creating new widget instance');
+    console.log("[Widget] Creating new widget instance");
     widgetInstance = new RecordingWidgetImpl();
   } else {
-    console.log('[Widget] Reusing existing widget instance');
+    console.log("[Widget] Reusing existing widget instance");
   }
   return widgetInstance;
 }
@@ -203,7 +319,7 @@ export function getRecordingWidget(): RecordingWidget {
  * Show the recording widget
  */
 export function showRecordingWidget(): void {
-  console.log('[Widget] showRecordingWidget() called');
+  console.log("[Widget] showRecordingWidget() called");
   const widget = getRecordingWidget();
   widget.show();
 }

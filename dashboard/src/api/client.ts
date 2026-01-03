@@ -9,9 +9,23 @@ import type {
   TokenResponse,
   WorkflowListResponse,
   WorkflowResponse,
-} from './types';
+  TeamMemberResponse,
+  UpdateMemberRoleRequest,
+  UpdateMemberStatusRequest,
+  InviteCreateRequest,
+  InviteResponse,
+  InviteListResponse,
+  InviteVerifyResponse,
+  NotificationListResponse,
+  NotificationResponse,
+  HealthLogListResponse,
+  HealthStatsResponse,
+  SlackSettingsRequest,
+  SlackSettingsResponse,
+  SlackTestResponse,
+} from "./types";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 class ApiClient {
   private baseUrl: string;
@@ -24,11 +38,11 @@ class ApiClient {
    * Get auth token from localStorage
    */
   private getToken(): string | null {
-    const token = localStorage.getItem('auth_token');
+    const token = localStorage.getItem("auth_token");
     if (!token) return null;
 
     // Check token expiration
-    const expiry = localStorage.getItem('auth_token_expiry');
+    const expiry = localStorage.getItem("auth_token_expiry");
     if (expiry && new Date(expiry) <= new Date()) {
       this.clearToken();
       return null;
@@ -40,19 +54,22 @@ class ApiClient {
   /**
    * Store auth token in localStorage
    */
-  private setToken(token: string, expiresIn: number = 7 * 24 * 60 * 60 * 1000): void {
-    localStorage.setItem('auth_token', token);
+  private setToken(
+    token: string,
+    expiresIn: number = 7 * 24 * 60 * 60 * 1000,
+  ): void {
+    localStorage.setItem("auth_token", token);
     const expiry = new Date(Date.now() + expiresIn);
-    localStorage.setItem('auth_token_expiry', expiry.toISOString());
+    localStorage.setItem("auth_token_expiry", expiry.toISOString());
   }
 
   /**
    * Clear auth token from localStorage
    */
   private clearToken(): void {
-    localStorage.removeItem('auth_token');
-    localStorage.removeItem('auth_token_expiry');
-    localStorage.removeItem('user_data');
+    localStorage.removeItem("auth_token");
+    localStorage.removeItem("auth_token_expiry");
+    localStorage.removeItem("user_data");
   }
 
   /**
@@ -60,11 +77,11 @@ class ApiClient {
    */
   private async request<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
     const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     };
 
     // Merge existing headers
@@ -78,7 +95,7 @@ class ApiClient {
     // Add auth token if available
     const token = this.getToken();
     if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
+      headers["Authorization"] = `Bearer ${token}`;
     }
 
     const config: RequestInit = {
@@ -96,17 +113,20 @@ class ApiClient {
 
         // Handle HTTP errors
         if (!response.ok) {
-          let errorMessage = 'An unknown error occurred';
+          let errorMessage = "An unknown error occurred";
 
           try {
             const errorData = await response.json();
 
             // FastAPI HTTPException returns { detail: { code, message } }
-            if (errorData.detail && typeof errorData.detail === 'object') {
-              errorMessage = errorData.detail.message || errorData.detail.code || errorMessage;
+            if (errorData.detail && typeof errorData.detail === "object") {
+              errorMessage =
+                errorData.detail.message ||
+                errorData.detail.code ||
+                errorMessage;
             }
             // Or sometimes just { detail: "error message" }
-            else if (errorData.detail && typeof errorData.detail === 'string') {
+            else if (errorData.detail && typeof errorData.detail === "string") {
               errorMessage = errorData.detail;
             }
             // Fallback to any message field
@@ -138,16 +158,19 @@ class ApiClient {
 
         // Success - check if response has content
         // DELETE requests often return 204 No Content
-        if (response.status === 204 || response.headers.get('content-length') === '0') {
+        if (
+          response.status === 204 ||
+          response.headers.get("content-length") === "0"
+        ) {
           return undefined as T;
         }
-        
+
         // Check if response is JSON
-        const contentType = response.headers.get('content-type');
-        if (contentType && contentType.includes('application/json')) {
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
           return await response.json();
         }
-        
+
         // Non-JSON response (shouldn't happen with our API)
         return undefined as T;
       } catch (error) {
@@ -162,7 +185,7 @@ class ApiClient {
       }
     }
 
-    throw new Error('Maximum retry attempts reached');
+    throw new Error("Maximum retry attempts reached");
   }
 
   /**
@@ -177,25 +200,25 @@ class ApiClient {
   // ============================================================================
 
   async signup(data: SignupRequest): Promise<TokenResponse> {
-    const response = await this.request<TokenResponse>('/api/auth/signup', {
-      method: 'POST',
+    const response = await this.request<TokenResponse>("/api/auth/signup", {
+      method: "POST",
       body: JSON.stringify(data),
     });
 
     this.setToken(response.access_token);
-    localStorage.setItem('user_data', JSON.stringify(response.user));
+    localStorage.setItem("user_data", JSON.stringify(response.user));
 
     return response;
   }
 
   async login(data: LoginRequest): Promise<TokenResponse> {
-    const response = await this.request<TokenResponse>('/api/auth/login', {
-      method: 'POST',
+    const response = await this.request<TokenResponse>("/api/auth/login", {
+      method: "POST",
       body: JSON.stringify(data),
     });
 
     this.setToken(response.access_token);
-    localStorage.setItem('user_data', JSON.stringify(response.user));
+    localStorage.setItem("user_data", JSON.stringify(response.user));
 
     return response;
   }
@@ -204,12 +227,12 @@ class ApiClient {
     this.clearToken();
   }
 
-  async getCurrentUser(): Promise<TokenResponse['user'] | null> {
+  async getCurrentUser(): Promise<TokenResponse["user"] | null> {
     const token = this.getToken();
     if (!token) return null;
 
     // Try to get cached user data first
-    const cachedUser = localStorage.getItem('user_data');
+    const cachedUser = localStorage.getItem("user_data");
     if (cachedUser) {
       try {
         return JSON.parse(cachedUser);
@@ -220,10 +243,10 @@ class ApiClient {
 
     // Fetch from server
     try {
-      const response = await this.request<{ user: TokenResponse['user'] }>(
-        '/api/auth/me'
+      const response = await this.request<{ user: TokenResponse["user"] }>(
+        "/api/auth/me",
       );
-      localStorage.setItem('user_data', JSON.stringify(response.user));
+      localStorage.setItem("user_data", JSON.stringify(response.user));
       return response.user;
     } catch {
       this.clearToken();
@@ -237,10 +260,10 @@ class ApiClient {
 
   async getWorkflows(
     limit: number = 50,
-    offset: number = 0
+    offset: number = 0,
   ): Promise<WorkflowListResponse> {
     return this.request<WorkflowListResponse>(
-      `/api/workflows?limit=${limit}&offset=${offset}`
+      `/api/workflows?limit=${limit}&offset=${offset}`,
     );
   }
 
@@ -250,20 +273,20 @@ class ApiClient {
 
   async deleteWorkflow(id: number): Promise<void> {
     await this.request(`/api/workflows/${id}`, {
-      method: 'DELETE',
+      method: "DELETE",
     });
   }
 
   async updateWorkflow(
     id: number,
-    data: import('./types').UpdateWorkflowRequest
-  ): Promise<import('./types').WorkflowResponse> {
-    return this.request<import('./types').WorkflowResponse>(
+    data: import("./types").UpdateWorkflowRequest,
+  ): Promise<import("./types").WorkflowResponse> {
+    return this.request<import("./types").WorkflowResponse>(
       `/api/workflows/${id}`,
       {
-        method: 'PUT',
+        method: "PUT",
         body: JSON.stringify(data),
-      }
+      },
     );
   }
 
@@ -271,17 +294,226 @@ class ApiClient {
   // STEP ENDPOINTS
   // ============================================================================
 
-  async getStep(id: number): Promise<import('./types').StepResponse> {
-    return this.request<import('./types').StepResponse>(`/api/steps/${id}`);
+  async getStep(id: number): Promise<import("./types").StepResponse> {
+    return this.request<import("./types").StepResponse>(`/api/steps/${id}`);
   }
 
   async updateStep(
     id: number,
-    data: import('./types').UpdateStepRequest
-  ): Promise<import('./types').StepResponse> {
-    return this.request<import('./types').StepResponse>(`/api/steps/${id}`, {
-      method: 'PUT',
+    data: import("./types").UpdateStepRequest,
+  ): Promise<import("./types").StepResponse> {
+    return this.request<import("./types").StepResponse>(`/api/steps/${id}`, {
+      method: "PUT",
       body: JSON.stringify(data),
+    });
+  }
+
+  async deleteStep(id: number): Promise<void> {
+    await this.request<void>(`/api/steps/${id}`, {
+      method: "DELETE",
+    });
+  }
+
+  async reorderSteps(
+    workflowId: number,
+    stepOrder: number[],
+  ): Promise<import("./types").WorkflowResponse> {
+    return this.request<import("./types").WorkflowResponse>(
+      `/api/workflows/${workflowId}/steps/reorder`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ step_order: stepOrder }),
+      },
+    );
+  }
+
+  // ============================================================================
+  // COMPANY ENDPOINTS
+  // ============================================================================
+
+  async getCompany(): Promise<import("./types").CompanyResponse> {
+    return this.request<import("./types").CompanyResponse>("/api/companies/me");
+  }
+
+  async updateCompany(
+    data: import("./types").UpdateCompanyRequest,
+  ): Promise<import("./types").CompanyResponse> {
+    return this.request<import("./types").CompanyResponse>(
+      "/api/companies/me",
+      {
+        method: "PUT",
+        body: JSON.stringify(data),
+      },
+    );
+  }
+
+  async getTeamMembers(): Promise<TeamMemberResponse[]> {
+    return this.request<TeamMemberResponse[]>("/api/companies/me/members");
+  }
+
+  async removeTeamMember(userId: number): Promise<void> {
+    await this.request<void>(`/api/companies/me/members/${userId}`, {
+      method: "DELETE",
+    });
+  }
+
+  async updateMemberRole(
+    userId: number,
+    data: UpdateMemberRoleRequest,
+  ): Promise<TeamMemberResponse> {
+    return this.request<TeamMemberResponse>(
+      `/api/companies/me/members/${userId}/role`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      },
+    );
+  }
+
+  async updateMemberStatus(
+    userId: number,
+    data: UpdateMemberStatusRequest,
+  ): Promise<TeamMemberResponse> {
+    return this.request<TeamMemberResponse>(
+      `/api/companies/me/members/${userId}/status`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      },
+    );
+  }
+
+  /**
+   * Get company name from invite token (public endpoint - no auth required)
+   */
+  async getInviteInfo(
+    token: string,
+  ): Promise<import("./types").InviteInfoResponse> {
+    return this.request<import("./types").InviteInfoResponse>(
+      `/api/companies/invite/${token}`,
+    );
+  }
+
+  // ============================================================================
+  // INVITE ENDPOINTS
+  // ============================================================================
+
+  async listInvites(): Promise<InviteListResponse> {
+    return this.request<InviteListResponse>("/api/invites/me/invites");
+  }
+
+  async createInvite(data: InviteCreateRequest): Promise<InviteResponse> {
+    return this.request<InviteResponse>("/api/invites/me/invites", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async revokeInvite(inviteId: number): Promise<void> {
+    await this.request<void>(`/api/invites/me/invites/${inviteId}`, {
+      method: "DELETE",
+    });
+  }
+
+  async verifyInvite(token: string): Promise<InviteVerifyResponse> {
+    return this.request<InviteVerifyResponse>(`/api/invites/verify/${token}`);
+  }
+
+  // ============================================================================
+  // NOTIFICATION ENDPOINTS
+  // ============================================================================
+
+  async getNotifications(params?: {
+    read?: boolean;
+    type?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<NotificationListResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.read !== undefined)
+      searchParams.set("read", String(params.read));
+    if (params?.type) searchParams.set("type", params.type);
+    if (params?.limit) searchParams.set("limit", String(params.limit));
+    if (params?.offset) searchParams.set("offset", String(params.offset));
+
+    const queryString = searchParams.toString();
+    return this.request<NotificationListResponse>(
+      `/api/notifications${queryString ? `?${queryString}` : ""}`,
+    );
+  }
+
+  async markNotificationRead(id: number): Promise<NotificationResponse> {
+    return this.request<NotificationResponse>(`/api/notifications/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ read: true }),
+    });
+  }
+
+  async markAllNotificationsRead(
+    notificationIds?: number[],
+  ): Promise<{ marked_count: number }> {
+    return this.request<{ marked_count: number }>(
+      "/api/notifications/mark-all-read",
+      {
+        method: "POST",
+        body: JSON.stringify({ notification_ids: notificationIds }),
+      },
+    );
+  }
+
+  async deleteNotification(id: number): Promise<void> {
+    await this.request<void>(`/api/notifications/${id}`, {
+      method: "DELETE",
+    });
+  }
+
+  // ============================================================================
+  // HEALTH DASHBOARD ENDPOINTS
+  // ============================================================================
+
+  async getHealthLogs(params?: {
+    workflow_id?: number;
+    status?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<HealthLogListResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.workflow_id)
+      searchParams.set("workflow_id", String(params.workflow_id));
+    if (params?.status) searchParams.set("status", params.status);
+    if (params?.limit) searchParams.set("limit", String(params.limit));
+    if (params?.offset) searchParams.set("offset", String(params.offset));
+
+    const queryString = searchParams.toString();
+    return this.request<HealthLogListResponse>(
+      `/api/health/logs${queryString ? `?${queryString}` : ""}`,
+    );
+  }
+
+  async getHealthStats(days: number = 7): Promise<HealthStatsResponse> {
+    return this.request<HealthStatsResponse>(`/api/health/stats?days=${days}`);
+  }
+
+  // ============================================================================
+  // SLACK INTEGRATION ENDPOINTS
+  // ============================================================================
+
+  async getSlackSettings(): Promise<SlackSettingsResponse> {
+    return this.request<SlackSettingsResponse>("/api/companies/me/slack");
+  }
+
+  async updateSlackSettings(
+    settings: SlackSettingsRequest,
+  ): Promise<SlackSettingsResponse> {
+    return this.request<SlackSettingsResponse>("/api/companies/me/slack", {
+      method: "PUT",
+      body: JSON.stringify(settings),
+    });
+  }
+
+  async testSlackWebhook(): Promise<SlackTestResponse> {
+    return this.request<SlackTestResponse>("/api/companies/me/slack/test", {
+      method: "POST",
     });
   }
 }

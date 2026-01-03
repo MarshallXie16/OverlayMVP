@@ -26,56 +26,59 @@ Acceptance Criteria:
 **So that** I can start creating workflows for my team  
 
 **Acceptance Criteria:**
-- [ ] Can access signup page at `/signup`
-- [ ] Form requires: email, password, name, company name
-- [ ] Email validation (format check)
-- [ ] Password requirements shown (8+ chars, 1 number)
-- [ ] On submit, creates company and user record in database
-- [ ] Returns JWT token and redirects to dashboard
-- [ ] Invite token generated for company
-- [ ] Error message shown if email already exists
-- [ ] Form has loading state during submission
+- [x] Can access signup page at `/signup`
+- [x] Form requires: email, password, name, company name
+- [x] Email validation (format check)
+- [x] Password requirements shown (8+ chars, 1 number)
+- [x] On submit, creates company and user record in database
+- [x] Returns JWT token and redirects to dashboard
+- [x] Invite token generated for company
+- [x] Error message shown if email already exists
+- [x] Form has loading state during submission
 
 **Priority:** P0 (Must-have for MVP)
+**Status:** ✅ COMPLETE
 
 ---
 
 ### Story 1.2: Team Member Invite
 
-**As an** admin user  
-**I want to** invite team members to my company  
-**So that** they can use workflows I create  
+**As an** admin user
+**I want to** invite team members to my company
+**So that** they can use workflows I create
 
 **Acceptance Criteria:**
-- [ ] Can access Settings → Company page
-- [ ] Invite link displayed with "Copy" button
-- [ ] Clicking copy shows success toast notification
-- [ ] Invite link format: `https://app.com/invite?token={invite_token}`
-- [ ] Pasting link in new browser shows signup form
-- [ ] New user auto-assigned to correct company
-- [ ] New user defaults to "Regular" role
-- [ ] Company admin can see list of all team members
+- [x] Can access Settings → Company page (TeamView exists at /team)
+- [x] Invite link displayed with "Copy" button (UI exists, uses mock token)
+- [x] Clicking copy shows success toast notification
+- [x] Invite link format: `https://app.com/invite/{invite_token}` (InvitePage implemented)
+- [x] Pasting link in new browser shows signup form (E2E tested - working)
+- [x] New user auto-assigned to correct company (backend supports this)
+- [x] New user defaults to "Regular" role (backend supports this)
+- [ ] Company admin can see list of all team members (TeamView uses mock data)
 
 **Priority:** P0 (Must-have for MVP)
+**Status:** ⏳ MOSTLY COMPLETE - Flow works E2E, TeamView needs real API integration
 
 ---
 
 ### Story 1.3: Extension Installation
 
-**As a** user  
-**I want to** install the Chrome extension  
-**So that** I can record and use workflows  
+**As a** user
+**I want to** install the Chrome extension
+**So that** I can record and use workflows
 
 **Acceptance Criteria:**
-- [ ] After signup, modal prompts to install extension
-- [ ] "Install Extension" button opens Chrome Web Store
-- [ ] Can skip installation ("I'll do this later")
-- [ ] Extension appears in Chrome toolbar when installed
-- [ ] Clicking extension icon shows login prompt (if not logged in)
-- [ ] After login, extension shows "Ready to record" state
-- [ ] User can access extension from any web page
+- [x] After signup, modal prompts to install extension
+- [ ] "Install Extension" button opens Chrome Web Store (placeholder for MVP - extension not published yet)
+- [x] Can skip installation ("I'll do this later")
+- [x] Extension appears in Chrome toolbar when installed
+- [x] Clicking extension icon shows login prompt (if not logged in)
+- [x] After login, extension shows "Ready to record" state
+- [x] User can access extension from any web page
 
 **Priority:** P0 (Must-have for MVP)
+**Status:** ✅ MOSTLY COMPLETE - Install modal works, Chrome Web Store link placeholder (extension not published)
 
 ---
 
@@ -88,19 +91,20 @@ Acceptance Criteria:
 **So that** I can capture the steps I perform  
 
 **Acceptance Criteria:**
-- [ ] Dashboard has prominent "Create Workflow" button
-- [ ] Clicking opens modal with form fields:
+- [x] Dashboard has prominent "Create Workflow" button
+- [x] Clicking opens modal with form fields:
   - Workflow name (required)
   - Description (optional)
   - Starting URL (pre-filled with current tab, editable)
-- [ ] "Start Recording" button is disabled if name is empty
-- [ ] Clicking "Start Recording" activates extension
-- [ ] Extension shows floating recording widget
-- [ ] Widget displays: "🔴 Recording... 0 steps"
-- [ ] Widget has "Stop" and "Pause" buttons
-- [ ] User can continue browsing/working normally
+- [x] "Start Recording" button is disabled if name is empty
+- [x] Clicking "Start Recording" activates extension
+- [x] Extension shows floating recording widget
+- [x] Widget displays: "🔴 Recording... 0 steps"
+- [x] Widget has "Stop" and "Pause" buttons
+- [x] User can continue browsing/working normally
 
 **Priority:** P0 (Must-have for MVP)
+**Status:** ✅ COMPLETE
 
 ---
 
@@ -111,20 +115,21 @@ Acceptance Criteria:
 **So that** I don't have to manually document each step  
 
 **Acceptance Criteria:**
-- [ ] Extension captures clicks on buttons, links, inputs
-- [ ] Extension captures text input on blur (not per keystroke)
-- [ ] Extension captures dropdown selections
-- [ ] Extension captures form submissions
-- [ ] Extension captures page navigation
-- [ ] Step counter increments for each captured action
-- [ ] Brief visual feedback on captured element (flash)
-- [ ] Noise filtered out (e.g., clicks on non-interactive elements)
-- [ ] Screenshots captured for each step (debounced 300ms)
-- [ ] Steps buffered locally in extension storage
+- [x] Extension captures clicks on buttons, links, inputs
+- [x] Extension captures text input on blur (not per keystroke)
+- [x] Extension captures dropdown selections
+- [x] Extension captures form submissions
+- [x] Extension captures page navigation
+- [x] Step counter increments for each captured action
+- [x] Brief visual feedback on captured element (flash)
+- [x] Noise filtered out (e.g., clicks on non-interactive elements)
+- [x] Screenshots captured for each step (debounced 300ms)
+- [x] Steps buffered locally in extension storage
 
 **Priority:** P0 (Must-have for MVP)
+**Status:** ✅ COMPLETE
 
-**Technical Note:** Implement "meaningful interaction" filter as specified in technical docs.
+**Technical Note:** Implemented "meaningful interaction" filter with EventDeduplicator (100ms buffering, priority-based selection).
 
 ---
 
@@ -135,25 +140,26 @@ Acceptance Criteria:
 **So that** the workflow is saved without blocking me  
 
 **Acceptance Criteria:**
-- [ ] Clicking "Stop Recording" ends capture immediately
-- [ ] User can navigate away from the page right away
-- [ ] Extension shows brief "Upload started" toast notification
-- [ ] Upload happens asynchronously in the background:
+- [x] Clicking "Stop Recording" ends capture immediately
+- [x] User can navigate away from the page right away
+- [x] Extension shows brief "Upload started" toast notification
+- [x] Upload happens asynchronously in the background:
   - Screenshots uploaded to S3 in batches
   - Workflow data sent to backend API
   - Backend queues AI labeling job
-- [ ] Dashboard shows workflow in "Processing" state
-- [ ] Processing indicator: "⏳ Processing... AI is generating labels"
-- [ ] User can create new workflows while previous one processes
-- [ ] When processing completes, workflow status updates to "Draft"
+- [x] Dashboard shows workflow in "Processing" state
+- [x] Processing indicator: "⏳ Processing... AI is generating labels"
+- [x] User can create new workflows while previous one processes
+- [x] When processing completes, workflow status updates to "Draft"
 - [ ] Notification shown: "Workflow 'X' is ready for review"
 - [ ] On upload error, workflow marked as "Upload Failed" with retry button
-- [ ] Local storage cleared only after successful upload
-- [ ] If upload fails, can retry without re-recording
+- [x] Local storage cleared only after successful upload
+- [x] If upload fails, can retry without re-recording
 
 **Priority:** P0 (Must-have for MVP)
+**Status:** ✅ MOSTLY COMPLETE - Missing error UI and completion notification
 
-**Technical Note:** Use Chrome extension background service worker for async upload. Implement retry logic with exponential backoff.
+**Technical Note:** Implemented with Celery + Redis background jobs and exponential backoff retry.
 
 ---
 
@@ -166,21 +172,22 @@ Acceptance Criteria:
 **So that** I can quickly understand what was captured  
 
 **Acceptance Criteria:**
-- [ ] Review page shows grid of all steps
-- [ ] Each step card displays:
+- [x] Review page shows grid of all steps
+- [x] Each step card displays:
   - Step number
   - Screenshot thumbnail (200x150px)
   - AI-generated field label
   - AI-generated instruction
   - Confidence indicator (✓ high, ⚠️ medium, ❌ low)
   - Action type and value entered
-- [ ] Steps display in order (1, 2, 3...)
-- [ ] Page has loading state while AI processes
-- [ ] Polling or WebSocket updates when AI completes
-- [ ] If AI fails for a step, shows template-based label
-- [ ] Low-confidence steps highlighted for review
+- [x] Steps display in order (1, 2, 3...)
+- [x] Page has loading state while AI processes
+- [x] Polling or WebSocket updates when AI completes
+- [x] If AI fails for a step, shows template-based label
+- [x] Low-confidence steps highlighted for review
 
 **Priority:** P0 (Must-have for MVP)
+**Status:** ✅ COMPLETE
 
 **Backlog Items:**
 - Screenshot with annotation dots directly overlayed (showing where interaction occurred)
@@ -195,19 +202,20 @@ Acceptance Criteria:
 **So that** I can correct mistakes or add context  
 
 **Acceptance Criteria:**
-- [ ] Each step has an "Edit" button
-- [ ] Clicking opens modal with:
+- [x] Each step has an "Edit" button
+- [x] Clicking opens modal with:
   - Full-size screenshot
   - Editable field label (text input, 100 char max)
   - Editable instruction (textarea, 500 char max)
   - Technical details (read-only, for debugging)
-- [ ] Can save changes or cancel
-- [ ] Edited steps marked visually (e.g., "Edited by you")
-- [ ] Changes saved to database immediately
-- [ ] Can edit same step multiple times
-- [ ] Validation: Label and instruction can't be empty
+- [x] Can save changes or cancel
+- [x] Edited steps marked visually (e.g., "Edited by you")
+- [x] Changes saved to database immediately
+- [x] Can edit same step multiple times
+- [x] Validation: Label and instruction can't be empty
 
 **Priority:** P0 (Must-have for MVP)
+**Status:** ✅ COMPLETE
 
 **Backlog Items:**
 - Click on annotation dot on screenshot to open edit modal for that specific interaction
@@ -222,15 +230,16 @@ Acceptance Criteria:
 **So that** the workflow only shows relevant actions  
 
 **Acceptance Criteria:**
-- [ ] Each step has a "Delete" button
+- [x] Each step has a "Delete" button
 - [ ] Clicking shows confirmation modal
 - [ ] Confirmation message: "Delete step X? Remaining steps will be renumbered."
-- [ ] On confirm, step deleted from database
-- [ ] Remaining steps renumbered (3, 4, 5 → 2, 3, 4)
-- [ ] UI updates immediately (no page reload)
+- [x] On confirm, step deleted from database
+- [x] Remaining steps renumbered (3, 4, 5 → 2, 3, 4)
+- [x] UI updates immediately (no page reload)
 - [ ] Cannot delete if only 1 step remains
 
 **Priority:** P1 (Should-have for MVP)
+**Status:** ✅ MOSTLY COMPLETE - Missing confirmation modal and last-step guard
 
 **Backlog Items:**
 - Undo deletion (keep deleted step in memory for current session)
@@ -245,15 +254,16 @@ Acceptance Criteria:
 **So that** my team can start using it  
 
 **Acceptance Criteria:**
-- [ ] Review page has "Save Workflow" button
-- [ ] Button disabled if any step has empty label/instruction
-- [ ] Clicking changes workflow status from "draft" to "active"
-- [ ] Success notification shown
-- [ ] Redirects to dashboard after save
-- [ ] Workflow now visible to all team members
-- [ ] Can edit workflow again later (goes back to review page)
+- [x] Review page has "Save Workflow" button
+- [x] Button disabled if any step has empty label/instruction
+- [x] Clicking changes workflow status from "draft" to "active"
+- [x] Success notification shown
+- [x] Redirects to dashboard after save
+- [x] Workflow now visible to all team members
+- [x] Can edit workflow again later (goes back to review page)
 
 **Priority:** P0 (Must-have for MVP)
+**Status:** ✅ COMPLETE
 
 ---
 
@@ -266,17 +276,18 @@ Acceptance Criteria:
 **So that** I can find the one I need  
 
 **Acceptance Criteria:**
-- [ ] Dashboard shows workflow library
-- [ ] Workflows displayed as cards with:
+- [x] Dashboard shows workflow library
+- [x] Workflows displayed as cards with:
   - Name and description
   - Creator name and avatar
   - Last updated date
   - Step count
   - Health status (✓ Healthy, ⚠️ Needs Review, ❌ Broken)
-- [ ] Clicking card opens detail view
-- [ ] Empty state shown if no workflows exist
+- [x] Clicking card opens detail view
+- [x] Empty state shown if no workflows exist
 
 **Priority:** P0 (Must-have for MVP)
+**Status:** ✅ COMPLETE
 
 **Backlog Items:**
 - Search workflows by name or description (full-text search)
@@ -293,19 +304,20 @@ Acceptance Criteria:
 **So that** I can be guided through the process  
 
 **Acceptance Criteria:**
-- [ ] Workflow detail page has "Start Walkthrough" button
-- [ ] Clicking opens starting URL in current tab
-- [ ] Extension activates automatically
-- [ ] Shows overlay UI with:
+- [x] Workflow detail page has "Start Walkthrough" button
+- [x] Clicking opens starting URL in current tab
+- [x] Extension activates automatically
+- [x] Shows overlay UI with:
   - Progress indicator (Step 1 of 5)
   - Current instruction
   - "Next" button
   - "Exit" button
-- [ ] Spotlight highlights the target element
-- [ ] Rest of page darkened with backdrop
-- [ ] Tooltip positioned near target element
+- [x] Spotlight highlights the target element
+- [x] Rest of page darkened with backdrop
+- [x] Tooltip positioned near target element
 
 **Priority:** P0 (Must-have for MVP)
+**Status:** ✅ COMPLETE
 
 ---
 
@@ -316,20 +328,21 @@ Acceptance Criteria:
 **So that** I can complete it without errors  
 
 **Acceptance Criteria:**
-- [ ] Each step shows:
+- [x] Each step shows:
   - Instruction text (e.g., "Enter invoice number")
   - Field label (e.g., "Invoice Number")
   - Expected action type
-- [ ] Spotlight moves to next element automatically
-- [ ] User performs action (click, type, select)
-- [ ] On correct action, advances to next step
-- [ ] Progress bar updates
-- [ ] Can go back to previous step
-- [ ] Can exit walkthrough anytime (confirmation modal)
-- [ ] Final step shows "✓ Workflow Complete!" message
-- [ ] Success logged to backend
+- [x] Spotlight moves to next element automatically
+- [x] User performs action (click, type, select)
+- [x] On correct action, advances to next step
+- [x] Progress bar updates
+- [x] Can go back to previous step
+- [x] Can exit walkthrough anytime (confirmation modal)
+- [x] Final step shows "✓ Workflow Complete!" message
+- [x] Success logged to backend
 
 **Priority:** P0 (Must-have for MVP)
+**Status:** ✅ COMPLETE
 
 **Backlog Items (UX Improvements):**
 - Auto-scroll to target element if offscreen
@@ -347,14 +360,14 @@ Acceptance Criteria:
 **So that** I can correct it before proceeding  
 
 **Acceptance Criteria:**
-- [ ] If user clicks wrong element, show error:
+- [x] If user clicks wrong element, show error:
   - "That's not quite right. Please click on: [Field Label]"
   - Spotlight stays on correct element
   - Can retry immediately
 - [ ] If user enters wrong format (e.g., date), show warning:
   - "This field expects: MM/DD/YYYY"
   - Can correct without losing progress
-- [ ] If user tries to skip required field:
+- [x] If user tries to skip required field:
   - "Please complete this step before continuing"
   - "Next" button disabled until action taken
 - [ ] Maximum 3 retries per step before offering:
@@ -362,6 +375,7 @@ Acceptance Criteria:
   - "Report issue" (sends error to admin)
 
 **Priority:** P0 (Must-have for MVP)
+**Status:** ⏳ PARTIAL - Basic validation works, format validation and retry limits not implemented
 
 ---
 
@@ -374,10 +388,10 @@ Acceptance Criteria:
 **So that** I'm not blocked by outdated workflows  
 
 **Acceptance Criteria:**
-- [ ] When element not found by primary selectors:
+- [x] When element not found by primary selectors:
   - Try all backup selectors (CSS, XPath, data-testid)
   - If still not found, initiate auto-healing
-- [ ] Auto-healing algorithm:
+- [x] Auto-healing algorithm:
   - Scan DOM for elements matching tag/role
   - Score candidates by: role (30), text (30), position (20), attributes (20)
   - Filter: score >30, same tag/role, limit to top 10
@@ -385,22 +399,20 @@ Acceptance Criteria:
   - AI receives: original screenshot, current screenshot, candidate metadata
   - AI returns: best match ID + confidence score (0-1)
   - Combine scores: 50% deterministic + 50% AI = final score
-- [ ] Based on final score:
+- [x] Based on final score:
   - ≥0.80: Accept, update selectors, continue seamlessly
   - 0.60-0.80: Use for current session, flag as "Needs Review"
   - <0.60: Mark as broken, show error to user, alert admin
-- [ ] Healing event logged to health_logs
-- [ ] User sees seamless experience (no interruption) for successful healing
+- [x] Healing event logged to health_logs
+- [x] User sees seamless experience (no interruption) for successful healing
 
 **Priority:** P0 (Must-have for MVP)
+**Status:** ✅ COMPLETE (Sprint 4)
 
-**Implementation Note:** This is the most complex story. Break it down into sub-tasks:
-1. Implement deterministic scoring algorithm
-2. Implement candidate filtering logic
-3. Integrate AI verification (with cost limits)
-4. Build confidence threshold logic
-5. Implement selector update mechanism
-6. Add comprehensive logging
+**Implementation Note:** Implemented with modular scoring system in `extension/src/content/healing/`:
+- 5 scoring factors with veto power
+- AI validation via POST /api/healing/validate
+- 44 tests for false positive prevention
 
 ---
 
@@ -411,7 +423,7 @@ Acceptance Criteria:
 **So that** I can fix it before more users are affected  
 
 **Acceptance Criteria:**
-- [ ] When workflow fails auto-healing 3 times, admin alert triggered
+- [x] When workflow fails auto-healing 3 times, admin alert triggered (via consecutive_failures in DB)
 - [ ] **MVP: In-app notification:**
   - Red badge on dashboard bell icon
   - Notification panel shows:
@@ -420,11 +432,12 @@ Acceptance Criteria:
     - Link to workflow health page
   - Notification marked as read when clicked
   - Notification persists until admin dismisses it
-- [ ] Workflow status automatically changed to "Broken"
-- [ ] Broken workflows highlighted in dashboard (red border + warning icon)
-- [ ] Health logs record failure details for debugging
+- [x] Workflow status automatically changed to "Broken" (via health service with min sample guard)
+- [x] Broken workflows highlighted in dashboard (red border + warning icon)
+- [x] Health logs record failure details for debugging
 
 **Priority:** P0 (Must-have for MVP)
+**Status:** ⏳ PARTIAL - Backend logging and status works, notification UI not implemented
 
 **Backlog Items:**
 - Email notification to admin:

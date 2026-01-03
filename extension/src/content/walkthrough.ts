@@ -6,10 +6,22 @@
  * EXT-002: Overlay UI Foundation
  */
 
-import type { WalkthroughState, StepResponse } from '@/shared/types';
-import { findElement, scrollToElement } from './utils/elementFinder';
+import type { WalkthroughState, StepResponse } from "@/shared/types";
+import { findElement, scrollToElement } from "./utils/elementFinder";
+import {
+  healElement,
+  type HealingResult,
+  type ElementContext,
+} from "./healing";
 
-console.log('🎯 Walkthrough Mode: Content script loaded');
+console.log("🎯 Walkthrough Mode: Content script loaded");
+
+// SVG Icons (inline to avoid dependencies)
+const ICONS = {
+  x: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>`,
+  chevronLeft: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>`,
+  chevronRight: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>`,
+};
 
 // Global walkthrough state
 let walkthroughState: WalkthroughState | null = null;
@@ -20,6 +32,9 @@ let tooltipElement: HTMLDivElement | null = null;
 let backdropElement: HTMLDivElement | null = null;
 let currentTargetElement: HTMLElement | null = null;
 
+// Flag to track if tooltip event delegation is set up
+let tooltipDelegationSetup = false;
+
 // Action detection state (EXT-004)
 let activeListeners: Array<{
   element: EventTarget;
@@ -29,7 +44,10 @@ let activeListeners: Array<{
 const inputValues = new WeakMap<HTMLElement, string>();
 
 // Flash success effect with cleanup tracking
-const flashPrevStyles = new Map<HTMLElement, { transition: string; boxShadow: string }>();
+const flashPrevStyles = new Map<
+  HTMLElement,
+  { transition: string; boxShadow: string }
+>();
 const flashTimers = new Map<HTMLElement, number>();
 function flashElement(element: HTMLElement): void {
   // Save previous inline styles if not saved yet
@@ -45,8 +63,8 @@ function flashElement(element: HTMLElement): void {
   if (existing) window.clearTimeout(existing);
 
   // Apply flash
-  element.style.transition = 'box-shadow 0.15s ease';
-  element.style.boxShadow = '0 0 0 3px rgba(34,197,94,0.6)';
+  element.style.transition = "box-shadow 0.15s ease";
+  element.style.boxShadow = "0 0 0 3px rgba(34,197,94,0.6)";
 
   const timerId = window.setTimeout(() => {
     const prev = flashPrevStyles.get(element);
@@ -56,8 +74,8 @@ function flashElement(element: HTMLElement): void {
       flashPrevStyles.delete(element);
     } else {
       // Fallback restore
-      element.style.boxShadow = '';
-      element.style.transition = '';
+      element.style.boxShadow = "";
+      element.style.transition = "";
     }
     flashTimers.delete(element);
   }, 250);
@@ -81,21 +99,24 @@ function cleanupFlashEffects(): void {
  * Initialize walkthrough mode with workflow data
  * Called when background sends WALKTHROUGH_DATA message
  */
-async function initializeWalkthrough(payload: {
+export async function initializeWalkthrough(payload: {
   workflowId: number;
   workflowName: string;
   startingUrl: string;
   steps: StepResponse[];
   totalSteps: number;
 }): Promise<void> {
-  console.log(`[Walkthrough] Initializing walkthrough for "${payload.workflowName}"`, {
-    workflowId: payload.workflowId,
-    totalSteps: payload.totalSteps,
-  });
+  console.log(
+    `[Walkthrough] Initializing walkthrough for "${payload.workflowName}"`,
+    {
+      workflowId: payload.workflowId,
+      totalSteps: payload.totalSteps,
+    },
+  );
 
   // Validate payload
   if (!payload.steps || payload.steps.length === 0) {
-    console.error('[Walkthrough] No steps provided');
+    console.error("[Walkthrough] No steps provided");
     return;
   }
 
@@ -107,13 +128,13 @@ async function initializeWalkthrough(payload: {
     steps: payload.steps,
     currentStepIndex: 0,
     totalSteps: payload.totalSteps,
-    status: 'active',
+    status: "active",
     error: null,
     retryAttempts: new Map(), // EXT-005: Track retry attempts per step
     startTime: Date.now(), // EXT-006: Track execution time
   };
 
-  console.log('[Walkthrough] State initialized:', walkthroughState);
+  console.log("[Walkthrough] State initialized:", walkthroughState);
 
   // Create overlay UI
   createOverlay();
@@ -121,8 +142,10 @@ async function initializeWalkthrough(payload: {
   // Show first step
   await showCurrentStep();
 
-  walkthroughState.status = 'active';
-  console.log(`[Walkthrough] Ready! First step: ${walkthroughState.steps[0]?.instruction || 'No instruction'}`);
+  walkthroughState.status = "active";
+  console.log(
+    `[Walkthrough] Ready! First step: ${walkthroughState.steps[0]?.instruction || "No instruction"}`,
+  );
 }
 
 /**
@@ -136,7 +159,7 @@ export function getWalkthroughState(): WalkthroughState | null {
  * Check if walkthrough is active
  */
 export function isWalkthroughActive(): boolean {
-  return walkthroughState !== null && walkthroughState.status === 'active';
+  return walkthroughState !== null && walkthroughState.status === "active";
 }
 
 /**
@@ -147,13 +170,15 @@ export function advanceStep(): boolean {
 
   if (walkthroughState.currentStepIndex < walkthroughState.totalSteps - 1) {
     walkthroughState.currentStepIndex++;
-    console.log(`[Walkthrough] Advanced to step ${walkthroughState.currentStepIndex + 1}/${walkthroughState.totalSteps}`);
+    console.log(
+      `[Walkthrough] Advanced to step ${walkthroughState.currentStepIndex + 1}/${walkthroughState.totalSteps}`,
+    );
     return true;
   }
 
   // Reached end of workflow
-  console.log('[Walkthrough] Workflow completed!');
-  walkthroughState.status = 'completed';
+  console.log("[Walkthrough] Workflow completed!");
+  walkthroughState.status = "completed";
   return false;
 }
 
@@ -165,7 +190,9 @@ export function previousStep(): boolean {
 
   if (walkthroughState.currentStepIndex > 0) {
     walkthroughState.currentStepIndex--;
-    console.log(`[Walkthrough] Went back to step ${walkthroughState.currentStepIndex + 1}/${walkthroughState.totalSteps}`);
+    console.log(
+      `[Walkthrough] Went back to step ${walkthroughState.currentStepIndex + 1}/${walkthroughState.totalSteps}`,
+    );
     return true;
   }
 
@@ -179,65 +206,74 @@ export function previousStep(): boolean {
 function createOverlay(): void {
   // Check if overlay already exists
   if (overlayContainer) {
-    console.warn('[Walkthrough] Overlay already exists');
+    console.warn("[Walkthrough] Overlay already exists");
     return;
   }
 
   // Create main overlay container
-  overlayContainer = document.createElement('div');
-  overlayContainer.id = 'walkthrough-overlay';
-  overlayContainer.className = 'walkthrough-overlay';
-  overlayContainer.setAttribute('role', 'dialog');
-  overlayContainer.setAttribute('aria-label', 'Walkthrough guide');
+  overlayContainer = document.createElement("div");
+  overlayContainer.id = "walkthrough-overlay";
+  overlayContainer.className = "walkthrough-overlay";
+  overlayContainer.setAttribute("role", "dialog");
+  overlayContainer.setAttribute("aria-label", "Walkthrough guide");
 
   // Create backdrop with SVG spotlight mask
-  backdropElement = document.createElement('div');
-  backdropElement.className = 'walkthrough-backdrop';
-  
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.classList.add('walkthrough-spotlight-mask');
-  svg.setAttribute('width', '100%');
-  svg.setAttribute('height', '100%');
-  
+  backdropElement = document.createElement("div");
+  backdropElement.className = "walkthrough-backdrop";
+
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.classList.add("walkthrough-spotlight-mask");
+  svg.setAttribute("width", "100%");
+  svg.setAttribute("height", "100%");
+
   // Create mask definition
-  const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
-  const mask = document.createElementNS('http://www.w3.org/2000/svg', 'mask');
-  mask.id = 'spotlight-mask';
-  
+  const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+  const mask = document.createElementNS("http://www.w3.org/2000/svg", "mask");
+  mask.id = "spotlight-mask";
+
   // White rectangle (shows backdrop)
-  const whiteRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-  whiteRect.setAttribute('fill', 'white');
-  whiteRect.setAttribute('width', '100%');
-  whiteRect.setAttribute('height', '100%');
-  
+  const whiteRect = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "rect",
+  );
+  whiteRect.setAttribute("fill", "white");
+  whiteRect.setAttribute("width", "100%");
+  whiteRect.setAttribute("height", "100%");
+
   // Black rectangle (cutout for spotlight - will be positioned dynamically)
-  const spotlightRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-  spotlightRect.id = 'spotlight-cutout';
-  spotlightRect.setAttribute('fill', 'black');
-  spotlightRect.setAttribute('x', '0');
-  spotlightRect.setAttribute('y', '0');
-  spotlightRect.setAttribute('width', '0');
-  spotlightRect.setAttribute('height', '0');
-  spotlightRect.setAttribute('rx', '8');
-  
+  const spotlightRect = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "rect",
+  );
+  spotlightRect.id = "spotlight-cutout";
+  spotlightRect.setAttribute("fill", "black");
+  spotlightRect.setAttribute("x", "0");
+  spotlightRect.setAttribute("y", "0");
+  spotlightRect.setAttribute("width", "0");
+  spotlightRect.setAttribute("height", "0");
+  spotlightRect.setAttribute("rx", "8");
+
   mask.appendChild(whiteRect);
   mask.appendChild(spotlightRect);
   defs.appendChild(mask);
   svg.appendChild(defs);
-  
+
   // Create backdrop rectangle with mask applied
-  const backdropRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-  backdropRect.setAttribute('fill', 'rgba(0, 0, 0, 0.7)');
-  backdropRect.setAttribute('width', '100%');
-  backdropRect.setAttribute('height', '100%');
-  backdropRect.setAttribute('mask', 'url(#spotlight-mask)');
-  
+  const backdropRect = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "rect",
+  );
+  backdropRect.setAttribute("fill", "rgba(0, 0, 0, 0.7)");
+  backdropRect.setAttribute("width", "100%");
+  backdropRect.setAttribute("height", "100%");
+  backdropRect.setAttribute("mask", "url(#spotlight-mask)");
+
   svg.appendChild(backdropRect);
   backdropElement.appendChild(svg);
 
   // Create tooltip
-  tooltipElement = document.createElement('div');
-  tooltipElement.className = 'walkthrough-tooltip';
+  tooltipElement = document.createElement("div");
+  tooltipElement.className = "walkthrough-tooltip";
 
   // Tooltip will be populated in showCurrentStep()
 
@@ -248,7 +284,53 @@ function createOverlay(): void {
   // Append overlay to body
   document.body.appendChild(overlayContainer);
 
-  console.log('[Walkthrough] Overlay created');
+  // Set up event delegation for tooltip buttons (only once)
+  setupTooltipEventDelegation();
+
+  console.log("[Walkthrough] Overlay created");
+}
+
+/**
+ * Set up event delegation for tooltip button clicks
+ * This prevents listener accumulation when tooltip content is updated
+ */
+function setupTooltipEventDelegation(): void {
+  if (!tooltipElement || tooltipDelegationSetup) return;
+
+  tooltipElement.addEventListener("click", (e) => {
+    const target = e.target as HTMLElement;
+    // Find the closest button element (handles clicks on SVG icons inside buttons)
+    const button = target.closest("button");
+    if (!button) return;
+
+    const buttonId = button.id;
+
+    switch (buttonId) {
+      case "walkthrough-btn-next":
+        handleNext();
+        break;
+      case "walkthrough-btn-back":
+        handleBack();
+        break;
+      case "walkthrough-btn-skip":
+        handleSkipStep();
+        break;
+      case "walkthrough-btn-exit":
+      case "walkthrough-close-btn":
+        handleExit();
+        break;
+      case "walkthrough-btn-done":
+        // Clean up and dismiss the overlay
+        removeActionListeners();
+        cleanupFlashEffects();
+        destroyOverlay();
+        walkthroughState = null;
+        break;
+    }
+  });
+
+  tooltipDelegationSetup = true;
+  console.log("[Walkthrough] Event delegation set up for tooltip buttons");
 }
 
 /**
@@ -261,13 +343,16 @@ function destroyOverlay(): void {
     tooltipElement = null;
     backdropElement = null;
     currentTargetElement = null;
-    console.log('[Walkthrough] Overlay destroyed');
+    tooltipDelegationSetup = false; // Reset for next walkthrough
+    console.log("[Walkthrough] Overlay destroyed");
   }
 }
 
 // Wait for layout to settle after scroll using two rAFs
 function waitForLayout(): Promise<void> {
-  return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+  return new Promise((resolve) =>
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+  );
 }
 
 /**
@@ -276,58 +361,455 @@ function waitForLayout(): Promise<void> {
  */
 async function showCurrentStep(): Promise<void> {
   if (!walkthroughState || !overlayContainer || !tooltipElement) {
-    console.error('[Walkthrough] Cannot show step: missing state or overlay');
+    console.error("[Walkthrough] Cannot show step: missing state or overlay");
     return;
   }
 
   const currentStep = walkthroughState.steps[walkthroughState.currentStepIndex];
-  
+
   if (!currentStep) {
-    console.error('[Walkthrough] Current step is undefined');
+    console.error("[Walkthrough] Current step is undefined");
     return;
   }
 
   try {
-    // Find target element
-    console.log(`[Walkthrough] Finding element for step ${walkthroughState.currentStepIndex + 1}`);
+    // Find target element using original selectors
+    console.log(
+      `[Walkthrough] Finding element for step ${walkthroughState.currentStepIndex + 1}`,
+    );
     const result = await findElement(currentStep);
     currentTargetElement = result.element;
 
-    // Scroll into view if needed
-    scrollToElement(currentTargetElement);
+    // Original selector worked - continue normally
+    await proceedWithElement(currentStep, currentTargetElement);
+  } catch (_findError) {
+    // Original selectors failed - attempt auto-healing
+    console.log(
+      "[Walkthrough] Original selectors failed, attempting auto-healing...",
+    );
 
-    // Wait for layout to settle (faster than fixed timeout)
-    await waitForLayout();
+    try {
+      const healingResult = await healElement(currentStep, {
+        aiEnabled: true, // Phase 4: Enable AI validation
+        onAIValidate: async (original, candidate, score) => {
+          return await validateHealingWithAI(
+            original,
+            candidate,
+            score,
+            currentStep,
+          );
+        },
+        onUserPrompt: async (element, score) => {
+          return await showHealingConfirmation(element, currentStep, score);
+        },
+      });
 
-    // Position spotlight around element
-    updateSpotlight(currentTargetElement);
+      if (healingResult.success && healingResult.element) {
+        // Healing succeeded
+        currentTargetElement = healingResult.element;
 
-    // Update tooltip content and position
-    updateTooltip(currentStep, currentTargetElement);
+        // Show appropriate indicator based on confidence
+        if (healingResult.confidence >= 0.85) {
+          // High confidence - seamless, no indication to user
+          console.log(
+            `[Walkthrough] Auto-healed with ${(healingResult.confidence * 100).toFixed(1)}% confidence`,
+          );
+        } else if (healingResult.confidence >= 0.7) {
+          // Medium-high confidence - show subtle badge
+          showHealedIndicator(healingResult.element);
+          console.log(
+            `[Walkthrough] Healed with badge at ${(healingResult.confidence * 100).toFixed(1)}% confidence`,
+          );
+        }
+        // For 60-70% range, user already confirmed via onUserPrompt
 
-    // Attach action detection listeners (EXT-004)
-    attachActionListeners(currentStep, currentTargetElement);
+        await proceedWithElement(currentStep, currentTargetElement);
 
-  } catch (error) {
-    console.error('[Walkthrough] Failed to find element:', error);
-    showElementNotFoundError(currentStep);
+        // Log healing for backend (Phase 5)
+        logHealingAttempt(healingResult, currentStep);
+      } else {
+        // Healing failed
+        console.error(
+          "[Walkthrough] Auto-healing failed:",
+          healingResult.resolution,
+        );
+        showElementNotFoundError(currentStep);
+
+        // Log failure for admin alerts (Phase 5)
+        logHealingAttempt(healingResult, currentStep);
+      }
+    } catch (healError) {
+      console.error("[Walkthrough] Healing system error:", healError);
+      showElementNotFoundError(currentStep);
+    }
   }
+}
+
+/**
+ * Proceed with element display after finding or healing
+ */
+async function proceedWithElement(
+  step: StepResponse,
+  element: HTMLElement,
+): Promise<void> {
+  // Scroll into view if needed
+  scrollToElement(element);
+
+  // Wait for layout to settle
+  await waitForLayout();
+
+  // Position spotlight around element
+  updateSpotlight(element);
+
+  // Update tooltip content and position
+  updateTooltip(step, element);
+
+  // Attach action detection listeners (EXT-004)
+  attachActionListeners(step, element);
+}
+
+/**
+ * Show a subtle indicator that the element was auto-healed
+ */
+function showHealedIndicator(element: HTMLElement): void {
+  // Add a subtle pulsing border to indicate healing
+  const originalOutline = element.style.outline;
+  const originalTransition = element.style.transition;
+
+  element.style.transition = "outline 0.3s ease-in-out";
+  element.style.outline = "2px dashed #14b8a6"; // Accent color - teal
+
+  // Remove indicator after 3 seconds
+  setTimeout(() => {
+    element.style.outline = originalOutline;
+    element.style.transition = originalTransition;
+  }, 3000);
+}
+
+/**
+ * Show healing confirmation dialog for medium confidence matches
+ */
+async function showHealingConfirmation(
+  element: HTMLElement,
+  step: StepResponse,
+  confidence: number,
+): Promise<{ confirmed: boolean }> {
+  return new Promise((resolve) => {
+    // Highlight the candidate element
+    const originalOutline = element.style.outline;
+    const originalBoxShadow = element.style.boxShadow;
+    element.style.outline = "3px solid #f59e0b"; // Warning amber
+    element.style.boxShadow = "0 0 20px rgba(245, 158, 11, 0.5)";
+
+    // Create confirmation overlay
+    const confirmOverlay = document.createElement("div");
+    confirmOverlay.id = "healing-confirm-overlay";
+    confirmOverlay.innerHTML = `
+      <div class="healing-confirm-dialog">
+        <div class="healing-confirm-header">
+          <span class="healing-confirm-icon">🔄</span>
+          <span class="healing-confirm-title">Element Changed</span>
+        </div>
+        <div class="healing-confirm-content">
+          <p>The page has changed. Is this the correct element for:</p>
+          <p class="healing-confirm-label">"${step.field_label || "this step"}"</p>
+          <p class="healing-confirm-confidence">Confidence: ${(confidence * 100).toFixed(0)}%</p>
+        </div>
+        <div class="healing-confirm-actions">
+          <button class="healing-confirm-btn healing-confirm-yes">Yes, continue</button>
+          <button class="healing-confirm-btn healing-confirm-no">No, skip step</button>
+        </div>
+      </div>
+    `;
+
+    // Add styles
+    const style = document.createElement("style");
+    style.textContent = `
+      #healing-confirm-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2147483647;
+      }
+      .healing-confirm-dialog {
+        background: white;
+        border-radius: 16px;
+        padding: 24px;
+        max-width: 400px;
+        box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+        animation: slideUp 0.3s ease-out;
+      }
+      @keyframes slideUp {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .healing-confirm-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 16px;
+      }
+      .healing-confirm-icon {
+        font-size: 24px;
+      }
+      .healing-confirm-title {
+        font-size: 18px;
+        font-weight: 600;
+        color: #171717;
+      }
+      .healing-confirm-content {
+        color: #525252;
+        margin-bottom: 20px;
+      }
+      .healing-confirm-content p {
+        margin: 8px 0;
+      }
+      .healing-confirm-label {
+        font-weight: 600;
+        color: #171717;
+        background: #f5f5f5;
+        padding: 8px 12px;
+        border-radius: 8px;
+      }
+      .healing-confirm-confidence {
+        font-size: 14px;
+        color: #737373;
+      }
+      .healing-confirm-actions {
+        display: flex;
+        gap: 12px;
+      }
+      .healing-confirm-btn {
+        flex: 1;
+        padding: 12px 16px;
+        border-radius: 10px;
+        font-weight: 500;
+        cursor: pointer;
+        border: none;
+        transition: all 0.2s;
+      }
+      .healing-confirm-yes {
+        background: #14b8a6;
+        color: white;
+      }
+      .healing-confirm-yes:hover {
+        background: #0d9488;
+      }
+      .healing-confirm-no {
+        background: #f5f5f5;
+        color: #525252;
+      }
+      .healing-confirm-no:hover {
+        background: #e5e5e5;
+      }
+    `;
+
+    document.head.appendChild(style);
+    document.body.appendChild(confirmOverlay);
+
+    // Handle button clicks
+    const yesBtn = confirmOverlay.querySelector(".healing-confirm-yes");
+    const noBtn = confirmOverlay.querySelector(".healing-confirm-no");
+
+    const cleanup = () => {
+      element.style.outline = originalOutline;
+      element.style.boxShadow = originalBoxShadow;
+      confirmOverlay.remove();
+      style.remove();
+    };
+
+    yesBtn?.addEventListener("click", () => {
+      cleanup();
+      resolve({ confirmed: true });
+    });
+
+    noBtn?.addEventListener("click", () => {
+      cleanup();
+      resolve({ confirmed: false });
+    });
+
+    // Auto-timeout after 30 seconds
+    setTimeout(() => {
+      cleanup();
+      resolve({ confirmed: false });
+    }, 30000);
+  });
+}
+
+/**
+ * Log healing attempt for backend tracking (Phase 5: Health logging)
+ */
+function logHealingAttempt(result: HealingResult, step: StepResponse): void {
+  // Send to background script for backend logging
+  chrome.runtime
+    .sendMessage({
+      type: "LOG_HEALING_ATTEMPT",
+      payload: {
+        stepId: step.id,
+        workflowId: step.workflow_id,
+        success: result.success,
+        confidence: result.confidence,
+        resolution: result.resolution,
+        pageUrl: window.location.href,
+        healingLog: result.healingLog,
+      },
+    })
+    .catch((error) => {
+      console.warn("[Walkthrough] Failed to log healing attempt:", error);
+    });
+}
+
+/**
+ * Call AI validation via background script
+ * Returns match result from backend AI service
+ */
+async function validateHealingWithAI(
+  original: ElementContext,
+  candidate: ElementContext,
+  score: number,
+  step: StepResponse,
+): Promise<{ isMatch: boolean; confidence: number }> {
+  return new Promise((resolve, reject) => {
+    // Build the validation request
+    const request = {
+      workflow_id: step.workflow_id,
+      step_id: step.id,
+      original_context: {
+        tag_name: original.tagName,
+        text: original.text || null,
+        role: original.role || null,
+        type: original.type || null,
+        id: original.selectors?.primary?.match(/#([^.[\s]+)/)?.[1] || null,
+        name: original.name || null,
+        classes: original.classes || [],
+        data_testid: original.selectors?.dataTestId || null,
+        label_text: original.fieldLabel || null,
+        placeholder: null,
+        aria_label: null,
+        x: original.boundingBox?.x || 0,
+        y: original.boundingBox?.y || 0,
+        width: original.boundingBox?.width || 0,
+        height: original.boundingBox?.height || 0,
+        visual_region: original.visualRegion || "unknown",
+        form_context: original.formContext
+          ? {
+              form_id: original.formContext.formId || null,
+              form_action: original.formContext.formAction || null,
+              form_name: original.formContext.formName || null,
+              form_classes: original.formContext.formClasses || [],
+              field_index: original.formContext.fieldIndex || 0,
+              total_fields: original.formContext.totalFields || 0,
+            }
+          : null,
+        nearby_landmarks: original.nearbyLandmarks
+          ? {
+              closest_heading: original.nearbyLandmarks.closestHeading,
+              closest_label: original.nearbyLandmarks.closestLabel,
+              sibling_texts: original.nearbyLandmarks.siblingTexts || [],
+              container_text: original.nearbyLandmarks.containerText || null,
+            }
+          : null,
+      },
+      candidate_context: {
+        tag_name: candidate.tagName,
+        text: candidate.text || null,
+        role: candidate.role || null,
+        type: candidate.type || null,
+        id: candidate.selectors?.primary?.match(/#([^.[\s]+)/)?.[1] || null,
+        name: candidate.name || null,
+        classes: candidate.classes || [],
+        data_testid: candidate.selectors?.dataTestId || null,
+        label_text: candidate.fieldLabel || null,
+        placeholder: null,
+        aria_label: null,
+        x: candidate.boundingBox?.x || 0,
+        y: candidate.boundingBox?.y || 0,
+        width: candidate.boundingBox?.width || 0,
+        height: candidate.boundingBox?.height || 0,
+        visual_region: candidate.visualRegion || "unknown",
+        form_context: candidate.formContext
+          ? {
+              form_id: candidate.formContext.formId || null,
+              form_action: candidate.formContext.formAction || null,
+              form_name: candidate.formContext.formName || null,
+              form_classes: candidate.formContext.formClasses || [],
+              field_index: candidate.formContext.fieldIndex || 0,
+              total_fields: candidate.formContext.totalFields || 0,
+            }
+          : null,
+        nearby_landmarks: candidate.nearbyLandmarks
+          ? {
+              closest_heading: candidate.nearbyLandmarks.closestHeading,
+              closest_label: candidate.nearbyLandmarks.closestLabel,
+              sibling_texts: candidate.nearbyLandmarks.siblingTexts || [],
+              container_text: candidate.nearbyLandmarks.containerText || null,
+            }
+          : null,
+      },
+      deterministic_score: score,
+      factor_scores: {},
+      original_screenshot: null, // Could add screenshot URL if available
+      current_screenshot: null,
+      page_url: window.location.href,
+      original_url: step.page_context?.url || window.location.href,
+      field_label: step.field_label || null,
+    };
+
+    chrome.runtime.sendMessage(
+      { type: "VALIDATE_HEALING", payload: request },
+      (response) => {
+        if (chrome.runtime.lastError) {
+          console.warn(
+            "[Walkthrough] AI validation failed:",
+            chrome.runtime.lastError.message,
+          );
+          reject(new Error(chrome.runtime.lastError.message));
+          return;
+        }
+
+        if (response?.payload?.success && response?.payload?.result) {
+          const result = response.payload.result;
+          console.log("[Walkthrough] AI validation result:", {
+            isMatch: result.is_match,
+            confidence: result.ai_confidence,
+            recommendation: result.recommendation,
+          });
+          resolve({
+            isMatch: result.is_match,
+            confidence: result.ai_confidence,
+          });
+        } else {
+          console.warn(
+            "[Walkthrough] AI validation returned error:",
+            response?.payload?.error,
+          );
+          reject(new Error(response?.payload?.error || "AI validation failed"));
+        }
+      },
+    );
+  });
 }
 
 /**
  * Update spotlight SVG mask to highlight target element
  */
 function updateSpotlight(targetElement: HTMLElement): void {
-  const spotlightRect = document.getElementById('spotlight-cutout');
+  const spotlightRect = document.getElementById("spotlight-cutout");
   if (!spotlightRect) return;
 
   const rect = targetElement.getBoundingClientRect();
   const padding = 8; // Breathing room around element
 
-  spotlightRect.setAttribute('x', String(rect.left - padding));
-  spotlightRect.setAttribute('y', String(rect.top - padding));
-  spotlightRect.setAttribute('width', String(rect.width + padding * 2));
-  spotlightRect.setAttribute('height', String(rect.height + padding * 2));
+  spotlightRect.setAttribute("x", String(rect.left - padding));
+  spotlightRect.setAttribute("y", String(rect.top - padding));
+  spotlightRect.setAttribute("width", String(rect.width + padding * 2));
+  spotlightRect.setAttribute("height", String(rect.height + padding * 2));
 }
 
 /**
@@ -336,47 +818,76 @@ function updateSpotlight(targetElement: HTMLElement): void {
 function updateTooltip(step: StepResponse, targetElement: HTMLElement): void {
   if (!tooltipElement || !walkthroughState) return;
 
-  // Update content
+  const currentStepNum = walkthroughState.currentStepIndex + 1;
+  const totalSteps = walkthroughState.totalSteps;
+  const isLastStep = currentStepNum === totalSteps;
+  const isFirstStep = currentStepNum === 1;
+  const progressPercent = (currentStepNum / totalSteps) * 100;
+
+  // Update content with new design
   tooltipElement.innerHTML = `
+    <!-- Header -->
     <div class="walkthrough-tooltip-header">
-      <div class="walkthrough-progress">Step ${walkthroughState.currentStepIndex + 1} of ${walkthroughState.totalSteps}</div>
-      <button class="walkthrough-close-btn" id="walkthrough-close-btn">×</button>
+      <div class="walkthrough-step-info">
+        <span class="walkthrough-step-number">${currentStepNum}</span>
+        <span class="walkthrough-progress">Step ${currentStepNum} of ${totalSteps}</span>
+      </div>
+      <button class="walkthrough-close-btn" id="walkthrough-close-btn" title="Close">
+        ${ICONS.x}
+      </button>
     </div>
+
+    <!-- Content -->
     <div class="walkthrough-tooltip-content">
-      ${step.field_label ? `<p class="walkthrough-field-label">${step.field_label}</p>` : ''}
-      <p class="walkthrough-instruction">${step.instruction || 'Complete this action'}</p>
-      <p class="walkthrough-error hidden" style="color: #EF4444; margin-top: 8px;"></p>
+      <h3 class="walkthrough-field-label">${step.field_label || "Action Required"}</h3>
+      <p class="walkthrough-instruction">${step.instruction || "Complete this action to continue."}</p>
+      <p class="walkthrough-error-msg hidden" id="walkthrough-error-msg"></p>
     </div>
+
+    <!-- Footer -->
     <div class="walkthrough-tooltip-footer">
-      <button class="walkthrough-btn walkthrough-btn-back" id="walkthrough-btn-back" ${walkthroughState.currentStepIndex === 0 ? 'disabled' : ''}>
-        ← Back
-      </button>
-      <button class="walkthrough-btn walkthrough-btn-skip hidden" id="walkthrough-btn-skip" style="background: #EF4444;">
-        Skip Step
-      </button>
-      <button class="walkthrough-btn walkthrough-btn-next" id="walkthrough-btn-next">
-        ${walkthroughState.currentStepIndex === walkthroughState.totalSteps - 1 ? 'Complete ✓' : 'Next →'}
-      </button>
-      <button class="walkthrough-btn walkthrough-btn-exit" id="walkthrough-btn-exit">
-        Exit
-      </button>
+      <div class="walkthrough-footer-left">
+        <button class="walkthrough-btn walkthrough-btn-back" id="walkthrough-btn-back" ${isFirstStep ? "disabled" : ""}>
+          ${ICONS.chevronLeft}
+          Back
+        </button>
+      </div>
+      <div class="walkthrough-footer-right">
+        <button class="walkthrough-btn walkthrough-btn-skip hidden" id="walkthrough-btn-skip">
+          Skip
+        </button>
+        <button class="walkthrough-btn walkthrough-btn-exit" id="walkthrough-btn-exit">
+          Exit
+        </button>
+        <button class="walkthrough-btn walkthrough-btn-next" id="walkthrough-btn-next">
+          ${isLastStep ? "Complete" : "Next"}
+          ${ICONS.chevronRight}
+        </button>
+      </div>
+    </div>
+
+    <!-- Progress Bar -->
+    <div class="walkthrough-progress-bar">
+      <div class="walkthrough-progress-bar-fill" style="width: ${progressPercent}%"></div>
     </div>
   `;
 
   // Position tooltip
   const targetRect = targetElement.getBoundingClientRect();
   const tooltipRect = tooltipElement.getBoundingClientRect();
-  const position = calculateTooltipPosition(targetRect, tooltipRect.width, tooltipRect.height);
-  
+  const position = calculateTooltipPosition(
+    targetRect,
+    tooltipRect.width,
+    tooltipRect.height,
+  );
+
   tooltipElement.style.top = `${position.top}px`;
   tooltipElement.style.left = `${position.left}px`;
+  // Clear any transform from centered error/completion state
+  tooltipElement.style.transform = "";
 
-  // Attach event listeners
-  document.getElementById('walkthrough-btn-next')?.addEventListener('click', handleNext);
-  document.getElementById('walkthrough-btn-back')?.addEventListener('click', handleBack);
-  document.getElementById('walkthrough-btn-skip')?.addEventListener('click', handleSkipStep);
-  document.getElementById('walkthrough-btn-exit')?.addEventListener('click', handleExit);
-  document.getElementById('walkthrough-close-btn')?.addEventListener('click', handleExit);
+  // Note: Button click handlers are managed via event delegation in setupTooltipEventDelegation()
+  // No need to attach individual listeners here - this prevents listener accumulation on re-renders
 }
 
 /**
@@ -386,7 +897,7 @@ function updateTooltip(step: StepResponse, targetElement: HTMLElement): void {
 function calculateTooltipPosition(
   targetRect: DOMRect,
   tooltipWidth: number,
-  tooltipHeight: number
+  tooltipHeight: number,
 ): { top: number; left: number } {
   const padding = 16;
   const viewportHeight = window.innerHeight;
@@ -396,10 +907,13 @@ function calculateTooltipPosition(
   if (targetRect.bottom + padding + tooltipHeight < viewportHeight) {
     return {
       top: targetRect.bottom + padding,
-      left: Math.max(padding, Math.min(
-        targetRect.left + targetRect.width / 2 - tooltipWidth / 2,
-        viewportWidth - tooltipWidth - padding
-      )),
+      left: Math.max(
+        padding,
+        Math.min(
+          targetRect.left + targetRect.width / 2 - tooltipWidth / 2,
+          viewportWidth - tooltipWidth - padding,
+        ),
+      ),
     };
   }
 
@@ -407,20 +921,26 @@ function calculateTooltipPosition(
   if (targetRect.top - padding - tooltipHeight > 0) {
     return {
       top: targetRect.top - padding - tooltipHeight,
-      left: Math.max(padding, Math.min(
-        targetRect.left + targetRect.width / 2 - tooltipWidth / 2,
-        viewportWidth - tooltipWidth - padding
-      )),
+      left: Math.max(
+        padding,
+        Math.min(
+          targetRect.left + targetRect.width / 2 - tooltipWidth / 2,
+          viewportWidth - tooltipWidth - padding,
+        ),
+      ),
     };
   }
 
   // Try right side
   if (targetRect.right + padding + tooltipWidth < viewportWidth) {
     return {
-      top: Math.max(padding, Math.min(
-        targetRect.top + targetRect.height / 2 - tooltipHeight / 2,
-        viewportHeight - tooltipHeight - padding
-      )),
+      top: Math.max(
+        padding,
+        Math.min(
+          targetRect.top + targetRect.height / 2 - tooltipHeight / 2,
+          viewportHeight - tooltipHeight - padding,
+        ),
+      ),
       left: targetRect.right + padding,
     };
   }
@@ -428,10 +948,13 @@ function calculateTooltipPosition(
   // Try left side
   if (targetRect.left - padding - tooltipWidth > 0) {
     return {
-      top: Math.max(padding, Math.min(
-        targetRect.top + targetRect.height / 2 - tooltipHeight / 2,
-        viewportHeight - tooltipHeight - padding
-      )),
+      top: Math.max(
+        padding,
+        Math.min(
+          targetRect.top + targetRect.height / 2 - tooltipHeight / 2,
+          viewportHeight - tooltipHeight - padding,
+        ),
+      ),
       left: targetRect.left - padding - tooltipWidth,
     };
   }
@@ -449,49 +972,64 @@ function calculateTooltipPosition(
 async function showElementNotFoundError(step: StepResponse): Promise<void> {
   if (!tooltipElement || !walkthroughState) return;
 
-  tooltipElement.className = 'walkthrough-tooltip walkthrough-error';
+  tooltipElement.className = "walkthrough-tooltip walkthrough-error";
   tooltipElement.innerHTML = `
+    <!-- Header -->
     <div class="walkthrough-tooltip-header">
-      <div class="walkthrough-progress">Error</div>
-      <button class="walkthrough-close-btn" id="walkthrough-close-btn">×</button>
+      <div class="walkthrough-step-info">
+        <span class="walkthrough-step-number">!</span>
+        <span class="walkthrough-progress">Error</span>
+      </div>
+      <button class="walkthrough-close-btn" id="walkthrough-close-btn" title="Close">
+        ${ICONS.x}
+      </button>
     </div>
+
+    <!-- Content -->
     <div class="walkthrough-tooltip-content">
-      <p class="walkthrough-field-label">
+      <h3 class="walkthrough-field-label">
         <span class="walkthrough-error-icon">⚠️</span>
         Element Not Found
-      </p>
+      </h3>
       <p class="walkthrough-instruction">
-        Cannot find "${step.field_label || 'target element'}". This workflow may be outdated.
+        Cannot find "${step.field_label || "target element"}". This workflow may be outdated or the page structure has changed.
       </p>
     </div>
+
+    <!-- Footer -->
     <div class="walkthrough-tooltip-footer">
-      <button class="walkthrough-btn walkthrough-btn-back" id="walkthrough-btn-skip">
-        Skip Step
-      </button>
-      <button class="walkthrough-btn walkthrough-btn-exit" id="walkthrough-btn-exit">
-        Exit Walkthrough
-      </button>
+      <div class="walkthrough-footer-left"></div>
+      <div class="walkthrough-footer-right">
+        <button class="walkthrough-btn walkthrough-btn-skip" id="walkthrough-btn-skip">
+          Skip Step
+        </button>
+        <button class="walkthrough-btn walkthrough-btn-exit" id="walkthrough-btn-exit">
+          Exit
+        </button>
+      </div>
+    </div>
+
+    <!-- Progress Bar -->
+    <div class="walkthrough-progress-bar">
+      <div class="walkthrough-progress-bar-fill" style="width: ${((walkthroughState.currentStepIndex + 1) / walkthroughState.totalSteps) * 100}%"></div>
     </div>
   `;
 
   // Position in center of viewport
-  tooltipElement.style.top = '50%';
-  tooltipElement.style.left = '50%';
-  tooltipElement.style.transform = 'translate(-50%, -50%)';
+  tooltipElement.style.top = "50%";
+  tooltipElement.style.left = "50%";
+  tooltipElement.style.transform = "translate(-50%, -50%)";
 
   // EXT-006: Log element not found via background
   logExecutionViaBackground({
     step_id: step.id,
-    status: 'failed',
-    error_type: 'element_not_found',
-    error_message: `Could not find element for step ${step.step_number}: ${step.field_label || 'Unknown'}`,
+    status: "failed",
+    error_type: "element_not_found",
+    error_message: `Could not find element for step ${step.step_number}: ${step.field_label || "Unknown"}`,
     page_url: window.location.href,
   });
 
-  // Attach event listeners
-  document.getElementById('walkthrough-btn-skip')?.addEventListener('click', handleNext);
-  document.getElementById('walkthrough-btn-exit')?.addEventListener('click', handleExit);
-  document.getElementById('walkthrough-close-btn')?.addEventListener('click', handleExit);
+  // Note: Button click handlers are managed via event delegation in setupTooltipEventDelegation()
 }
 
 /**
@@ -525,7 +1063,7 @@ function handleBack(): void {
  * Handle Exit button click
  */
 function handleExit(): void {
-  if (confirm('Are you sure you want to exit this walkthrough?')) {
+  if (confirm("Are you sure you want to exit this walkthrough?")) {
     exitWalkthrough();
   }
 }
@@ -536,54 +1074,64 @@ function handleExit(): void {
 async function showCompletionMessage(): Promise<void> {
   if (!tooltipElement || !walkthroughState) return;
 
-  tooltipElement.className = 'walkthrough-tooltip';
+  tooltipElement.className = "walkthrough-tooltip walkthrough-complete";
   tooltipElement.innerHTML = `
+    <!-- Header -->
     <div class="walkthrough-tooltip-header">
-      <div class="walkthrough-progress">Complete!</div>
+      <div class="walkthrough-step-info">
+        <span class="walkthrough-step-number">✓</span>
+        <span class="walkthrough-progress">Complete</span>
+      </div>
     </div>
+
+    <!-- Content -->
     <div class="walkthrough-tooltip-content">
-      <p class="walkthrough-field-label">✓ Workflow Complete!</p>
+      <h3 class="walkthrough-field-label">Workflow Complete!</h3>
       <p class="walkthrough-instruction">
-        You've successfully completed "${walkthroughState.workflowName}".
+        You've successfully completed "${walkthroughState.workflowName}". Great job!
       </p>
     </div>
+
+    <!-- Footer -->
     <div class="walkthrough-tooltip-footer">
-      <button class="walkthrough-btn walkthrough-btn-next" id="walkthrough-btn-done">
-        Done
-      </button>
+      <div class="walkthrough-footer-left"></div>
+      <div class="walkthrough-footer-right">
+        <button class="walkthrough-btn walkthrough-btn-next" id="walkthrough-btn-done">
+          Done
+          ${ICONS.chevronRight}
+        </button>
+      </div>
+    </div>
+
+    <!-- Progress Bar -->
+    <div class="walkthrough-progress-bar">
+      <div class="walkthrough-progress-bar-fill" style="width: 100%"></div>
     </div>
   `;
 
   // Position in center of viewport
-  tooltipElement.style.top = '50%';
-  tooltipElement.style.left = '50%';
-  tooltipElement.style.transform = 'translate(-50%, -50%)';
+  tooltipElement.style.top = "50%";
+  tooltipElement.style.left = "50%";
+  tooltipElement.style.transform = "translate(-50%, -50%)";
 
   // Remove spotlight
-  const spotlightRect = document.getElementById('spotlight-cutout');
+  const spotlightRect = document.getElementById("spotlight-cutout");
   if (spotlightRect) {
-    spotlightRect.setAttribute('width', '0');
-    spotlightRect.setAttribute('height', '0');
+    spotlightRect.setAttribute("width", "0");
+    spotlightRect.setAttribute("height", "0");
   }
 
   // EXT-006: Log successful completion via background
-  const executionTimeMs = walkthroughState.startTime ? Date.now() - walkthroughState.startTime : null;
+  const executionTimeMs = walkthroughState.startTime
+    ? Date.now() - walkthroughState.startTime
+    : null;
   logExecutionViaBackground({
-    status: 'success',
+    status: "success",
     page_url: window.location.href,
     execution_time_ms: executionTimeMs,
   });
 
-  // Attach event listener
-  document.getElementById('walkthrough-btn-done')?.addEventListener('click', () => {
-    // Clean up without logging again
-    if (walkthroughState) {
-      removeActionListeners();
-      cleanupFlashEffects();
-      destroyOverlay();
-      walkthroughState = null;
-    }
-  });
+  // Note: Done button click is handled via event delegation in setupTooltipEventDelegation()
 }
 
 /**
@@ -592,16 +1140,16 @@ async function showCompletionMessage(): Promise<void> {
  */
 function getEventsForActionType(actionType: string): string[] {
   switch (actionType) {
-    case 'click':
-      return ['click'];
-    case 'input_commit':
+    case "click":
+      return ["click"];
+    case "input_commit":
       // Mirror recorder heuristics: commit on blur only (not every change)
-      return ['blur'];
-    case 'select_change':
-      return ['change'];
-    case 'submit':
-      return ['submit'];
-    case 'navigate':
+      return ["blur"];
+    case "select_change":
+      return ["change"];
+    case "submit":
+      return ["submit"];
+    case "navigate":
       return []; // No auto-advance for navigation
     default:
       return [];
@@ -612,13 +1160,20 @@ function getEventsForActionType(actionType: string): string[] {
  * Check if input value has changed since focus
  */
 function hasValueChanged(element: HTMLElement): boolean {
-  if (!(element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement)) {
+  if (
+    !(
+      element instanceof HTMLInputElement ||
+      element instanceof HTMLTextAreaElement
+    )
+  ) {
     return false;
   }
-  
-  const initialValue = inputValues.get(element) || '';
+
+  const initialValue = inputValues.get(element) || "";
   const changed = element.value !== initialValue;
-  console.log(`[Walkthrough] Value changed: ${changed} (initial: "${initialValue}", current: "${element.value}")`);
+  console.log(
+    `[Walkthrough] Value changed: ${changed} (initial: "${initialValue}", current: "${element.value}")`,
+  );
   return changed;
 }
 
@@ -628,32 +1183,33 @@ function hasValueChanged(element: HTMLElement): boolean {
 function validateAction(
   event: Event,
   step: StepResponse,
-  targetElement: HTMLElement
+  targetElement: HTMLElement,
 ): boolean {
   const eventTarget = event.target as HTMLElement;
 
   // 1. Check if event target matches expected target element
   if (eventTarget !== targetElement) {
-    console.log('[Walkthrough] Action validation failed: wrong element');
+    console.log("[Walkthrough] Action validation failed: wrong element");
     return false;
   }
 
   // 2. Check if action type matches
   switch (step.action_type) {
-    case 'click':
-      return event.type === 'click';
-    
-    case 'input_commit':
+    case "click":
+      return event.type === "click";
+
+    case "input_commit":
       // Commit on blur only (mirror recorder); ensure value actually changed
-      return event.type === 'blur' && hasValueChanged(eventTarget);
-    
-    case 'select_change':
-      return event.type === 'change' && 
-             eventTarget instanceof HTMLSelectElement;
-    
-    case 'submit':
-      return event.type === 'submit';
-    
+      return event.type === "blur" && hasValueChanged(eventTarget);
+
+    case "select_change":
+      return (
+        event.type === "change" && eventTarget instanceof HTMLSelectElement
+      );
+
+    case "submit":
+      return event.type === "submit";
+
     default:
       return false;
   }
@@ -665,19 +1221,23 @@ function validateAction(
 function handleActionDetected(
   event: Event,
   step: StepResponse,
-  targetElement: HTMLElement
+  targetElement: HTMLElement,
 ): void {
   console.log(`[Walkthrough] Action detected: ${event.type} on`, event.target);
 
   // Validate action
   if (!validateAction(event, step, targetElement)) {
-    console.log('[Walkthrough] Action did not match expected step');
+    console.log("[Walkthrough] Action did not match expected step");
     // EXT-005: Handle incorrect action
-    handleIncorrectAction(step, targetElement, 'That\'s not quite right. Please try the highlighted step.');
+    handleIncorrectAction(
+      step,
+      targetElement,
+      "That's not quite right. Please try the highlighted step.",
+    );
     return;
   }
 
-  console.log('[Walkthrough] Correct action detected! Auto-advancing...');
+  console.log("[Walkthrough] Correct action detected! Auto-advancing...");
 
   // Reset retry counter for this step (EXT-005)
   if (walkthroughState) {
@@ -690,12 +1250,12 @@ function handleActionDetected(
   // Auto-advance after a small delay tuned per action
   const delay = ((): number => {
     switch (step.action_type) {
-      case 'click':
-      case 'submit':
+      case "click":
+      case "submit":
         return 60;
-      case 'select_change':
+      case "select_change":
         return 120;
-      case 'input_commit':
+      case "input_commit":
         return 150;
       default:
         return 120;
@@ -713,48 +1273,66 @@ function handleActionDetected(
  */
 function attachActionListeners(
   step: StepResponse,
-  targetElement: HTMLElement
+  targetElement: HTMLElement,
 ): void {
   // Clear previous listeners
   removeActionListeners();
 
   // Track initial value for inputs
-  if (targetElement instanceof HTMLInputElement || targetElement instanceof HTMLTextAreaElement) {
+  if (
+    targetElement instanceof HTMLInputElement ||
+    targetElement instanceof HTMLTextAreaElement
+  ) {
     inputValues.set(targetElement, targetElement.value);
-    console.log(`[Walkthrough] Tracking initial value: "${targetElement.value}"`);
+    console.log(
+      `[Walkthrough] Tracking initial value: "${targetElement.value}"`,
+    );
   }
 
   // Determine which events to listen for
   const events = getEventsForActionType(step.action_type);
-  
+
   if (events.length === 0) {
-    console.log(`[Walkthrough] No auto-advance for action type: ${step.action_type}`);
+    console.log(
+      `[Walkthrough] No auto-advance for action type: ${step.action_type}`,
+    );
     return;
   }
 
-  console.log(`[Walkthrough] Attaching listeners for ${step.action_type}:`, events);
+  console.log(
+    `[Walkthrough] Attaching listeners for ${step.action_type}:`,
+    events,
+  );
 
   // For input commits, also listen to focus to reset baseline value
-  if (step.action_type === 'input_commit') {
+  if (step.action_type === "input_commit") {
     const focusHandler = () => {
-      if (targetElement instanceof HTMLInputElement || targetElement instanceof HTMLTextAreaElement) {
+      if (
+        targetElement instanceof HTMLInputElement ||
+        targetElement instanceof HTMLTextAreaElement
+      ) {
         inputValues.set(targetElement, targetElement.value);
       }
     };
-    targetElement.addEventListener('focusin', focusHandler);
-    activeListeners.push({ element: targetElement, event: 'focusin', handler: focusHandler });
+    targetElement.addEventListener("focusin", focusHandler);
+    activeListeners.push({
+      element: targetElement,
+      event: "focusin",
+      handler: focusHandler,
+    });
   }
 
   // Attach listeners
-  events.forEach(eventType => {
+  events.forEach((eventType) => {
     const handler = (event: Event) => {
       handleActionDetected(event, step, targetElement);
     };
 
     // For submit events, listen on form (not button)
-    const listenOn: EventTarget = eventType === 'submit' 
-      ? targetElement.closest('form') || document 
-      : targetElement;
+    const listenOn: EventTarget =
+      eventType === "submit"
+        ? targetElement.closest("form") || document
+        : targetElement;
 
     listenOn.addEventListener(eventType, handler);
     activeListeners.push({ element: listenOn, event: eventType, handler });
@@ -769,7 +1347,7 @@ function removeActionListeners(): void {
     element.removeEventListener(event, handler);
   });
   activeListeners = [];
-  console.log('[Walkthrough] Removed action listeners');
+  console.log("[Walkthrough] Removed action listeners");
 }
 
 /**
@@ -777,8 +1355,13 @@ function removeActionListeners(): void {
  */
 function logExecutionViaBackground(data: {
   step_id?: number | null;
-  status: 'success' | 'healed_deterministic' | 'healed_ai' | 'failed';
-  error_type?: 'element_not_found' | 'timeout' | 'navigation_error' | 'user_exit' | null;
+  status: "success" | "healed_deterministic" | "healed_ai" | "failed";
+  error_type?:
+    | "element_not_found"
+    | "timeout"
+    | "navigation_error"
+    | "user_exit"
+    | null;
   error_message?: string | null;
   healing_confidence?: number | null;
   deterministic_score?: number | null;
@@ -788,16 +1371,16 @@ function logExecutionViaBackground(data: {
   if (!walkthroughState) return;
   chrome.runtime.sendMessage(
     {
-      type: 'LOG_EXECUTION',
+      type: "LOG_EXECUTION",
       payload: { workflowId: walkthroughState.workflowId, ...data },
     },
     () => {
       // Swallow lastError to avoid noisy console warnings
       const e = chrome.runtime.lastError;
       if (e) {
-        console.debug('[Walkthrough] LOG_EXECUTION ignored:', e.message);
+        console.debug("[Walkthrough] LOG_EXECUTION ignored:", e.message);
       }
-    }
+    },
   );
 }
 
@@ -807,37 +1390,45 @@ function logExecutionViaBackground(data: {
 function handleIncorrectAction(
   _step: StepResponse,
   targetElement: HTMLElement,
-  message: string
+  message: string,
 ): void {
   if (!walkthroughState || !tooltipElement) return;
 
   // Increment retry counter
-  const attempts = walkthroughState.retryAttempts.get(walkthroughState.currentStepIndex) || 0;
-  walkthroughState.retryAttempts.set(walkthroughState.currentStepIndex, attempts + 1);
+  const attempts =
+    walkthroughState.retryAttempts.get(walkthroughState.currentStepIndex) || 0;
+  walkthroughState.retryAttempts.set(
+    walkthroughState.currentStepIndex,
+    attempts + 1,
+  );
 
   console.log(`[Walkthrough] Incorrect action. Attempt ${attempts + 1}/3`);
 
   // Show error message in tooltip
-  const errorEl = tooltipElement.querySelector('.walkthrough-error');
+  const errorEl = tooltipElement.querySelector("#walkthrough-error-msg");
   if (errorEl) {
-    errorEl.textContent = attempts >= 2 
-      ? 'Having trouble? You can skip this step.'
-      : message;
-    errorEl.classList.remove('hidden');
+    errorEl.textContent =
+      attempts >= 2 ? "Having trouble? You can skip this step." : message;
+    errorEl.classList.remove("hidden");
   }
 
-  // After 3 failed attempts, show Skip button
+  // After 3 failed attempts, show Skip button and hide Next
   if (attempts >= 2) {
-    const skipBtn = tooltipElement.querySelector('#walkthrough-btn-skip');
+    const skipBtn = tooltipElement.querySelector("#walkthrough-btn-skip");
+    const nextBtn = tooltipElement.querySelector("#walkthrough-btn-next");
     if (skipBtn) {
-      skipBtn.classList.remove('hidden');
+      skipBtn.classList.remove("hidden");
+    }
+    // Hide Next button to avoid two forward options
+    if (nextBtn) {
+      nextBtn.classList.add("hidden");
     }
   }
 
   // Flash target element red to indicate error
   if (targetElement) {
     const prevBoxShadow = targetElement.style.boxShadow;
-    targetElement.style.boxShadow = '0 0 0 3px rgba(239, 68, 68, 0.6)'; // red
+    targetElement.style.boxShadow = "0 0 0 3px rgba(239, 68, 68, 0.6)"; // red
     setTimeout(() => {
       targetElement.style.boxShadow = prevBoxShadow;
     }, 400);
@@ -850,16 +1441,19 @@ function handleIncorrectAction(
 function handleSkipStep(): void {
   if (!walkthroughState) return;
 
-  console.log('[Walkthrough] Skipping step', walkthroughState.currentStepIndex + 1);
+  console.log(
+    "[Walkthrough] Skipping step",
+    walkthroughState.currentStepIndex + 1,
+  );
 
   // Log skipped step as failed (EXT-006)
   const currentStep = walkthroughState.steps[walkthroughState.currentStepIndex];
   if (currentStep) {
     logExecutionViaBackground({
       step_id: currentStep.id,
-      status: 'failed',
-      error_type: 'user_exit',
-      error_message: 'User skipped step after 3 failed attempts',
+      status: "failed",
+      error_type: "user_exit",
+      error_message: "User skipped step after 3 failed attempts",
       page_url: window.location.href,
     });
   }
@@ -874,71 +1468,104 @@ function handleSkipStep(): void {
 export function exitWalkthrough(): void {
   if (!walkthroughState) return;
 
-  console.log('[Walkthrough] Exiting walkthrough');
-  
+  console.log("[Walkthrough] Exiting walkthrough");
+
   // EXT-006: Log early exit as failed via background
-  const executionTimeMs = walkthroughState.startTime ? Date.now() - walkthroughState.startTime : null;
+  const executionTimeMs = walkthroughState.startTime
+    ? Date.now() - walkthroughState.startTime
+    : null;
   logExecutionViaBackground({
-    status: 'failed',
-    error_type: 'user_exit',
-    error_message: 'User exited walkthrough early',
+    status: "failed",
+    error_type: "user_exit",
+    error_message: "User exited walkthrough early",
     page_url: window.location.href,
     execution_time_ms: executionTimeMs,
   });
-  
+
   // Clean up action listeners (EXT-004)
   removeActionListeners();
   // Clean up any lingering visual effects on page elements
   cleanupFlashEffects();
-  
+
   // Clean up overlay UI
   destroyOverlay();
-  
+
   // Reset state
   walkthroughState = null;
 }
 
 // Listen for messages from background
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  console.log('[Walkthrough] Received message:', message.type);
+  console.log("[Walkthrough] Received message:", message.type);
 
-  if (message.type === 'WALKTHROUGH_DATA') {
+  if (message.type === "WALKTHROUGH_DATA") {
+    // Prevent duplicate initialization
+    if (walkthroughState !== null) {
+      console.log(
+        "[Walkthrough] Ignoring duplicate WALKTHROUGH_DATA - already initialized",
+      );
+      sendResponse({ success: true, status: "already_initialized" });
+      return false;
+    }
     initializeWalkthrough(message.payload);
-    sendResponse({ success: true, status: 'initialized' });
-    return true;
+    sendResponse({ success: true, status: "initialized" });
+    return false;
   }
 
-  if (message.type === 'WALKTHROUGH_ERROR') {
-    console.error('[Walkthrough] Error from background:', message.payload.error);
+  if (message.type === "WALKTHROUGH_ERROR") {
+    console.error(
+      "[Walkthrough] Error from background:",
+      message.payload.error,
+    );
     if (walkthroughState) {
-      walkthroughState.status = 'error';
+      walkthroughState.status = "error";
       walkthroughState.error = message.payload.error;
     }
     sendResponse({ success: false });
-    return true;
+    return false;
   }
 
-  return true;
+  // Do not claim async handling for unrelated messages
+  return false;
 });
 
 // Listen for messages from page (dashboard) via window.postMessage
 // Forwards START_WALKTHROUGH to background script
-window.addEventListener('message', (event: MessageEvent) => {
+window.addEventListener("message", (event: MessageEvent) => {
   try {
-    const data = (event.data || {}) as { source?: string; type?: string; payload?: any };
-    if (data.source !== 'overlay-dashboard') return;
+    const data = (event.data || {}) as {
+      source?: string;
+      type?: string;
+      payload?: any;
+    };
+    if (data.source !== "overlay-dashboard") return;
 
-    if (data.type === 'START_WALKTHROUGH') {
-      console.log('[Walkthrough] Forwarding START_WALKTHROUGH from page to background');
-      chrome.runtime.sendMessage({ type: 'START_WALKTHROUGH', payload: data.payload }, () => {
-        // Swallow lastError to prevent console warnings
-        const e = chrome.runtime.lastError;
-        if (e) {
-          console.debug('[Walkthrough] START_WALKTHROUGH send ignored:', e.message);
-        }
-      });
+    if (data.type === "START_WALKTHROUGH") {
+      // Prevent duplicate initialization - only forward if not already active
+      if (walkthroughState !== null) {
+        console.log(
+          "[Walkthrough] Ignoring duplicate START_WALKTHROUGH - already active",
+        );
+        return;
+      }
+      console.log(
+        "[Walkthrough] Forwarding START_WALKTHROUGH from page to background",
+      );
+      chrome.runtime.sendMessage(
+        { type: "START_WALKTHROUGH", payload: data.payload },
+        () => {
+          // Swallow lastError to prevent console warnings
+          const e = chrome.runtime.lastError;
+          if (e) {
+            console.debug(
+              "[Walkthrough] START_WALKTHROUGH send ignored:",
+              e.message,
+            );
+          }
+        },
+      );
     }
   } catch (err) {
-    console.error('[Walkthrough] Error handling window message', err);
+    console.error("[Walkthrough] Error handling window message", err);
   }
 });

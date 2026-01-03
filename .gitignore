@@ -24,6 +24,7 @@ app.db
 *.swp
 *.swo
 *~
+.windsurf/
 
 # OS
 .DS_Store

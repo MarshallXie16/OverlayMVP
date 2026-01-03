@@ -31,6 +31,7 @@ celery_app = Celery(
     backend=REDIS_URL,
     include=[
         "app.tasks.ai_labeling",
+        "app.tasks.email",
     ]
 )
 

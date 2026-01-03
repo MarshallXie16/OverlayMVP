@@ -1,65 +1,37 @@
 /**
  * Layout Component
- * Main layout wrapper with navigation bar
+ * Main layout wrapper with sidebar navigation and glassmorphic background
  */
 
-import { Link, useNavigate } from 'react-router-dom';
-import { useAuthStore } from '@/store/auth';
+import React from "react";
+import { Sidebar } from "@/components/layout/Sidebar";
 
 interface LayoutProps {
   children: React.ReactNode;
 }
 
+/**
+ * Animated background blobs for glassmorphism effect
+ */
+const AnimatedBlobs: React.FC = () => (
+  <div className="fixed top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
+    <div className="absolute top-[-10%] right-[-5%] w-[500px] h-[500px] bg-primary-300/30 rounded-full blur-3xl opacity-50 mix-blend-multiply animate-blob"></div>
+    <div className="absolute bottom-[-10%] left-[-10%] w-[600px] h-[600px] bg-accent-300/20 rounded-full blur-3xl opacity-50 mix-blend-multiply animate-blob animation-delay-2000"></div>
+    <div className="absolute top-[40%] left-[30%] w-[400px] h-[400px] bg-purple-300/20 rounded-full blur-3xl opacity-50 mix-blend-multiply animate-blob animation-delay-4000"></div>
+  </div>
+);
+
 export const Layout: React.FC<LayoutProps> = ({ children }) => {
-  const { user, logout } = useAuthStore();
-  const navigate = useNavigate();
-
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
-  };
-
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Navigation Bar */}
-      <nav className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            {/* Logo and navigation */}
-            <div className="flex">
-              <Link
-                to="/dashboard"
-                className="flex items-center px-2 text-gray-900 font-semibold text-lg"
-              >
-                Workflow Platform
-              </Link>
-            </div>
+    <div className="flex min-h-screen bg-primary-50 font-sans text-neutral-900">
+      {/* Animated background gradients */}
+      <AnimatedBlobs />
 
-            {/* User menu */}
-            {user && (
-              <div className="flex items-center space-x-4">
-                <span className="text-sm text-gray-700">
-                  {user.name}
-                </span>
-                <span className="text-xs text-gray-500">
-                  {user.company_name}
-                </span>
-                <button
-                  onClick={handleLogout}
-                  className="text-sm text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md hover:bg-gray-100"
-                >
-                  Logout
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </nav>
+      {/* Sidebar navigation */}
+      <Sidebar />
 
-      {/* Main content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {children}
-      </main>
+      {/* Main content area */}
+      <main className="flex-1 ml-64 p-8 relative z-10">{children}</main>
     </div>
   );
 };

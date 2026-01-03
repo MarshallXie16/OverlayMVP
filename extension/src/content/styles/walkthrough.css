@@ -1,6 +1,7 @@
 /**
  * Walkthrough Overlay UI Styles
- * 
+ *
+ * New glassmorphism design with teal accents
  * EXT-002: Overlay UI Foundation
  * Loaded via manifest.json (not imported in TypeScript)
  */
@@ -15,9 +16,9 @@
   left: 0;
   width: 100vw;
   height: 100vh;
-  z-index: 999999; /* Very high to appear above most content */
-  pointer-events: none; /* Allow clicks through to target element */
-  animation: fadeIn 0.2s ease-out;
+  z-index: 999999;
+  pointer-events: none;
+  animation: fadeIn 0.3s ease-out;
 }
 
 @keyframes fadeIn {
@@ -48,29 +49,61 @@
 }
 
 /* ============================================================================
+   SPOTLIGHT RING (Alternative to SVG mask)
+   ============================================================================ */
+
+.walkthrough-spotlight-ring {
+  position: absolute;
+  pointer-events: none;
+  border: 3px solid #0d9488;
+  border-radius: 8px;
+  box-shadow:
+    0 0 0 4px rgba(13, 148, 136, 0.2),
+    0 0 0 9999px rgba(0, 0, 0, 0.5);
+  animation: spotlight-pulse 2s ease-in-out infinite;
+  z-index: 999998;
+}
+
+@keyframes spotlight-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 4px rgba(13, 148, 136, 0.2),
+      0 0 0 9999px rgba(0, 0, 0, 0.5);
+  }
+  50% {
+    box-shadow:
+      0 0 0 6px rgba(13, 148, 136, 0.3),
+      0 0 0 9999px rgba(0, 0, 0, 0.5);
+  }
+}
+
+/* ============================================================================
    TOOLTIP (Instruction card)
    ============================================================================ */
 
 .walkthrough-tooltip {
   position: absolute;
-  width: 360px;
+  width: 340px;
   max-width: calc(100vw - 32px);
   background: white;
   border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25), 0 2px 8px rgba(0, 0, 0, 0.15);
-  pointer-events: auto; /* Restore pointer events for tooltip */
-  animation: slideUp 0.3s ease-out;
+  box-shadow:
+    0 25px 50px -12px rgba(0, 0, 0, 0.25),
+    0 0 0 1px rgba(0, 0, 0, 0.05);
+  pointer-events: auto;
+  animation: slideIn 0.3s ease-out;
   z-index: 1000000;
+  overflow: hidden;
 }
 
-@keyframes slideUp {
+@keyframes slideIn {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(10px) scale(0.98);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
 }
 
@@ -79,251 +112,320 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px;
-  border-bottom: 1px solid #e5e7eb;
+  padding: 16px 20px;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.walkthrough-step-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.walkthrough-step-number {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0d9488;
 }
 
 .walkthrough-progress {
-  font-size: 14px;
-  font-weight: 600;
-  color: #6b7280;
+  font-size: 11px;
+  font-weight: 700;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .walkthrough-close-btn {
   background: none;
   border: none;
-  font-size: 24px;
   color: #9ca3af;
   cursor: pointer;
-  padding: 0;
-  width: 28px;
-  height: 28px;
+  padding: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 4px;
-  transition: background-color 0.2s, color 0.2s;
+  border-radius: 6px;
+  transition: all 0.2s ease;
 }
 
 .walkthrough-close-btn:hover {
   background-color: #f3f4f6;
-  color: #374151;
+  color: #4b5563;
+}
+
+.walkthrough-close-btn svg {
+  width: 20px;
+  height: 20px;
 }
 
 /* Tooltip Content */
 .walkthrough-tooltip-content {
-  padding: 16px;
+  padding: 20px;
 }
 
 .walkthrough-field-label {
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 700;
   color: #111827;
   margin: 0 0 8px 0;
+  line-height: 1.3;
 }
 
 .walkthrough-instruction {
   font-size: 14px;
-  color: #4b5563;
+  color: #6b7280;
   margin: 0;
-  line-height: 1.5;
+  line-height: 1.6;
+}
+
+/* Error message in content */
+.walkthrough-error-msg {
+  color: #dc2626;
+  font-size: 13px;
+  margin-top: 12px;
+  padding: 8px 12px;
+  background-color: #fef2f2;
+  border-radius: 6px;
+  border: 1px solid #fecaca;
 }
 
 /* Tooltip Footer */
 .walkthrough-tooltip-footer {
   display: flex;
-  gap: 8px;
-  padding: 16px;
-  border-top: 1px solid #e5e7eb;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
 }
 
+.walkthrough-footer-left {
+  display: flex;
+  align-items: center;
+}
+
+.walkthrough-footer-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Button Base */
 .walkthrough-btn {
-  flex: 1;
-  padding: 10px 16px;
+  padding: 8px 16px;
   font-size: 14px;
   font-weight: 600;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.walkthrough-btn-next {
-  background-color: #2563eb;
-  color: white;
+.walkthrough-btn svg {
+  width: 16px;
+  height: 16px;
 }
 
-.walkthrough-btn-next:hover {
-  background-color: #1d4ed8;
-}
-
-.walkthrough-btn-next:disabled {
-  background-color: #93c5fd;
-  cursor: not-allowed;
-}
-
+/* Back Button - Text style */
 .walkthrough-btn-back {
-  background-color: #f3f4f6;
-  color: #374151;
+  background: transparent;
+  color: #9ca3af;
+  padding: 8px 4px;
 }
 
-.walkthrough-btn-back:hover {
-  background-color: #e5e7eb;
+.walkthrough-btn-back:hover:not(:disabled) {
+  color: #4b5563;
 }
 
 .walkthrough-btn-back:disabled {
-  opacity: 0.5;
+  opacity: 0.3;
   cursor: not-allowed;
 }
 
+/* Exit Button - Text style */
 .walkthrough-btn-exit {
-  background-color: transparent;
+  background: transparent;
   color: #6b7280;
-  border: 1px solid #d1d5db;
-  padding: 10px 12px;
-  flex: 0 0 auto;
 }
 
 .walkthrough-btn-exit:hover {
-  background-color: #f9fafb;
-  color: #374151;
-}
-
-/* ============================================================================
-   HIGHLIGHT BORDER (Optional animated border around target)
-   ============================================================================ */
-
-.walkthrough-highlight-border {
-  position: absolute;
-  border: 3px solid #2563eb;
-  border-radius: 8px;
-  pointer-events: none;
-  animation: pulse 2s ease-in-out infinite;
-  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.2);
-}
-
-@keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.7;
-    transform: scale(1.02);
-  }
-}
-
-/* ============================================================================
-   EXIT CONFIRMATION MODAL
-   ============================================================================ */
-
-.walkthrough-exit-modal {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 400px;
-  max-width: calc(100vw - 32px);
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
-  pointer-events: auto;
-  z-index: 1000001;
-  animation: scaleIn 0.2s ease-out;
-}
-
-@keyframes scaleIn {
-  from {
-    opacity: 0;
-    transform: translate(-50%, -50%) scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
-  }
-}
-
-.walkthrough-exit-modal-header {
-  padding: 20px;
-  border-bottom: 1px solid #e5e7eb;
-}
-
-.walkthrough-exit-modal-title {
-  font-size: 18px;
-  font-weight: 700;
   color: #111827;
-  margin: 0;
 }
 
-.walkthrough-exit-modal-content {
-  padding: 20px;
-}
-
-.walkthrough-exit-modal-text {
-  font-size: 14px;
-  color: #4b5563;
-  margin: 0;
-  line-height: 1.5;
-}
-
-.walkthrough-exit-modal-footer {
-  display: flex;
-  gap: 8px;
-  padding: 20px;
-  border-top: 1px solid #e5e7eb;
-}
-
-.walkthrough-exit-modal-btn-cancel {
-  flex: 1;
-  padding: 10px 16px;
-  background-color: #f3f4f6;
-  color: #374151;
-  border: none;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.walkthrough-exit-modal-btn-cancel:hover {
-  background-color: #e5e7eb;
-}
-
-.walkthrough-exit-modal-btn-confirm {
-  flex: 1;
-  padding: 10px 16px;
-  background-color: #dc2626;
+/* Next Button - Primary teal */
+.walkthrough-btn-next {
+  background-color: #0d9488;
   color: white;
-  border: none;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.2s;
+  padding: 8px 20px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
-.walkthrough-exit-modal-btn-confirm:hover {
-  background-color: #b91c1c;
+.walkthrough-btn-next:hover {
+  background-color: #0f766e;
+}
+
+.walkthrough-btn-next:active {
+  transform: scale(0.98);
+}
+
+/* Skip Button - Danger */
+.walkthrough-btn-skip {
+  background-color: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+.walkthrough-btn-skip:hover {
+  background-color: #fee2e2;
+}
+
+/* Progress Bar */
+.walkthrough-progress-bar {
+  height: 3px;
+  background-color: #f3f4f6;
+  width: 100%;
+}
+
+.walkthrough-progress-bar-fill {
+  height: 100%;
+  background-color: #0d9488;
+  transition: width 0.3s ease;
+}
+
+/* ============================================================================
+   TOOLTIP ARROW
+   ============================================================================ */
+
+.walkthrough-tooltip-arrow {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  transform: rotate(45deg);
+  z-index: -1;
+}
+
+.walkthrough-tooltip-arrow.arrow-left {
+  left: -8px;
+  top: 50%;
+  margin-top: -8px;
+  border-right: none;
+  border-top: none;
+}
+
+.walkthrough-tooltip-arrow.arrow-right {
+  right: -8px;
+  top: 50%;
+  margin-top: -8px;
+  border-left: none;
+  border-bottom: none;
+}
+
+.walkthrough-tooltip-arrow.arrow-top {
+  top: -8px;
+  left: 50%;
+  margin-left: -8px;
+  border-bottom: none;
+  border-right: none;
+}
+
+.walkthrough-tooltip-arrow.arrow-bottom {
+  bottom: -8px;
+  left: 50%;
+  margin-left: -8px;
+  border-top: none;
+  border-left: none;
 }
 
 /* ============================================================================
    ERROR STATE
    ============================================================================ */
 
-.walkthrough-error {
-  background-color: #fef2f2;
-  border: 1px solid #fecaca;
+.walkthrough-tooltip.walkthrough-error {
+  background-color: #fff;
 }
 
-.walkthrough-error .walkthrough-tooltip-content {
-  color: #991b1b;
+.walkthrough-error .walkthrough-tooltip-header {
+  background-color: #fef2f2;
+  border-bottom-color: #fecaca;
+}
+
+.walkthrough-error .walkthrough-step-number {
+  color: #dc2626;
 }
 
 .walkthrough-error-icon {
   display: inline-block;
   margin-right: 8px;
   font-size: 20px;
+}
+
+/* ============================================================================
+   COMPLETION STATE
+   ============================================================================ */
+
+.walkthrough-complete .walkthrough-tooltip-header {
+  background-color: #f0fdfa;
+  border-bottom-color: #ccfbf1;
+}
+
+.walkthrough-complete .walkthrough-step-number {
+  color: #0d9488;
+}
+
+.walkthrough-complete .walkthrough-field-label {
+  color: #0d9488;
+}
+
+/* ============================================================================
+   UTILITY CLASSES
+   ============================================================================ */
+
+.hidden {
+  display: none !important;
+}
+
+/* ============================================================================
+   ACCESSIBILITY & HIGH CONTRAST
+   ============================================================================ */
+
+.walkthrough-overlay:focus-visible {
+  outline: none;
+}
+
+.walkthrough-btn:focus-visible {
+  outline: 2px solid #0d9488;
+  outline-offset: 2px;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .walkthrough-tooltip {
+    border: 2px solid #000;
+  }
+
+  .walkthrough-btn {
+    border: 2px solid currentColor;
+  }
+
+  .walkthrough-spotlight-ring {
+    border-width: 4px;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .walkthrough-overlay,
+  .walkthrough-tooltip {
+    animation: none;
+  }
+
+  .walkthrough-spotlight-ring {
+    animation: none;
+  }
 }
 
 /* ============================================================================
@@ -340,60 +442,16 @@
 
   .walkthrough-tooltip-footer {
     flex-direction: column;
+    gap: 12px;
   }
 
-  .walkthrough-btn {
+  .walkthrough-footer-left,
+  .walkthrough-footer-right {
     width: 100%;
-  }
-}
-
-/**
- * Walkthrough Overlay Styles
- * EXT-002: Overlay UI Foundation
- * EXT-005: Error feedback UI
- */
-
-/* =============================================================================
-   Utility Classes
-   ============================================================================= */
-
-.hidden {
-  display: none !important;
-}
-
-/* =============================================================================
-   Overlay Container
-   ============================================================================= */
-
-.walkthrough-overlay:focus-visible {
-  outline: none;
-}
-
-.walkthrough-btn:focus-visible {
-  outline: 2px solid #2563eb;
-  outline-offset: 2px;
-}
-
-/* High contrast mode support */
-@media (prefers-contrast: high) {
-  .walkthrough-tooltip {
-    border: 2px solid #000;
+    justify-content: center;
   }
 
   .walkthrough-btn {
-    border: 2px solid currentColor;
-  }
-}
-
-/* Reduced motion support */
-@media (prefers-reduced-motion: reduce) {
-  .walkthrough-overlay,
-  .walkthrough-tooltip,
-  .walkthrough-exit-modal {
-    animation: none;
-  }
-
-  .walkthrough-highlight-border {
-    animation: none;
+    flex: 1;
   }
 }

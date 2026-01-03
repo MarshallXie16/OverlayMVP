@@ -3,31 +3,45 @@
  * New user registration with email/password/company invite
  */
 
-import { useState, FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useAuthStore } from '@/store/auth';
+import { useState, FormEvent, useEffect } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useAuthStore } from "@/store/auth";
 import {
   validateEmail,
   validatePassword,
   validateName,
   validatePasswordConfirmation,
-} from '@/utils/validation';
+} from "@/utils/validation";
+import { InstallExtensionModal } from "@/components/InstallExtensionModal";
 
 export const Signup: React.FC = () => {
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [companyName, setCompanyName] = useState('');
-  const [inviteToken, setInviteToken] = useState('');
-  const [validationError, setValidationError] = useState('');
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [companyName, setCompanyName] = useState("");
+  const [inviteToken, setInviteToken] = useState("");
+  const [validationError, setValidationError] = useState("");
+  const [showInstallModal, setShowInstallModal] = useState(false);
 
   const { signup, isLoading, error, clearError } = useAuthStore();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // Pre-fill invite token from URL query param
+  useEffect(() => {
+    const inviteFromUrl = searchParams.get("invite");
+    if (inviteFromUrl) {
+      setInviteToken(inviteFromUrl);
+    }
+  }, [searchParams]);
+
+  // Check if user is joining via invite link
+  const isJoiningViaInvite = Boolean(inviteToken);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    setValidationError('');
+    setValidationError("");
     clearError();
 
     // Client-side validation
@@ -51,7 +65,7 @@ export const Signup: React.FC = () => {
 
     const confirmValidation = validatePasswordConfirmation(
       password,
-      confirmPassword
+      confirmPassword,
     );
     if (!confirmValidation.isValid) {
       setValidationError(confirmValidation.error!);
@@ -66,10 +80,16 @@ export const Signup: React.FC = () => {
         company_name: companyName || null,
         invite_token: inviteToken || null,
       });
-      navigate('/dashboard');
+      // Show install modal instead of navigating immediately
+      setShowInstallModal(true);
     } catch {
       // Error is handled by store
     }
+  };
+
+  const handleSkipInstall = () => {
+    setShowInstallModal(false);
+    navigate("/dashboard");
   };
 
   return (
@@ -79,7 +99,7 @@ export const Signup: React.FC = () => {
           Create your account
         </h2>
         <p className="mt-2 text-center text-sm text-gray-600">
-          Already have an account?{' '}
+          Already have an account?{" "}
           <Link
             to="/login"
             className="font-medium text-primary-600 hover:text-primary-500"
@@ -183,47 +203,51 @@ export const Signup: React.FC = () => {
               </div>
             </div>
 
-            {/* Company name (optional) */}
-            <div>
-              <label
-                htmlFor="company-name"
-                className="block text-sm font-medium text-gray-700"
-              >
-                Company Name (optional)
-              </label>
-              <div className="mt-1">
-                <input
-                  id="company-name"
-                  name="company-name"
-                  type="text"
-                  value={companyName}
-                  onChange={(e) => setCompanyName(e.target.value)}
-                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-                  placeholder="Leave blank to create a new company"
-                />
+            {/* Company name (only shown when NOT joining via invite) */}
+            {!isJoiningViaInvite && (
+              <div>
+                <label
+                  htmlFor="company-name"
+                  className="block text-sm font-medium text-gray-700"
+                >
+                  Company Name (optional)
+                </label>
+                <div className="mt-1">
+                  <input
+                    id="company-name"
+                    name="company-name"
+                    type="text"
+                    value={companyName}
+                    onChange={(e) => setCompanyName(e.target.value)}
+                    className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                    placeholder="Leave blank to create a new company"
+                  />
+                </div>
               </div>
-            </div>
+            )}
 
-            {/* Invite token (optional) */}
-            <div>
-              <label
-                htmlFor="invite-token"
-                className="block text-sm font-medium text-gray-700"
-              >
-                Invite Token (optional)
-              </label>
-              <div className="mt-1">
-                <input
-                  id="invite-token"
-                  name="invite-token"
-                  type="text"
-                  value={inviteToken}
-                  onChange={(e) => setInviteToken(e.target.value)}
-                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-                  placeholder="Enter if joining existing company"
-                />
+            {/* Invite token (only shown when NOT joining via invite link) */}
+            {!isJoiningViaInvite && (
+              <div>
+                <label
+                  htmlFor="invite-token"
+                  className="block text-sm font-medium text-gray-700"
+                >
+                  Invite Token (optional)
+                </label>
+                <div className="mt-1">
+                  <input
+                    id="invite-token"
+                    name="invite-token"
+                    type="text"
+                    value={inviteToken}
+                    onChange={(e) => setInviteToken(e.target.value)}
+                    className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                    placeholder="Enter if joining existing company"
+                  />
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Error messages */}
             {(validationError || error) && (
@@ -266,13 +290,20 @@ export const Signup: React.FC = () => {
                     Creating account...
                   </span>
                 ) : (
-                  'Create account'
+                  "Create account"
                 )}
               </button>
             </div>
           </form>
         </div>
       </div>
+
+      {/* Install Extension Modal */}
+      <InstallExtensionModal
+        isOpen={showInstallModal}
+        onClose={handleSkipInstall}
+        onSkip={handleSkipInstall}
+      />
     </div>
   );
 };

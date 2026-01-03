@@ -2,6 +2,7 @@
 Integration tests for authentication API endpoints.
 """
 import pytest
+from datetime import datetime, timezone
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
@@ -61,10 +62,10 @@ class TestSignupEndpoint:
         assert decoded["role"] == "admin"
         assert decoded["email"] == "sarah@acme.com"
 
-    def test_signup_joins_existing_company_regular_user(
+    def test_signup_joins_existing_company_editor_user(
         self, client: TestClient, db: Session
     ):
-        """Test signup with invite_token joins existing company as regular user."""
+        """Test signup with invite_token joins existing company as editor user."""
         # Create existing company
         company = Company(name="Existing Corp", invite_token="test-invite-token-123")
         db.add(company)
@@ -87,13 +88,13 @@ class TestSignupEndpoint:
         user_data = data["user"]
         assert user_data["email"] == "alex@existing.com"
         assert user_data["name"] == "Alex Smith"
-        assert user_data["role"] == "regular"
+        assert user_data["role"] == "editor"
         assert user_data["company_name"] == "Existing Corp"
 
         # Verify user was created with correct role and company
         user = db.query(User).filter(User.email == "alex@existing.com").first()
         assert user is not None
-        assert user.role == "regular"
+        assert user.role == "editor"
         assert user.company_id == company.id
 
     def test_signup_duplicate_email_fails(self, client: TestClient, db: Session):
@@ -382,6 +383,38 @@ class TestLoginEndpoint:
         assert user.last_login_at is not None
         assert user.last_login_at != initial_login_at
 
+    def test_login_suspended_user_returns_403(self, client: TestClient, db: Session):
+        """Test that suspended user cannot log in."""
+        # Create suspended user
+        company = Company(name="Test Corp", invite_token="token123")
+        db.add(company)
+        db.flush()
+
+        user = User(
+            email="suspended@test.com",
+            password_hash=hash_password("SecurePass123"),
+            name="Suspended User",
+            role="editor",
+            company_id=company.id,
+            status="suspended",
+        )
+        db.add(user)
+        db.commit()
+
+        # Attempt login
+        response = client.post(
+            "/api/auth/login",
+            json={
+                "email": "suspended@test.com",
+                "password": "SecurePass123",
+            },
+        )
+
+        assert response.status_code == 403
+        data = response.json()
+        assert data["detail"]["code"] == "ACCOUNT_SUSPENDED"
+        assert "suspended" in data["detail"]["message"].lower()
+
 
 class TestAuthEndToEnd:
     """End-to-end authentication flow tests."""
@@ -416,8 +449,8 @@ class TestAuthEndToEnd:
         login_data = login_response.json()
         login_token = login_data["access_token"]
 
-        # 3. Both tokens should be valid (though different)
-        assert signup_token != login_token  # Different timestamps
+        # 3. Both tokens should be valid
+        # Note: Tokens may be identical if operations complete within the same second
         signup_decoded = decode_token(signup_token)
         login_decoded = decode_token(login_token)
 
@@ -465,8 +498,199 @@ class TestAuthEndToEnd:
         # 3. Verify both users in same company
         assert admin_data["user"]["company_id"] == user_data["user"]["company_id"]
         assert admin_data["user"]["role"] == "admin"
-        assert user_data["user"]["role"] == "regular"
+        assert user_data["user"]["role"] == "editor"
 
         # 4. Verify company has 2 users
         company = db.query(Company).filter(Company.name == "Shared Company").first()
         assert len(company.users) == 2
+
+
+class TestEmailInviteSignup:
+    """Test signup with email invite tokens (from Invite table)."""
+
+    def test_signup_with_email_invite_token(self, client: TestClient, db: Session):
+        """Test that users can signup using email invite tokens."""
+        from datetime import timedelta
+        from app.models.invite import Invite
+
+        # 1. Create company and admin
+        admin_response = client.post(
+            "/api/auth/signup",
+            json={
+                "email": "admin@emailinvite.com",
+                "password": "AdminPass123",
+                "name": "Admin",
+                "company_name": "Email Invite Corp",
+            },
+        )
+        assert admin_response.status_code == 201
+        admin_data = admin_response.json()
+        company_id = admin_data["user"]["company_id"]
+
+        # 2. Create an email invite (simulating admin creating invite)
+        invite = Invite(
+            token="test-email-invite-token-123",
+            email="invitee@emailinvite.com",
+            role="viewer",  # Use viewer to verify role is applied
+            company_id=company_id,
+            invited_by_id=admin_data["user"]["id"],
+            expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+        )
+        db.add(invite)
+        db.commit()
+
+        # 3. Signup with the email invite token
+        user_response = client.post(
+            "/api/auth/signup",
+            json={
+                "email": "invitee@emailinvite.com",
+                "password": "InviteePass123",
+                "name": "Invited User",
+                "invite_token": "test-email-invite-token-123",
+            },
+        )
+
+        assert user_response.status_code == 201
+        user_data = user_response.json()
+
+        # 4. Verify user joined correct company with correct role
+        assert user_data["user"]["company_id"] == company_id
+        assert user_data["user"]["role"] == "viewer"  # Role from invite
+
+        # 5. Verify invite is marked as accepted
+        db.refresh(invite)
+        assert invite.accepted_at is not None
+
+    def test_signup_with_expired_invite_fails(self, client: TestClient, db: Session):
+        """Test that expired email invites cannot be used."""
+        from datetime import timedelta
+        from app.models.invite import Invite
+
+        # 1. Create company
+        admin_response = client.post(
+            "/api/auth/signup",
+            json={
+                "email": "admin@expiredinvite.com",
+                "password": "AdminPass123",
+                "name": "Admin",
+                "company_name": "Expired Invite Corp",
+            },
+        )
+        assert admin_response.status_code == 201
+        company_id = admin_response.json()["user"]["company_id"]
+
+        # 2. Create an expired invite
+        invite = Invite(
+            token="expired-invite-token",
+            email="invitee@expiredinvite.com",
+            role="editor",
+            company_id=company_id,
+            invited_by_id=admin_response.json()["user"]["id"],
+            expires_at=datetime.now(timezone.utc) - timedelta(days=1),  # Expired
+        )
+        db.add(invite)
+        db.commit()
+
+        # 3. Try to signup with expired invite
+        response = client.post(
+            "/api/auth/signup",
+            json={
+                "email": "invitee@expiredinvite.com",
+                "password": "InviteePass123",
+                "name": "Invited User",
+                "invite_token": "expired-invite-token",
+            },
+        )
+
+        assert response.status_code == 400
+        assert response.json()["detail"]["code"] == "INVITE_EXPIRED"
+
+    def test_signup_with_already_used_invite_fails(self, client: TestClient, db: Session):
+        """Test that already-used email invites cannot be reused."""
+        from datetime import timedelta
+        from app.models.invite import Invite
+
+        # 1. Create company
+        admin_response = client.post(
+            "/api/auth/signup",
+            json={
+                "email": "admin@usedinvite.com",
+                "password": "AdminPass123",
+                "name": "Admin",
+                "company_name": "Used Invite Corp",
+            },
+        )
+        assert admin_response.status_code == 201
+        company_id = admin_response.json()["user"]["company_id"]
+
+        # 2. Create an already-accepted invite
+        invite = Invite(
+            token="already-used-token",
+            email="original@usedinvite.com",
+            role="editor",
+            company_id=company_id,
+            invited_by_id=admin_response.json()["user"]["id"],
+            expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+            accepted_at=datetime.now(timezone.utc) - timedelta(hours=1),  # Already used
+        )
+        db.add(invite)
+        db.commit()
+
+        # 3. Try to signup with already-used invite
+        response = client.post(
+            "/api/auth/signup",
+            json={
+                "email": "another@usedinvite.com",
+                "password": "AnotherPass123",
+                "name": "Another User",
+                "invite_token": "already-used-token",
+            },
+        )
+
+        assert response.status_code == 400
+        assert response.json()["detail"]["code"] == "INVITE_ALREADY_USED"
+
+    def test_email_invite_takes_precedence_over_company_token(self, client: TestClient, db: Session):
+        """Test that if a token matches an email invite, it's used instead of company token."""
+        from datetime import timedelta
+        from app.models.invite import Invite
+
+        # 1. Create company (this generates a company invite_token)
+        admin_response = client.post(
+            "/api/auth/signup",
+            json={
+                "email": "admin@precedence.com",
+                "password": "AdminPass123",
+                "name": "Admin",
+                "company_name": "Precedence Corp",
+            },
+        )
+        assert admin_response.status_code == 201
+        company_id = admin_response.json()["user"]["company_id"]
+
+        # 2. Create an email invite with admin role
+        invite = Invite(
+            token="email-invite-precedence",
+            email="invitee@precedence.com",
+            role="admin",  # Admin role via email invite
+            company_id=company_id,
+            invited_by_id=admin_response.json()["user"]["id"],
+            expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+        )
+        db.add(invite)
+        db.commit()
+
+        # 3. Signup with the email invite token
+        user_response = client.post(
+            "/api/auth/signup",
+            json={
+                "email": "invitee@precedence.com",
+                "password": "InviteePass123",
+                "name": "New Admin",
+                "invite_token": "email-invite-precedence",
+            },
+        )
+
+        assert user_response.status_code == 201
+        # Should get admin role from email invite, not editor from company token
+        assert user_response.json()["user"]["role"] == "admin"

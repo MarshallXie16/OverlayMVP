@@ -2,27 +2,27 @@
  * Tests for content script selector extraction
  */
 
-import { describe, it, expect } from 'vitest';
-import { extractSelectors } from './selectors';
+import { describe, it, expect } from "vitest";
+import { extractSelectors } from "../../utils/selectors";
 
-describe('Selector Extraction', () => {
-  describe('extractSelectors', () => {
-    it('should extract ID selector when stable', () => {
-      const element = document.createElement('button');
-      element.id = 'submit-button';
+describe("Selector Extraction", () => {
+  describe("extractSelectors", () => {
+    it("should extract ID selector when stable", () => {
+      const element = document.createElement("button");
+      element.id = "submit-button";
       document.body.appendChild(element);
 
       const selectors = extractSelectors(element);
 
-      expect(selectors.primary).toBe('#submit-button');
-      expect(selectors.css).toContain('button');
+      expect(selectors.primary).toBe("#submit-button");
+      expect(selectors.css).toContain("button");
 
       document.body.removeChild(element);
     });
 
-    it('should reject React dynamic IDs', () => {
-      const element = document.createElement('div');
-      element.id = ':r1:';
+    it("should reject React dynamic IDs", () => {
+      const element = document.createElement("div");
+      element.id = ":r1:";
       document.body.appendChild(element);
 
       const selectors = extractSelectors(element);
@@ -33,9 +33,9 @@ describe('Selector Extraction', () => {
       document.body.removeChild(element);
     });
 
-    it('should reject MUI dynamic IDs', () => {
-      const element = document.createElement('div');
-      element.id = 'mui-1234';
+    it("should reject MUI dynamic IDs", () => {
+      const element = document.createElement("div");
+      element.id = "mui-1234";
       document.body.appendChild(element);
 
       const selectors = extractSelectors(element);
@@ -45,37 +45,37 @@ describe('Selector Extraction', () => {
       document.body.removeChild(element);
     });
 
-    it('should extract data-testid when available', () => {
-      const element = document.createElement('button');
-      element.setAttribute('data-testid', 'login-button');
+    it("should extract data-testid when available", () => {
+      const element = document.createElement("button");
+      element.setAttribute("data-testid", "login-button");
       document.body.appendChild(element);
 
       const selectors = extractSelectors(element);
 
-      expect(selectors.data_testid).toBe('login-button');
+      expect(selectors.data_testid).toBe("login-button");
 
       document.body.removeChild(element);
     });
 
-    it('should generate CSS path with nth-of-type', () => {
-      const parent = document.createElement('div');
-      parent.className = 'container';
-      const button1 = document.createElement('button');
-      const button2 = document.createElement('button');
+    it("should generate CSS path with nth-of-type", () => {
+      const parent = document.createElement("div");
+      parent.className = "container";
+      const button1 = document.createElement("button");
+      const button2 = document.createElement("button");
       parent.appendChild(button1);
       parent.appendChild(button2);
       document.body.appendChild(parent);
 
       const selectors = extractSelectors(button2);
 
-      expect(selectors.css).toContain('button:nth-of-type(2)');
+      expect(selectors.css).toContain("button:nth-of-type(2)");
 
       document.body.removeChild(parent);
     });
 
-    it('should generate XPath', () => {
-      const div = document.createElement('div');
-      div.id = 'test-div';
+    it("should generate XPath", () => {
+      const div = document.createElement("div");
+      div.id = "test-div";
       document.body.appendChild(div);
 
       const selectors = extractSelectors(div);
@@ -88,10 +88,10 @@ describe('Selector Extraction', () => {
     });
   });
 
-  describe('Dynamic ID Detection', () => {
-    it('should reject React dynamic IDs', () => {
-      const element = document.createElement('div');
-      element.id = ':r0:';
+  describe("Dynamic ID Detection", () => {
+    it("should reject React dynamic IDs", () => {
+      const element = document.createElement("div");
+      element.id = ":r0:";
       document.body.appendChild(element);
 
       const selectors = extractSelectors(element);
@@ -100,11 +100,11 @@ describe('Selector Extraction', () => {
       document.body.removeChild(element);
     });
 
-    it('should reject framework-generated IDs', () => {
-      const testCases = ['mui-component', 'react-12345', 'ember-view'];
+    it("should reject framework-generated IDs", () => {
+      const testCases = ["mui-component", "react-12345", "ember-view"];
 
-      testCases.forEach(id => {
-        const element = document.createElement('div');
+      testCases.forEach((id) => {
+        const element = document.createElement("div");
         element.id = id;
         document.body.appendChild(element);
 
@@ -115,11 +115,11 @@ describe('Selector Extraction', () => {
       });
     });
 
-    it('should accept stable descriptive IDs', () => {
-      const testCases = ['submit-button', 'user-profile', 'login-form'];
+    it("should accept stable descriptive IDs", () => {
+      const testCases = ["submit-button", "user-profile", "login-form"];
 
-      testCases.forEach(id => {
-        const element = document.createElement('div');
+      testCases.forEach((id) => {
+        const element = document.createElement("div");
         element.id = id;
         document.body.appendChild(element);
 

@@ -18,15 +18,17 @@ import type {
   WorkflowListResponse,
   ScreenshotResponse,
   ApiError,
-} from './types';
-import { getToken, saveToken, clearAuthState } from './storage';
+  HealingValidationRequest,
+  HealingValidationResponse,
+} from "./types";
+import { getToken, saveToken, clearAuthState } from "./storage";
 
 // ============================================================================
 // CONFIGURATION
 // ============================================================================
 
 const API_CONFIG = {
-  baseUrl: process.env.API_BASE_URL || 'http://localhost:8000',
+  baseUrl: process.env.API_BASE_URL || "http://localhost:8000",
   timeout: 30000, // 30 seconds
   maxRetries: 3,
   retryDelay: 1000, // 1 second
@@ -40,10 +42,10 @@ export class ApiClientError extends Error {
   constructor(
     message: string,
     public status?: number,
-    public details?: any
+    public details?: any,
   ) {
     super(message);
-    this.name = 'ApiClientError';
+    this.name = "ApiClientError";
   }
 }
 
@@ -56,7 +58,7 @@ async function parseErrorResponse(response: Response): Promise<ApiError> {
     return error as ApiError;
   } catch {
     return {
-      detail: response.statusText || 'Unknown error',
+      detail: response.statusText || "Unknown error",
       status: response.status,
     };
   }
@@ -67,7 +69,7 @@ async function parseErrorResponse(response: Response): Promise<ApiError> {
 // ============================================================================
 
 interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+  method?: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
   body?: any;
   headers?: Record<string, string>;
   requiresAuth?: boolean;
@@ -79,10 +81,10 @@ interface RequestOptions {
  */
 async function makeRequest<T>(
   endpoint: string,
-  options: RequestOptions = {}
+  options: RequestOptions = {},
 ): Promise<T> {
   const {
-    method = 'GET',
+    method = "GET",
     body,
     headers = {},
     requiresAuth = true,
@@ -99,14 +101,14 @@ async function makeRequest<T>(
   if (requiresAuth) {
     const token = await getToken();
     if (!token) {
-      throw new ApiClientError('Not authenticated', 401);
+      throw new ApiClientError("Not authenticated", 401);
     }
-    requestHeaders['Authorization'] = `Bearer ${token}`;
+    requestHeaders["Authorization"] = `Bearer ${token}`;
   }
 
   // Add Content-Type for JSON (not for multipart)
-  if (!isMultipart && body && method !== 'GET') {
-    requestHeaders['Content-Type'] = 'application/json';
+  if (!isMultipart && body && method !== "GET") {
+    requestHeaders["Content-Type"] = "application/json";
   }
 
   // Build request body
@@ -114,7 +116,7 @@ async function makeRequest<T>(
   if (body) {
     if (isMultipart) {
       requestBody = body as FormData;
-    } else if (method !== 'GET') {
+    } else if (method !== "GET") {
       requestBody = JSON.stringify(body);
     }
   }
@@ -124,7 +126,10 @@ async function makeRequest<T>(
   for (let attempt = 0; attempt < API_CONFIG.maxRetries; attempt++) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.timeout);
+      const timeoutId = setTimeout(
+        () => controller.abort(),
+        API_CONFIG.timeout,
+      );
 
       const response = await fetch(url, {
         method,
@@ -139,9 +144,7 @@ async function makeRequest<T>(
       if (!response.ok) {
         const error = await parseErrorResponse(response);
         const errorMessage =
-          typeof error.detail === 'string'
-            ? error.detail
-            : 'Request failed';
+          typeof error.detail === "string" ? error.detail : "Request failed";
 
         // Don't retry auth errors
         if (response.status === 401 || response.status === 403) {
@@ -158,14 +161,18 @@ async function makeRequest<T>(
         }
 
         // Retry server errors (5xx) and network errors
-        lastError = new ApiClientError(errorMessage, response.status, error.detail);
+        lastError = new ApiClientError(
+          errorMessage,
+          response.status,
+          error.detail,
+        );
         await sleep(API_CONFIG.retryDelay * Math.pow(2, attempt));
         continue;
       }
 
       // Parse response
-      const contentType = response.headers.get('content-type');
-      if (contentType?.includes('application/json')) {
+      const contentType = response.headers.get("content-type");
+      if (contentType?.includes("application/json")) {
         return (await response.json()) as T;
       }
 
@@ -191,9 +198,9 @@ async function makeRequest<T>(
 
   // All retries failed
   throw new ApiClientError(
-    lastError?.message || 'Network request failed',
+    lastError?.message || "Network request failed",
     undefined,
-    lastError
+    lastError,
   );
 }
 
@@ -217,8 +224,8 @@ export class ApiClient {
    * Sign up a new user
    */
   async signup(request: SignupRequest): Promise<TokenResponse> {
-    const response = await makeRequest<TokenResponse>('/api/auth/signup', {
-      method: 'POST',
+    const response = await makeRequest<TokenResponse>("/api/auth/signup", {
+      method: "POST",
       body: request,
       requiresAuth: false,
     });
@@ -233,8 +240,8 @@ export class ApiClient {
    * Log in an existing user
    */
   async login(request: LoginRequest): Promise<TokenResponse> {
-    const response = await makeRequest<TokenResponse>('/api/auth/login', {
-      method: 'POST',
+    const response = await makeRequest<TokenResponse>("/api/auth/login", {
+      method: "POST",
       body: request,
       requiresAuth: false,
     });
@@ -260,10 +267,10 @@ export class ApiClient {
    * Create a new workflow with steps
    */
   async createWorkflow(
-    request: CreateWorkflowRequest
+    request: CreateWorkflowRequest,
   ): Promise<CreateWorkflowResponse> {
-    return makeRequest<CreateWorkflowResponse>('/api/workflows', {
-      method: 'POST',
+    return makeRequest<CreateWorkflowResponse>("/api/workflows", {
+      method: "POST",
       body: request,
     });
   }
@@ -280,23 +287,23 @@ export class ApiClient {
     const queryParams = new URLSearchParams();
 
     if (params?.limit !== undefined) {
-      queryParams.append('limit', params.limit.toString());
+      queryParams.append("limit", params.limit.toString());
     }
     if (params?.offset !== undefined) {
-      queryParams.append('offset', params.offset.toString());
+      queryParams.append("offset", params.offset.toString());
     }
     if (params?.status) {
-      queryParams.append('status', params.status);
+      queryParams.append("status", params.status);
     }
     if (params?.tags && params.tags.length > 0) {
-      params.tags.forEach((tag) => queryParams.append('tags', tag));
+      params.tags.forEach((tag) => queryParams.append("tags", tag));
     }
 
     const query = queryParams.toString();
-    const endpoint = query ? `/api/workflows?${query}` : '/api/workflows';
+    const endpoint = query ? `/api/workflows?${query}` : "/api/workflows";
 
     return makeRequest<WorkflowListResponse>(endpoint, {
-      method: 'GET',
+      method: "GET",
     });
   }
 
@@ -305,7 +312,7 @@ export class ApiClient {
    */
   async getWorkflow(workflowId: number): Promise<WorkflowResponse> {
     return makeRequest<WorkflowResponse>(`/api/workflows/${workflowId}`, {
-      method: 'GET',
+      method: "GET",
     });
   }
 
@@ -314,10 +321,10 @@ export class ApiClient {
    */
   async updateWorkflow(
     workflowId: number,
-    request: UpdateWorkflowRequest
+    request: UpdateWorkflowRequest,
   ): Promise<WorkflowResponse> {
     return makeRequest<WorkflowResponse>(`/api/workflows/${workflowId}`, {
-      method: 'PUT',
+      method: "PUT",
       body: request,
     });
   }
@@ -327,7 +334,7 @@ export class ApiClient {
    */
   async deleteWorkflow(workflowId: number): Promise<void> {
     return makeRequest<void>(`/api/workflows/${workflowId}`, {
-      method: 'DELETE',
+      method: "DELETE",
     });
   }
 
@@ -341,17 +348,17 @@ export class ApiClient {
   async uploadScreenshot(
     imageBlob: Blob,
     workflowId: number,
-    stepId?: string
+    stepId?: string,
   ): Promise<ScreenshotResponse> {
     const formData = new FormData();
-    formData.append('image', imageBlob, 'screenshot.jpg'); // Backend expects 'image', not 'file'
-    formData.append('workflow_id', workflowId.toString());
+    formData.append("image", imageBlob, "screenshot.jpg"); // Backend expects 'image', not 'file'
+    formData.append("workflow_id", workflowId.toString());
     if (stepId) {
-      formData.append('step_id', stepId);
+      formData.append("step_id", stepId);
     }
 
-    return makeRequest<ScreenshotResponse>('/api/screenshots', {
-      method: 'POST',
+    return makeRequest<ScreenshotResponse>("/api/screenshots", {
+      method: "POST",
       body: formData,
       isMultipart: true,
     });
@@ -367,11 +374,14 @@ export class ApiClient {
    */
   async linkScreenshotToStep(
     stepId: number,
-    screenshotId: number
+    screenshotId: number,
   ): Promise<void> {
-    return makeRequest<void>(`/api/steps/${stepId}/screenshot?screenshot_id=${screenshotId}`, {
-      method: 'PATCH',
-    });
+    return makeRequest<void>(
+      `/api/steps/${stepId}/screenshot?screenshot_id=${screenshotId}`,
+      {
+        method: "PATCH",
+      },
+    );
   }
 
   /**
@@ -390,7 +400,7 @@ export class ApiClient {
       message: string;
       status: string;
     }>(`/api/workflows/${workflowId}/start-processing`, {
-      method: 'POST',
+      method: "POST",
     });
   }
 
@@ -402,30 +412,82 @@ export class ApiClient {
    * Log workflow execution result
    * Called on walkthrough completion, failure, or healing events
    */
-  async logExecution(workflowId: number, data: {
-    step_id?: number | null;
-    status: 'success' | 'healed_deterministic' | 'healed_ai' | 'failed';
-    error_type?: 'element_not_found' | 'timeout' | 'navigation_error' | 'user_exit' | null;
-    error_message?: string | null;
-    healing_confidence?: number | null;
-    deterministic_score?: number | null;
-    page_url?: string | null;
-    execution_time_ms?: number | null;
-  }): Promise<{ execution_id: number; workflow_status: string }> {
+  async logExecution(
+    workflowId: number,
+    data: {
+      step_id?: number | null;
+      status: "success" | "healed_deterministic" | "healed_ai" | "failed";
+      error_type?:
+        | "element_not_found"
+        | "timeout"
+        | "navigation_error"
+        | "user_exit"
+        | null;
+      error_message?: string | null;
+      healing_confidence?: number | null;
+      deterministic_score?: number | null;
+      page_url?: string | null;
+      execution_time_ms?: number | null;
+    },
+  ): Promise<{ execution_id: number; workflow_status: string }> {
     try {
-      return await makeRequest<{ execution_id: number; workflow_status: string }>(
-        `/api/workflows/${workflowId}/executions`,
-        {
-          method: 'POST',
-          body: data,
-        }
-      );
+      return await makeRequest<{
+        execution_id: number;
+        workflow_status: string;
+      }>(`/api/workflows/${workflowId}/executions`, {
+        method: "POST",
+        body: data,
+      });
     } catch (error) {
       // Log error but don't throw - logging failures shouldn't break UX
-      console.error('[API] Failed to log execution:', error);
+      console.error("[API] Failed to log execution:", error);
       // Return dummy response
-      return { execution_id: -1, workflow_status: 'unknown' };
+      return { execution_id: -1, workflow_status: "unknown" };
     }
+  }
+
+  // ==========================================================================
+  // HEALING VALIDATION (Phase 4)
+  // ==========================================================================
+
+  /**
+   * Validate an auto-healing candidate match using AI
+   * Called when deterministic score is uncertain (0.70-0.85 range)
+   */
+  async validateHealingMatch(
+    request: HealingValidationRequest,
+  ): Promise<HealingValidationResponse> {
+    return makeRequest<HealingValidationResponse>("/api/healing/validate", {
+      method: "POST",
+      body: request,
+    });
+  }
+
+  /**
+   * Check if AI healing validation service is available
+   */
+  async getHealingServiceStatus(): Promise<{
+    ai_available: boolean;
+    model: string | null;
+    ai_weight: number;
+    thresholds: {
+      accept: number;
+      reject: number;
+    };
+    fallback_mode: string;
+  }> {
+    return makeRequest<{
+      ai_available: boolean;
+      model: string | null;
+      ai_weight: number;
+      thresholds: {
+        accept: number;
+        reject: number;
+      };
+      fallback_mode: string;
+    }>("/api/healing/status", {
+      method: "GET",
+    });
   }
 
   // ==========================================================================
@@ -436,8 +498,8 @@ export class ApiClient {
    * Check API health
    */
   async healthCheck(): Promise<{ status: string }> {
-    return makeRequest<{ status: string }>('/api/health', {
-      method: 'GET',
+    return makeRequest<{ status: string }>("/api/health", {
+      method: "GET",
       requiresAuth: false,
     });
   }

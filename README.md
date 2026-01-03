@@ -4,120 +4,229 @@ AI-powered Chrome extension for recording, managing, and executing interactive w
 
 ## 📚 Documentation
 
-### Getting Started
-- **[Quick Start Guide](./QUICKSTART.md)** - Get running in 5 minutes ⚡
-- **[Testing Guide](./docs/testing.md)** - Comprehensive testing scenarios 🧪
-
 ### Technical Documentation
+- **[API Reference](./backend/API_EXAMPLES.md)** - Complete REST API documentation
 - **[Architecture](./docs/architecture.md)** - System architecture and component interaction
-- **[Recording System](./docs/recording-system.md)** - Event recording and deduplication
+- **[Testing Guide](./TESTING_GUIDE.md)** - Testing procedures and scenarios
 
 ### Project Knowledge
-- **[Memory](./memory.md)** - Recent work summary and key lessons learned
-- **[Fixed Bugs](./fixed_bugs.md)** - Quick reference of bugs fixed and lessons
+- **[Memory](./memory.md)** - Project context and architectural decisions
+- **[Backlog](/.claude/backlog.md)** - Prioritized future work
 
 ### Design Documentation
 - **[Design Docs](./design_docs/)** - Business plan, product design, roadmap
 
-## 🎯 Current Status
+---
 
-**Sprint 1 Complete** ✅ (53 Story Points)
-
-- ✅ Backend API with authentication and workflow management
-- ✅ Chrome extension with recording capabilities
-- ✅ Web dashboard with workflow viewing
-- ✅ ~7,900 lines of production code
-- ✅ 54 tests passing (100% pass rate)
-
-**Next**: Sprint 2 - AI labeling, walkthrough mode, enhanced testing
-
-## Quick Start
-
-**For detailed step-by-step instructions, see [QUICKSTART.md](./QUICKSTART.md)**
+## Quick Start (5 Minutes)
 
 ### Prerequisites
-- **Node.js** 18+ and npm
-- **Python** 3.11+
-- **Google Chrome** (for extension testing)
 
-*Note: Redis and AWS S3 are not required for MVP testing*
+| Requirement | Version | Check Command |
+|-------------|---------|---------------|
+| Node.js | 18+ | `node --version` |
+| Python | 3.11+ | `python --version` |
+| npm | 9+ | `npm --version` |
+| Chrome | Latest | For extension testing |
 
-### Installation
+### Step 1: Clone and Install Dependencies
 
-1. **Clone the repository**
 ```bash
+# Clone the repository
 git clone <repository-url>
 cd OverlayMVP
-```
 
-2. **Install dependencies**
-```bash
-# Install all npm packages
+# Install all npm packages (root, dashboard, extension)
 npm install
 
 # Set up Python virtual environment
 cd backend
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
+cd ..
 ```
 
-3. **Configure environment variables**
+### Step 2: Configure Environment
+
 ```bash
-# Copy example env file
-cp .env.example .env
-
-# Edit .env and fill in:
-# - JWT_SECRET_KEY (generate a secure random key)
-# - ANTHROPIC_API_KEY (from Anthropic Console)
-# - AWS credentials for S3
-# - Other configuration values
+# Copy environment template
+cp backend/.env.example backend/.env
 ```
 
-4. **Initialize the database**
+Edit `backend/.env` with your values:
+
+```env
+# Required for development
+JWT_SECRET_KEY=generate-a-secure-random-key-here
+DATABASE_URL=sqlite:///./app.db
+
+# Required for AI labeling (get from Anthropic Console)
+ANTHROPIC_API_KEY=sk-ant-...
+
+# Optional - for screenshot storage (uses local filesystem if not set)
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+AWS_S3_BUCKET=
+```
+
+**Generate a secure JWT key:**
 ```bash
-cd backend
-# Run migrations (once implemented)
-alembic upgrade head
+python -c "import secrets; print(secrets.token_urlsafe(32))"
 ```
 
-### Running the Development Environment
+### Step 3: Initialize Database
 
-**Terminal 1: Backend API**
 ```bash
 cd backend
 source venv/bin/activate
-uvicorn app.main:app --reload
-# Runs at http://localhost:8000
+alembic upgrade head
+cd ..
 ```
 
-**Terminal 2: Web Dashboard**
+### Step 4: Start Development Servers
+
+You need **3 terminal windows**:
+
+**Terminal 1 - Backend API:**
+```bash
+cd backend
+source venv/bin/activate
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+**Terminal 2 - Web Dashboard:**
 ```bash
 cd dashboard
 npm run dev
-# Runs at http://localhost:3000
 ```
 
-**Terminal 3: Chrome Extension** (one-time build)
+**Terminal 3 - Celery Worker (for AI labeling):**
+```bash
+cd backend
+source venv/bin/activate
+celery -A app.celery_app worker --loglevel=info
+```
+
+### Step 5: Load Chrome Extension
+
 ```bash
 cd extension
 npm run build
-# Builds to extension/dist/
 ```
 
-Then load the extension in Chrome:
-1. Open Chrome → `chrome://extensions/`
-2. Enable "Developer mode"
-3. Click "Load unpacked"
+Load in Chrome:
+1. Navigate to `chrome://extensions/`
+2. Enable **Developer mode** (top right)
+3. Click **Load unpacked**
 4. Select `extension/dist/` folder
 
-### Verify Everything Works
+### Step 6: Verify Setup
 
-1. **Backend**: http://localhost:8000/docs (Swagger UI)
-2. **Dashboard**: http://localhost:3000 (Login page)
-3. **Extension**: Click icon in Chrome toolbar (Popup UI)
+| Component | URL | Expected |
+|-----------|-----|----------|
+| Backend API | http://localhost:8000/docs | Swagger UI |
+| Dashboard | http://localhost:5173 | Login page |
+| Extension | Chrome toolbar icon | Popup appears |
 
-**See [TESTING_GUIDE.md](./TESTING_GUIDE.md) for complete end-to-end testing scenarios.**
+### Step 7: Create Test Account
+
+1. Open http://localhost:5173/signup
+2. Enter email, password, name, and company name
+3. Click "Create Account"
+4. You'll be redirected to the dashboard
+
+---
+
+## First Workflow Test
+
+### Recording a Workflow
+
+1. Click the extension icon in Chrome toolbar
+2. Click **Start Recording**
+3. Navigate to any website (e.g., https://example.com)
+4. Perform some actions (clicks, text input)
+5. Click **Stop Recording**
+6. The workflow is saved and sent for AI labeling
+
+### Viewing in Dashboard
+
+1. Open http://localhost:5173
+2. Your recorded workflow appears in the list
+3. Click to view step details and screenshots
+
+### Running a Walkthrough
+
+1. Click the extension icon
+2. Select your recorded workflow
+3. Click **Start Walkthrough**
+4. Follow the guided overlay instructions
+
+---
+
+## Troubleshooting
+
+### Backend won't start
+
+```bash
+# Check virtual environment is activated
+which python  # Should show venv path
+
+# Check all dependencies installed
+pip install -r requirements.txt
+
+# Check database migrations
+alembic upgrade head
+
+# Check port 8000 is free
+lsof -i :8000
+```
+
+### Dashboard shows "Network Error"
+
+```bash
+# Verify backend is running
+curl http://localhost:8000/api/health
+
+# Check CORS is configured (backend should allow localhost:5173)
+```
+
+### Extension doesn't load
+
+```bash
+# Rebuild the extension
+cd extension
+npm run build
+
+# Check for build errors
+npm run build 2>&1 | head -50
+
+# Reload in Chrome:
+# 1. Go to chrome://extensions
+# 2. Click refresh icon on the extension card
+```
+
+### AI Labeling not working
+
+```bash
+# Check Celery worker is running
+# Should see "celery@hostname ready" message
+
+# Check ANTHROPIC_API_KEY is set
+echo $ANTHROPIC_API_KEY
+
+# Check Redis is running (if using Redis)
+redis-cli ping  # Should return PONG
+```
+
+### Database errors
+
+```bash
+# Reset database (development only!)
+cd backend
+rm app.db  # Delete SQLite file
+alembic upgrade head  # Recreate tables
+```
 
 ---
 
@@ -126,74 +235,83 @@ Then load the extension in Chrome:
 ```
 workflow-platform/
 ├── extension/           # Chrome extension (TypeScript + React)
+│   ├── src/
+│   │   ├── background/  # Service worker
+│   │   ├── content/     # Content scripts (recording, walkthrough)
+│   │   ├── popup/       # Extension popup UI
+│   │   └── shared/      # Shared types and utilities
+│   └── dist/            # Built extension (load this in Chrome)
+│
 ├── backend/             # FastAPI server (Python)
-├── dashboard/           # Web dashboard (React)
+│   ├── app/
+│   │   ├── api/         # REST endpoints
+│   │   ├── models/      # SQLAlchemy models
+│   │   ├── services/    # Business logic
+│   │   └── tasks/       # Celery async tasks
+│   └── tests/           # pytest tests
+│
+├── dashboard/           # Web dashboard (React + Vite)
+│   ├── src/
+│   │   ├── components/  # React components
+│   │   ├── pages/       # Page components
+│   │   └── api/         # API client
+│   └── dist/            # Production build
+│
 ├── docs/                # Technical documentation
 ├── design_docs/         # Product specifications
-├── memory.md            # Agent's project memory
-├── tasks.md             # Current sprint tasks
-└── README.md            # This file
+└── .claude/             # Agent configuration and memory
 ```
 
-See `docs/architecture.md` for detailed system architecture.
+---
+
+## Running Tests
+
+### Backend Tests
+```bash
+cd backend
+source venv/bin/activate
+pytest                           # All tests
+pytest tests/unit/               # Unit tests only
+pytest tests/integration/        # Integration tests only
+pytest -v --tb=short            # Verbose with short tracebacks
+```
+
+### Extension Tests
+```bash
+cd extension
+npm test                        # All tests
+npm test -- --watch            # Watch mode
+npm test -- --coverage         # With coverage report
+```
+
+### Dashboard Tests
+```bash
+cd dashboard
+npm test                        # All tests
+npm test -- --coverage         # With coverage report
+```
 
 ---
 
 ## Core Technologies
 
-- **Frontend**: React 18, TypeScript, Tailwind CSS, Zustand
-- **Backend**: FastAPI, SQLAlchemy, Celery, Redis
-- **Database**: SQLite (MVP) → PostgreSQL (production)
-- **AI**: Anthropic Claude 3.5 Sonnet
-- **Storage**: AWS S3
-- **Auth**: JWT with bcrypt
+| Component | Technology |
+|-----------|------------|
+| **Frontend** | React 18, TypeScript, Tailwind CSS, Zustand |
+| **Backend** | FastAPI, SQLAlchemy, Celery, Redis |
+| **Database** | SQLite (dev), PostgreSQL (production) |
+| **AI** | Anthropic Claude 3.5 Sonnet |
+| **Storage** | AWS S3 (or local filesystem) |
+| **Auth** | JWT with bcrypt |
 
 ---
 
 ## Development Workflow
 
-1. Check `tasks.md` for current sprint tasks
-2. Create feature branch: `feature/TICKET-XXX-description`
-3. Implement following test-driven development
-4. Update `memory.md` with new patterns/decisions
-5. Run tests before committing
-6. Update documentation as needed
+1. Check `.claude/backlog.md` for prioritized tasks
+2. Create feature branch: `git checkout -b feature/TICKET-description`
+3. Implement with tests
+4. Run test suite before committing
+5. Update documentation if API changes
+6. Submit PR for review
 
----
-
-## Documentation Structure
-
-- **`docs/`** - Technical documentation (architecture, components)
-- **`design_docs/`** - Business and product specifications
-- **`memory.md`** - Project knowledge and decisions
-- **`tasks.md`** - Current sprint plan
-
----
-
-## Troubleshooting
-
-### Backend won't start
-- Ensure virtual environment is activated
-- Check all environment variables in `.env`
-- Verify Python version: `python --version` (should be 3.11+)
-
-### Extension won't load
-- Check for build errors: `npm run dev`
-- Ensure manifest.json is in dist folder
-- Check Chrome extension error logs
-
-### Database errors
-- Ensure migrations have run: `alembic upgrade head`
-- Check DATABASE_URL in `.env`
-
----
-
-## Contributing
-
-See `agent.md` for the autonomous development workflow and standards.
-
----
-
-## License
-
-[To be determined]

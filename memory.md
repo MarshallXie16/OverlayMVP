@@ -11,6 +11,29 @@ Building a Chrome Extension + Web Dashboard + API server for recording, managing
 
 ## Recent Work Summary
 
+### Sprint 4: Company & Team Management (2025-12-24)
+**Objective:** Implement company management APIs, team invite flow, and dashboard team view.
+
+**What We Built:**
+- Company API endpoints (`/api/companies/me`, `/me/members`, `/invite/{token}`)
+- Team member listing and removal (admin only)
+- Invite token generation (UUID stored on company record)
+- Public invite link verification endpoint
+- Team management UI (TeamView page with mock data)
+- Invite flow: Dashboard link → Signup with company join
+- Extension installation modal with Chrome Web Store placeholder
+
+**Current Status:**
+- Backend: Company APIs complete and tested
+- Frontend: TeamView works with real invite token display
+- Flow: Invite → Signup → Join company works E2E
+- Next: Full RBAC system (Admin > Editor > Viewer roles)
+
+**Test Status (2025-12-24):**
+- Backend: 238 passed, 14 failed, 5 errors (documented in backlog as TEST-FIX-001)
+- Extension: 373 passed, 37 failed (documented in backlog as TEST-FIX-002)
+- Dashboard: 28 passed (100%)
+
 ### Sprint 3: Walkthrough Mode Foundation (2025-11-24)
 **Objective:** Implement foundation for walkthrough mode - health indicators, start button, messaging infrastructure, and element finding.
 
@@ -32,7 +55,7 @@ Building a Chrome Extension + Web Dashboard + API server for recording, managing
 - Element finder provides robustness for UI changes (MVP for auto-healing)
 - Health metrics automatically track workflow reliability
 
-**Status:** ✅ 5/5 tickets complete - Foundation ready for overlay UI (next session)
+**Status:** ✅ 5/5 tickets complete - Foundation ready for overlay UI
 
 ### Sprint 2: AI-Powered Workflow Labeling (2024-11-23)
 **Objective:** Implement complete AI labeling pipeline with Claude Vision API and admin review/edit interface.
@@ -178,46 +201,46 @@ Building a Chrome Extension + Web Dashboard + API server for recording, managing
 **Benefit:** Catches unused variables, type errors, undefined access early before commit.  
 **Note:** Especially important for TypeScript projects with strict type checking.
 
-### 10. AI SDK Major Version Upgrades
-**Problem:** `'Anthropic' object has no attribute 'messages'` error.  
-**Root Cause:** Outdated anthropic package (0.7.1) had completely different API structure.  
-**Lesson:** AI SDKs have major breaking changes between versions - check docs carefully.  
+### 19. AI SDK Major Version Upgrades
+**Problem:** `'Anthropic' object has no attribute 'messages'` error.
+**Root Cause:** Outdated anthropic package (0.7.1) had completely different API structure.
+**Lesson:** AI SDKs have major breaking changes between versions - check docs carefully.
 **Solution:** Upgraded to 0.74.1, changed all calls to `client.messages.create()`.
 
-### 11. Claude Tool Calling vs Prompt Engineering
-**Problem:** Claude returned plain text "Here's the JSON: {...}" instead of pure JSON.  
-**Initial Approach:** Tried regex to extract JSON from text (brittle).  
-**Lesson:** Use tool calling for guaranteed structured output, not prompt engineering.  
+### 20. Claude Tool Calling vs Prompt Engineering
+**Problem:** Claude returned plain text "Here's the JSON: {...}" instead of pure JSON.
+**Initial Approach:** Tried regex to extract JSON from text (brittle).
+**Lesson:** Use tool calling for guaranteed structured output, not prompt engineering.
 **Solution:** Defined `record_workflow_labels` tool with explicit schema, forced tool use.
 
-### 12. Local Development HTTPS Requirements
-**Problem:** Claude API rejected local screenshot URLs: "Only HTTPS URLs supported".  
-**Workaround Considered:** Set up local HTTPS (complex).  
-**Lesson:** Convert local files to base64 for AI APIs with HTTPS requirements.  
+### 21. Local Development HTTPS Requirements
+**Problem:** Claude API rejected local screenshot URLs: "Only HTTPS URLs supported".
+**Workaround Considered:** Set up local HTTPS (complex).
+**Lesson:** Convert local files to base64 for AI APIs with HTTPS requirements.
 **Solution:** Read screenshot files, encode as base64, send in API request.
 
-### 13. Mocked Storage Breaks Dependent Features
-**Problem:** Screenshots showed as broken images in dashboard.  
-**Root Cause:** S3 utilities completely mocked, returned fake URLs, files never saved.  
-**Lesson:** MVP needs real storage implementation, even if local; mocks break integration.  
+### 22. Mocked Storage Breaks Dependent Features
+**Problem:** Screenshots showed as broken images in dashboard.
+**Root Cause:** S3 utilities completely mocked, returned fake URLs, files never saved.
+**Lesson:** MVP needs real storage implementation, even if local; mocks break integration.
 **Solution:** Implemented local file storage with FastAPI StaticFiles serving.
 
-### 14. UI Navigation Must Ship With Features
-**Problem:** Review page existed but users couldn't find it (had to type URL manually).  
-**Root Cause:** Developer implemented page but forgot navigation button.  
-**Lesson:** ALWAYS add UI navigation in same commit as new page/feature.  
+### 23. UI Navigation Must Ship With Features
+**Problem:** Review page existed but users couldn't find it (had to type URL manually).
+**Root Cause:** Developer implemented page but forgot navigation button.
+**Lesson:** ALWAYS add UI navigation in same commit as new page/feature.
 **Solution:** Added "Review & Edit" button on workflow detail page.
 
-### 15. Empty Response Bodies
-**Problem:** DELETE workflow threw JSON parse error despite successful deletion.  
-**Root Cause:** 204 No Content returns empty body, client tried to parse JSON.  
-**Lesson:** Check response status and content-length before calling `.json()`.  
+### 24. Empty Response Bodies
+**Problem:** DELETE workflow threw JSON parse error despite successful deletion.
+**Root Cause:** 204 No Content returns empty body, client tried to parse JSON.
+**Lesson:** Check response status and content-length before calling `.json()`.
 **Solution:** Return `undefined` for 204 responses or empty bodies.
 
-### 16. Dependency Type Assumptions
-**Problem:** `TypeError: 'User' object is not subscriptable` when accessing `current_user["company_id"]`.  
-**Root Cause:** Assumed FastAPI dependency returned dict, but it returns User object.  
-**Lesson:** Verify what types dependencies actually return, don't assume.  
+### 25. Dependency Type Assumptions
+**Problem:** `TypeError: 'User' object is not subscriptable` when accessing `current_user["company_id"]`.
+**Root Cause:** Assumed FastAPI dependency returned dict, but it returns User object.
+**Lesson:** Verify what types dependencies actually return, don't assume.
 **Solution:** Changed to `current_user.company_id` (attribute access).
 
 ---
@@ -327,7 +350,10 @@ workflow-platform/
 
 ### Core Tables
 - **companies** - Multi-tenant root (each company isolated)
+  - `invite_token` - UUID for team invite links (generated on company creation)
 - **users** - Team members (admin vs regular roles)
+  - `role` - "admin" or "regular" (future: "editor", "viewer")
+  - `company_id` - FK to companies (set on signup via invite or new company)
 - **workflows** - Recorded workflow metadata
 - **steps** - Individual workflow steps with selectors, metadata
 - **screenshots** - Deduplicated screenshot storage (SHA-256 hash)
@@ -771,6 +797,52 @@ User Action → Content Script (Recorder) → IndexedDB (Buffer) → Background 
 
 ---
 
+## Development Tools
+
+### Chrome DevTools MCP (Added Dec 2024)
+
+We use Chrome DevTools MCP for AI-assisted debugging of the Chrome extension and dashboard.
+
+**What it enables:**
+- Inspect DOM elements on pages where the extension runs
+- View console logs and JavaScript errors
+- Monitor network requests to the backend API
+- Take screenshots for visual debugging
+- Execute JavaScript in page context
+- Analyze performance with Chrome tracing
+
+**Setup:**
+1. Start Chrome with remote debugging: `./scripts/debug-chrome.sh`
+2. In Chrome, go to `chrome://inspect/#remote-debugging` and enable it
+3. Claude can now use 26 debugging tools via MCP
+
+**Configuration:**
+- MCP server: `npx chrome-devtools-mcp@latest --autoConnect`
+- Connects to Chrome on port 9222
+- Full documentation: `docs/debugging-with-mcp.md`
+
+**Common debugging prompts:**
+- "Check the console for JavaScript errors from the extension"
+- "List all network requests to localhost:8000"
+- "Take a snapshot of the DOM to find the overlay elements"
+- "Take a screenshot of the current page state"
+
+---
+
 ## Next Steps
 
-See `tasks.md` for current sprint plan and `roadmap.md` for long-term milestones.
+**Current Sprint: Company & User Management System**
+Sprint plan at: `.claude/plans/mossy-rolling-kettle.md`
+
+**Immediate Priorities:**
+1. Address Codex review feedback on sprint plan (invite lifecycle, SQLite migration)
+2. Implement RBAC with 3-tier roles (Admin > Editor > Viewer)
+3. Add user suspension capability
+4. Integrate Resend for email invites
+
+**Tech Debt (see backlog.md):**
+- TEST-FIX-001: Fix 14 failing backend tests
+- TEST-FIX-002: Fix 37 failing extension tests
+- SECURITY-001: XPath injection vulnerability in candidateFinder.ts
+
+See `backlog.md` for full prioritized list and `roadmap.md` for long-term milestones.

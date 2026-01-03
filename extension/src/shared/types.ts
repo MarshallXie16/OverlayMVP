@@ -73,7 +73,13 @@ export interface UpdateWorkflowRequest {
   name?: string;
   description?: string | null;
   tags?: string[];
-  status?: 'draft' | 'processing' | 'active' | 'needs_review' | 'broken' | 'archived';
+  status?:
+    | "draft"
+    | "processing"
+    | "active"
+    | "needs_review"
+    | "broken"
+    | "archived";
 }
 
 /**
@@ -87,7 +93,13 @@ export interface WorkflowResponse {
   description: string | null;
   starting_url: string;
   tags: string[];
-  status: 'draft' | 'processing' | 'active' | 'needs_review' | 'broken' | 'archived';
+  status:
+    | "draft"
+    | "processing"
+    | "active"
+    | "needs_review"
+    | "broken"
+    | "archived";
   success_rate: number;
   total_uses: number;
   consecutive_failures: number;
@@ -110,7 +122,13 @@ export interface WorkflowListItem {
   description: string | null;
   starting_url: string;
   tags: string[];
-  status: 'draft' | 'processing' | 'active' | 'needs_review' | 'broken' | 'archived';
+  status:
+    | "draft"
+    | "processing"
+    | "active"
+    | "needs_review"
+    | "broken"
+    | "archived";
   success_rate: number;
   total_uses: number;
   consecutive_failures: number;
@@ -136,7 +154,7 @@ export interface WorkflowListResponse {
  */
 export interface CreateWorkflowResponse {
   workflow_id: number;
-  status: 'processing';
+  status: "processing";
 }
 
 // ============================================================================
@@ -149,7 +167,12 @@ export interface CreateWorkflowResponse {
 export interface StepCreate {
   step_number: number;
   timestamp?: string | null; // ISO 8601 datetime
-  action_type: 'click' | 'input_commit' | 'select_change' | 'submit' | 'navigate';
+  action_type:
+    | "click"
+    | "input_commit"
+    | "select_change"
+    | "submit"
+    | "navigate";
   selectors: Record<string, any>;
   element_meta: Record<string, any>;
   page_context: Record<string, any>;
@@ -240,20 +263,22 @@ export interface ScreenshotResponse {
  * Message types for Chrome extension communication
  */
 export type MessageType =
-  | 'PING'
-  | 'PONG'
-  | 'START_RECORDING'
-  | 'STOP_RECORDING'
-  | 'START_WALKTHROUGH'
-  | 'WALKTHROUGH_DATA'
-  | 'WALKTHROUGH_ERROR'
-  | 'CAPTURE_SCREENSHOT'
-  | 'GET_RECORDING_STATE'
-  | 'SAVE_STEP'
-  | 'SCREENSHOT_CAPTURED'
-  | 'LOG_EXECUTION'
-  | 'STEP_SAVED'
-  | 'ERROR';
+  | "PING"
+  | "PONG"
+  | "START_RECORDING"
+  | "STOP_RECORDING"
+  | "START_WALKTHROUGH"
+  | "WALKTHROUGH_DATA"
+  | "WALKTHROUGH_ERROR"
+  | "CAPTURE_SCREENSHOT"
+  | "GET_RECORDING_STATE"
+  | "SAVE_STEP"
+  | "SCREENSHOT_CAPTURED"
+  | "LOG_EXECUTION"
+  | "LOG_HEALING_ATTEMPT"
+  | "VALIDATE_HEALING"
+  | "STEP_SAVED"
+  | "ERROR";
 
 /**
  * Extension message structure
@@ -289,7 +314,7 @@ export interface WalkthroughState {
   steps: StepResponse[];
   currentStepIndex: number;
   totalSteps: number;
-  status: 'initializing' | 'active' | 'completed' | 'error';
+  status: "initializing" | "active" | "completed" | "error";
   error: string | null;
   // EXT-005: Retry tracking
   retryAttempts: Map<number, number>; // stepIndex -> attempt count
@@ -322,8 +347,98 @@ export interface ApiError {
  * API request options
  */
 export interface ApiRequestOptions {
-  method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+  method?: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
   body?: any;
   headers?: Record<string, string>;
   requiresAuth?: boolean;
+}
+
+// ============================================================================
+// HEALING VALIDATION TYPES (backend/app/schemas/healing.py)
+// ============================================================================
+
+/**
+ * Visual region of the page where element appears
+ */
+export type VisualRegion =
+  | "header"
+  | "main"
+  | "footer"
+  | "sidebar"
+  | "modal"
+  | "unknown";
+
+/**
+ * Form context for an element
+ */
+export interface FormContextApi {
+  form_id: string | null;
+  form_action: string | null;
+  form_name: string | null;
+  form_classes: string[];
+  field_index: number;
+  total_fields: number;
+}
+
+/**
+ * Nearby landmarks for contextual anchoring
+ */
+export interface NearbyLandmarksApi {
+  closest_heading: { text: string; level: number; distance: number } | null;
+  closest_label: { text: string; for_id: string | null } | null;
+  sibling_texts: string[];
+  container_text: string | null;
+}
+
+/**
+ * Element context for healing validation API
+ */
+export interface ElementContextApi {
+  tag_name: string;
+  text: string | null;
+  role: string | null;
+  type: string | null;
+  id: string | null;
+  name: string | null;
+  classes: string[];
+  data_testid: string | null;
+  label_text: string | null;
+  placeholder: string | null;
+  aria_label: string | null;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  visual_region: VisualRegion;
+  form_context: FormContextApi | null;
+  nearby_landmarks: NearbyLandmarksApi | null;
+}
+
+/**
+ * Request payload for healing validation
+ */
+export interface HealingValidationRequest {
+  workflow_id: number;
+  step_id: number;
+  original_context: ElementContextApi;
+  candidate_context: ElementContextApi;
+  deterministic_score: number;
+  factor_scores: Record<string, number>;
+  original_screenshot: string | null;
+  current_screenshot: string | null;
+  page_url: string;
+  original_url: string;
+  field_label: string | null;
+}
+
+/**
+ * Response from healing validation
+ */
+export interface HealingValidationResponse {
+  is_match: boolean;
+  ai_confidence: number;
+  reasoning: string;
+  combined_score: number;
+  recommendation: "accept" | "reject" | "prompt_user";
+  ai_model: string;
 }
