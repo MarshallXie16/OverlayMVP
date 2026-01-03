@@ -50,7 +50,13 @@ export interface WorkflowListItem {
   description: string | null;
   starting_url: string;
   tags: string[];
-  status: 'draft' | 'processing' | 'active' | 'needs_review' | 'broken' | 'archived';
+  status:
+    | "draft"
+    | "processing"
+    | "active"
+    | "needs_review"
+    | "broken"
+    | "archived";
   success_rate: number;
   total_uses: number;
   consecutive_failures: number;
@@ -77,33 +83,38 @@ export interface StepResponse {
   workflow_id: number;
   step_number: number;
   timestamp: string | null;
-  action_type: 'click' | 'input_commit' | 'select_change' | 'submit' | 'navigate';
+  action_type:
+    | "click"
+    | "input_commit"
+    | "select_change"
+    | "submit"
+    | "navigate";
   selectors: Selectors;
   element_meta: ElementMeta;
   page_context: PageContext;
   action_data: Record<string, any> | null;
   dom_context: Record<string, any> | null;
   screenshot_id: number | null;
-  
+
   // AI-generated labels
   field_label: string | null;
   instruction: string | null;
   ai_confidence: number | null;
   ai_model: string | null;
   ai_generated_at: string | null;
-  
+
   // Admin edits
   label_edited: boolean;
   instruction_edited: boolean;
   edited_by: number | null;
   edited_at: string | null;
-  
+
   // Auto-healing (future)
   healed_selectors: Record<string, any> | null;
   healed_at: string | null;
   healing_confidence: number | null;
   healing_method: string | null;
-  
+
   created_at: string;
 }
 
@@ -116,7 +127,7 @@ export interface UpdateWorkflowRequest {
   name?: string;
   description?: string;
   tags?: string[];
-  status?: 'draft' | 'active' | 'archived' | 'needs_review' | 'broken';
+  status?: "draft" | "active" | "archived" | "needs_review" | "broken";
 }
 
 export interface Selectors {
@@ -160,6 +171,176 @@ export interface PageContext {
 export interface Viewport {
   width: number;
   height: number;
+}
+
+// ============================================================================
+// COMPANY TYPES
+// ============================================================================
+
+export type UserRole = "admin" | "editor" | "viewer";
+export type UserStatus = "active" | "suspended";
+
+export interface CompanyResponse {
+  id: number;
+  name: string;
+  invite_token: string;
+  created_at: string;
+  member_count: number;
+}
+
+export interface TeamMemberResponse {
+  id: number;
+  name: string | null;
+  email: string;
+  role: UserRole;
+  status: UserStatus;
+  created_at: string;
+  last_login_at: string | null;
+}
+
+export interface UpdateCompanyRequest {
+  name: string;
+}
+
+export interface UpdateMemberRoleRequest {
+  role: UserRole;
+}
+
+export interface UpdateMemberStatusRequest {
+  status: UserStatus;
+}
+
+export interface InviteInfoResponse {
+  company_name: string;
+}
+
+// ============================================================================
+// INVITE TYPES
+// ============================================================================
+
+export interface InviteCreateRequest {
+  email: string;
+  role: UserRole;
+}
+
+export interface InviteResponse {
+  id: number;
+  token: string;
+  email: string;
+  role: UserRole;
+  company_id: number;
+  invited_by_id: number;
+  expires_at: string;
+  accepted_at: string | null;
+  created_at: string;
+}
+
+export interface InviteListResponse {
+  invites: InviteResponse[];
+  total: number;
+}
+
+export interface InviteVerifyResponse {
+  valid: boolean;
+  company_name: string | null;
+  role: UserRole | null;
+  email: string | null;
+  expired: boolean;
+}
+
+// ============================================================================
+// NOTIFICATION TYPES
+// ============================================================================
+
+export type NotificationType =
+  | "workflow_broken"
+  | "workflow_healed"
+  | "low_confidence"
+  | "high_failure_rate";
+
+export type NotificationSeverity = "info" | "warning" | "error";
+
+export interface NotificationResponse {
+  id: number;
+  type: NotificationType;
+  severity: NotificationSeverity;
+  title: string;
+  message: string | null;
+  action_url: string | null;
+  workflow_id: number | null;
+  read: boolean;
+  created_at: string;
+}
+
+export interface NotificationListResponse {
+  notifications: NotificationResponse[];
+  unread_count: number;
+  total: number;
+}
+
+export interface MarkAsReadRequest {
+  read: boolean;
+}
+
+// ============================================================================
+// HEALTH DASHBOARD TYPES
+// ============================================================================
+
+export type HealthLogStatus =
+  | "success"
+  | "healed_deterministic"
+  | "healed_ai"
+  | "failed";
+
+export interface HealthLogResponse {
+  id: number;
+  workflow_id: number;
+  workflow_name: string;
+  step_id: number | null;
+  status: HealthLogStatus;
+  error_type: string | null;
+  error_message: string | null;
+  healing_confidence: number | null;
+  execution_time_ms: number | null;
+  page_url: string | null;
+  created_at: string;
+}
+
+export interface HealthLogListResponse {
+  logs: HealthLogResponse[];
+  total: number;
+}
+
+export interface HealthStatsResponse {
+  total_executions: number;
+  success_count: number;
+  healed_count: number;
+  failed_count: number;
+  success_rate: number;
+  healing_rate: number;
+  avg_execution_time_ms: number;
+  workflows_by_status: Record<string, number>;
+}
+
+// ============================================================================
+// SLACK INTEGRATION TYPES
+// ============================================================================
+
+export interface SlackSettingsRequest {
+  webhook_url?: string | null;
+  enabled: boolean;
+  notify_on: NotificationType[];
+}
+
+export interface SlackSettingsResponse {
+  enabled: boolean;
+  webhook_configured: boolean;
+  notify_on: NotificationType[];
+}
+
+export interface SlackTestResponse {
+  success: boolean;
+  message: string;
 }
 
 // ============================================================================

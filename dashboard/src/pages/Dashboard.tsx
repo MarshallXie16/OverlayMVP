@@ -1,19 +1,29 @@
 /**
  * Dashboard Page
- * Main dashboard with workflow list
+ * Glassmorphic dashboard with workflow grid and health stats
  */
 
-import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { apiClient } from '@/api/client';
-import type { WorkflowListItem } from '@/api/types';
-import { HealthBadge } from '@/components/HealthBadge';
-import { compareByHealth } from '@/utils/workflowHealth';
+import { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
+import { Search, AlertTriangle, Loader2 } from "lucide-react";
+import { apiClient } from "@/api/client";
+import type { WorkflowListItem } from "@/api/types";
+import { useAuthStore } from "@/store/auth";
+import { Button } from "@/components/ui/Button";
+import { WorkflowCard } from "@/components/workflows/WorkflowCard";
+import { mapWorkflowListItemToDesign } from "@/utils/typeMappers";
+import { compareByHealth } from "@/utils/workflowHealth";
+import { DesignWorkflow, WorkflowStatus } from "@/types/design";
 
 export const Dashboard: React.FC = () => {
   const [workflows, setWorkflows] = useState<WorkflowListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [workflowToDelete, setWorkflowToDelete] = useState<string | null>(null);
+
+  const { user } = useAuthStore();
+  const navigate = useNavigate();
 
   useEffect(() => {
     loadWorkflows();
@@ -24,210 +34,300 @@ export const Dashboard: React.FC = () => {
     setError(null);
     try {
       const response = await apiClient.getWorkflows(50, 0);
-      // Sort workflows by health: broken first, then needs_review, then healthy
       const sortedWorkflows = [...response.workflows].sort(compareByHealth);
       setWorkflows(sortedWorkflows);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load workflows');
+      setError(err instanceof Error ? err.message : "Failed to load workflows");
     } finally {
       setIsLoading(false);
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active':
-        return 'bg-green-100 text-green-800';
-      case 'processing':
-        return 'bg-blue-100 text-blue-800';
-      case 'needs_review':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'broken':
-        return 'bg-red-100 text-red-800';
-      case 'draft':
-        return 'bg-gray-100 text-gray-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
+  // Convert to design workflows
+  const designWorkflows: DesignWorkflow[] = useMemo(() => {
+    return workflows.map((wf) =>
+      mapWorkflowListItemToDesign(wf, user?.name || "Unknown"),
+    );
+  }, [workflows, user?.name]);
+
+  // Filter by search
+  const filteredWorkflows = useMemo(() => {
+    if (!searchQuery.trim()) return designWorkflows;
+    const query = searchQuery.toLowerCase();
+    return designWorkflows.filter(
+      (wf) =>
+        wf.title.toLowerCase().includes(query) ||
+        wf.description.toLowerCase().includes(query),
+    );
+  }, [designWorkflows, searchQuery]);
+
+  // Calculate health stats
+  const healthStats = useMemo(() => {
+    const total = workflows.length;
+    const totalRuns = workflows.reduce((sum, wf) => sum + wf.total_uses, 0);
+    const successRates = workflows
+      .filter((wf) => wf.total_uses > 0)
+      .map((wf) => wf.success_rate);
+    const avgSuccessRate =
+      successRates.length > 0
+        ? Math.round(
+            (successRates.reduce((a, b) => a + b, 0) / successRates.length) *
+              100,
+          )
+        : 100;
+    const brokenCount = designWorkflows.filter(
+      (wf) => wf.status === WorkflowStatus.BROKEN,
+    ).length;
+
+    return {
+      successRate: avgSuccessRate,
+      totalWorkflows: total,
+      totalRuns,
+      brokenWorkflows: brokenCount,
+    };
+  }, [workflows, designWorkflows]);
+
+  const handleSelectWorkflow = (wf: DesignWorkflow) => {
+    navigate(`/workflows/${wf.id}`);
   };
 
-  const formatDate = (dateString: string) => {
-    try {
-      const date = new Date(dateString);
-      
-      // Validate date is valid
-      if (isNaN(date.getTime())) {
-        return 'Invalid date';
-      }
-      
-      const now = new Date();
-      const diffMs = now.getTime() - date.getTime();
-      
-      // Handle negative diff (future dates)
-      if (diffMs < 0) {
-        return 'Just now';
-      }
-      
-      const diffSecs = Math.floor(diffMs / 1000);
-      const diffMins = Math.floor(diffMs / 60000);
-      const diffHours = Math.floor(diffMs / 3600000);
-      const diffDays = Math.floor(diffMs / 86400000);
+  const handleDeleteWorkflow = async () => {
+    if (!workflowToDelete) return;
 
-      if (diffSecs < 60) return 'Just now';
-      if (diffMins < 60) return `${diffMins}m ago`;
-      if (diffHours < 24) return `${diffHours}h ago`;
-      if (diffDays < 30) return `${diffDays}d ago`;
-      
-      // For older dates, show full date
-      return date.toLocaleDateString();
+    try {
+      await apiClient.deleteWorkflow(Number(workflowToDelete));
+      setWorkflows(workflows.filter((w) => String(w.id) !== workflowToDelete));
+      setWorkflowToDelete(null);
     } catch (err) {
-      console.error('Error formatting date:', dateString, err);
-      return 'Unknown';
+      console.error("Failed to delete workflow:", err);
     }
   };
 
   if (isLoading) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+      <div className="flex flex-col justify-center items-center h-64 gap-4">
+        <Loader2 className="h-12 w-12 text-primary-600 animate-spin" />
+        <p className="text-neutral-500">Loading workflows...</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="rounded-md bg-red-50 p-4">
-        <div className="text-sm text-red-800">{error}</div>
+      <div className="rounded-xl bg-red-50 border border-red-200 p-6">
+        <div className="text-red-800">{error}</div>
+        <Button variant="secondary" className="mt-4" onClick={loadWorkflows}>
+          Try Again
+        </Button>
       </div>
     );
   }
 
   return (
-    <div>
+    <div className="animate-fade-in pb-20">
+      {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Workflows</h1>
-        <p className="mt-2 text-sm text-gray-600">
-          Manage and monitor your recorded workflows
+        <h1 className="text-3xl font-extrabold text-neutral-900 tracking-tight mb-2">
+          Operations Dashboard
+        </h1>
+        <p className="text-neutral-500">
+          Real-time overview of your team's automation health and activity.
         </p>
       </div>
 
-      {workflows.length === 0 ? (
-        <div className="text-center py-12">
-          <svg
-            className="mx-auto h-16 w-16 text-gray-400"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-            />
-          </svg>
-          <h3 className="mt-4 text-lg font-medium text-gray-900">
-            No workflows yet
-          </h3>
-          <p className="mt-2 text-sm text-gray-500 max-w-md mx-auto">
-            Create your first workflow by recording your actions using the Chrome extension.
-            It's easy: just click the extension icon and hit "Start Recording"!
-          </p>
-          <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4 max-w-lg mx-auto">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <svg className="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <div className="ml-3 flex-1">
-                <h4 className="text-sm font-medium text-blue-900">
-                  How to create a workflow
-                </h4>
-                <div className="mt-2 text-sm text-blue-700">
-                  <ol className="list-decimal list-inside space-y-1 text-left">
-                    <li>Click the extension icon in your Chrome toolbar</li>
-                    <li>Enter a name for your workflow</li>
-                    <li>Click "Start Recording" to begin</li>
-                    <li>Perform the actions you want to record</li>
-                    <li>Click "Stop Recording" when finished</li>
-                    <li>Your workflow will appear here automatically</li>
-                  </ol>
-                </div>
-              </div>
-            </div>
+      {/* Stats Panel */}
+      <div className="relative bg-white/60 backdrop-blur-xl rounded-2xl border border-white/60 shadow-sm mb-12 p-6">
+        {/* Floating Status Badge */}
+        <div className="absolute top-4 right-4 flex items-center gap-2 px-3 py-1.5 bg-white/40 backdrop-blur-md text-green-700 rounded-full border border-green-200/50 shadow-sm z-10">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span>
+          </span>
+          <span className="font-bold text-sm">Operational</span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-2">
+          {/* Success Rate */}
+          <div className="bg-white/50 rounded-xl p-5 border border-white/60 shadow-sm flex flex-col justify-center h-32 hover:shadow-md transition-shadow">
+            <span className="text-xs font-bold text-neutral-400 uppercase tracking-wider mb-2">
+              Success Rate
+            </span>
+            <span className="text-3xl font-bold text-neutral-900">
+              {healthStats.successRate}%
+            </span>
+            <span className="text-xs text-green-600 font-medium mt-1">
+              All time average
+            </span>
+          </div>
+
+          {/* Total Workflows */}
+          <div className="bg-white/50 rounded-xl p-5 border border-white/60 shadow-sm flex flex-col justify-center h-32 hover:shadow-md transition-shadow">
+            <span className="text-xs font-bold text-neutral-400 uppercase tracking-wider mb-2">
+              Total Workflows
+            </span>
+            <span className="text-3xl font-bold text-neutral-900">
+              {healthStats.totalWorkflows}
+            </span>
+            <span className="text-xs text-neutral-500 mt-1">
+              Active workflows
+            </span>
+          </div>
+
+          {/* Total Runs */}
+          <div className="bg-white/50 rounded-xl p-5 border border-white/60 shadow-sm flex flex-col justify-center h-32 hover:shadow-md transition-shadow">
+            <span className="text-xs font-bold text-neutral-400 uppercase tracking-wider mb-2">
+              Total Runs
+            </span>
+            <span className="text-3xl font-bold text-neutral-900">
+              {healthStats.totalRuns.toLocaleString()}
+            </span>
+            <span className="text-xs text-neutral-500 mt-1">All time</span>
+          </div>
+
+          {/* Failing Workflows */}
+          <div className="bg-white/50 rounded-xl p-5 border border-white/60 shadow-sm flex flex-col justify-center h-32 hover:shadow-md transition-shadow">
+            <span className="text-xs font-bold text-neutral-400 uppercase tracking-wider mb-2">
+              Failing Workflows
+            </span>
+            <span
+              className={`text-3xl font-bold ${healthStats.brokenWorkflows > 0 ? "text-red-600" : "text-neutral-900"}`}
+            >
+              {healthStats.brokenWorkflows}
+            </span>
+            {healthStats.brokenWorkflows > 0 ? (
+              <span className="text-xs text-red-600 font-medium mt-1">
+                Needs attention
+              </span>
+            ) : (
+              <span className="text-xs text-neutral-500 mt-1">
+                All systems go
+              </span>
+            )}
           </div>
         </div>
+      </div>
+
+      {/* Search & Title */}
+      <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+        <h2 className="text-2xl font-bold text-neutral-900">
+          Recent Workflows
+        </h2>
+        <div className="relative w-full md:w-96">
+          <Search
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400"
+            size={18}
+          />
+          <input
+            type="text"
+            placeholder="Search workflows..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-3 rounded-xl border border-neutral-200 bg-white/80 backdrop-blur focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500 transition-all shadow-sm"
+          />
+        </div>
+      </div>
+
+      {/* Workflow Grid */}
+      {filteredWorkflows.length === 0 && workflows.length === 0 ? (
+        <div className="text-center py-16 glass-card rounded-2xl">
+          <div className="w-20 h-20 rounded-full bg-neutral-100 flex items-center justify-center mx-auto mb-6">
+            <Search className="h-10 w-10 text-neutral-300" />
+          </div>
+          <h3 className="text-xl font-bold text-neutral-900 mb-2">
+            No workflows yet
+          </h3>
+          <p className="text-neutral-500 max-w-md mx-auto mb-6">
+            Create your first workflow by recording your actions using the
+            Chrome extension.
+          </p>
+          <div className="bg-primary-50 border border-primary-200 rounded-xl p-6 max-w-lg mx-auto text-left">
+            <h4 className="font-semibold text-primary-900 mb-3">
+              How to create a workflow:
+            </h4>
+            <ol className="list-decimal list-inside space-y-2 text-sm text-primary-800">
+              <li>Click the extension icon in your Chrome toolbar</li>
+              <li>Enter a name for your workflow</li>
+              <li>Click "Start Recording" to begin</li>
+              <li>Perform the actions you want to record</li>
+              <li>Click "Stop Recording" when finished</li>
+            </ol>
+          </div>
+        </div>
+      ) : filteredWorkflows.length === 0 ? (
+        <div className="text-center py-16 glass-card rounded-2xl">
+          <Search className="h-12 w-12 text-neutral-300 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-neutral-700">
+            No matching workflows
+          </h3>
+          <p className="text-neutral-500 mt-1">Try a different search term</p>
+        </div>
       ) : (
-        <div className="bg-white shadow overflow-hidden sm:rounded-md">
-          <ul className="divide-y divide-gray-200">
-            {workflows.map((workflow) => (
-              <li key={workflow.id}>
-                <Link
-                  to={`/workflows/${workflow.id}`}
-                  className="block hover:bg-gray-50 transition-colors"
-                >
-                  <div className="px-4 py-4 sm:px-6">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-primary-600 truncate">
-                          {workflow.name}
-                        </p>
-                        {workflow.description && (
-                          <p className="mt-1 text-sm text-gray-500 truncate">
-                            {workflow.description}
-                          </p>
-                        )}
-                      </div>
-                      <div className="ml-2 flex-shrink-0 flex gap-2">
-                        {/* Health badge */}
-                        <HealthBadge workflow={workflow} size="small" showLabel={false} />
-                        
-                        {/* Status badge */}
-                        <span
-                          className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(
-                            workflow.status
-                          )}`}
-                        >
-                          {workflow.status}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="mt-2 sm:flex sm:justify-between">
-                      <div className="sm:flex">
-                        <p className="flex items-center text-sm text-gray-500">
-                          {workflow.step_count} steps
-                        </p>
-                        <p className="mt-2 flex items-center text-sm text-gray-500 sm:mt-0 sm:ml-6">
-                          {workflow.total_uses} runs
-                        </p>
-                        {workflow.success_rate > 0 && (
-                          <p className="mt-2 flex items-center text-sm text-gray-500 sm:mt-0 sm:ml-6">
-                            {(workflow.success_rate * 100).toFixed(0)}% success
-                          </p>
-                        )}
-                      </div>
-                      <div className="mt-2 flex items-center text-sm text-gray-500 sm:mt-0">
-                        <p>{formatDate(workflow.created_at)}</p>
-                      </div>
-                    </div>
-                  </div>
-                </Link>
-              </li>
-            ))}
-          </ul>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredWorkflows.map((wf) => (
+            <WorkflowCard
+              key={wf.id}
+              workflow={wf}
+              onClick={handleSelectWorkflow}
+              onDelete={() => setWorkflowToDelete(wf.id)}
+            />
+          ))}
+
+          {/* Add New Card */}
+          <div
+            onClick={() => {
+              // Could open extension or show instructions
+            }}
+            className="border-2 border-dashed border-neutral-200 rounded-2xl flex flex-col items-center justify-center text-neutral-400 p-6 hover:border-primary-400 hover:bg-primary-50/30 transition-all cursor-pointer group min-h-[240px]"
+          >
+            <div className="w-16 h-16 rounded-full bg-neutral-100 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+              <span className="text-3xl text-neutral-300 group-hover:text-primary-500">
+                +
+              </span>
+            </div>
+            <span className="font-semibold group-hover:text-primary-600 transition-colors">
+              Create New Workflow
+            </span>
+          </div>
         </div>
       )}
 
-      {/* Refresh button */}
-      <div className="mt-4">
-        <button
-          onClick={loadWorkflows}
-          className="text-sm text-primary-600 hover:text-primary-700 font-medium"
-        >
-          Refresh
-        </button>
-      </div>
+      {/* Delete Confirmation Modal */}
+      {workflowToDelete && (
+        <div className="fixed inset-0 z-[1400] flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-neutral-900/30 backdrop-blur-sm"
+            onClick={() => setWorkflowToDelete(null)}
+          />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 animate-fade-in border border-neutral-200">
+            <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center text-red-600 mb-4 mx-auto">
+              <AlertTriangle size={24} />
+            </div>
+            <h3 className="text-xl font-bold text-center mb-2">
+              Delete Workflow?
+            </h3>
+            <p className="text-neutral-500 text-center mb-6 text-sm">
+              Are you sure you want to delete this workflow? This action cannot
+              be undone.
+            </p>
+            <div className="flex gap-3">
+              <Button
+                variant="secondary"
+                className="flex-1"
+                onClick={() => setWorkflowToDelete(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                className="flex-1"
+                onClick={handleDeleteWorkflow}
+              >
+                Delete
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

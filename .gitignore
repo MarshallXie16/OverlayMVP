@@ -24,6 +24,7 @@ app.db
 *.swp
 *.swo
 *~
+.windsurf/
 
 # OS
 .DS_Store
@@ -34,6 +35,7 @@ dist/
 build/
 *.egg-info/
 .eggs/
+**/.vite/
 
 # Extension build
 packages/extension/dist/

@@ -15,3 +15,51 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+/* Glassmorphism Utilities */
+@layer components {
+  .glass-panel {
+    @apply bg-white/60 backdrop-blur-xl border border-white/40 shadow-glass;
+  }
+
+  .glass-card {
+    @apply bg-white/80 backdrop-blur-lg border border-white/50 shadow-glass;
+  }
+
+  .glass-card-solid {
+    @apply bg-white backdrop-blur-sm border border-neutral-200/50 shadow-glass;
+  }
+}
+
+/* Animation delay utilities */
+@layer utilities {
+  .animation-delay-2000 {
+    animation-delay: 2s;
+  }
+
+  .animation-delay-4000 {
+    animation-delay: 4s;
+  }
+}
+
+/* Custom scrollbar for glass panels */
+.glass-panel::-webkit-scrollbar,
+.glass-card::-webkit-scrollbar {
+  width: 6px;
+}
+
+.glass-panel::-webkit-scrollbar-track,
+.glass-card::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.glass-panel::-webkit-scrollbar-thumb,
+.glass-card::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 3px;
+}
+
+.glass-panel::-webkit-scrollbar-thumb:hover,
+.glass-card::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.2);
+}

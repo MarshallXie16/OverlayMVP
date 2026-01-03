@@ -191,3 +191,25 @@ class StepUpdate(BaseModel):
                 "instruction": "Enter your company email address"
             }
         }
+
+
+class ReorderStepsRequest(BaseModel):
+    """
+    Schema for reordering workflow steps.
+
+    Accepts a list of step IDs in the desired new order.
+    All steps in the workflow must be included exactly once.
+    """
+
+    step_order: list[int] = Field(
+        ...,
+        min_length=1,
+        description="List of step IDs in desired order (all workflow steps must be included)"
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "step_order": [5, 2, 1, 4, 3]
+            }
+        }

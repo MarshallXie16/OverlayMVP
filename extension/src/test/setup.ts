@@ -4,7 +4,7 @@
  * Mock Chrome APIs and global objects for testing
  */
 
-import { vi } from 'vitest';
+import { vi } from "vitest";
 
 // Mock chrome.storage API
 const createStorageMock = () => {
@@ -12,34 +12,36 @@ const createStorageMock = () => {
 
   return {
     local: {
-      get: vi.fn((keys: string | string[] | null, callback?: (items: any) => void) => {
-        return new Promise((resolve) => {
-          let result: any = {};
-          if (keys === null) {
-            result = { ...storage };
-          } else if (typeof keys === 'string') {
-            if (keys in storage) {
-              result[keys] = storage[keys];
-            }
-          } else if (Array.isArray(keys)) {
-            keys.forEach((key) => {
-              if (key in storage) {
-                result[key] = storage[key];
+      get: vi.fn(
+        (keys: string | string[] | null, callback?: (items: any) => void) => {
+          return new Promise((resolve) => {
+            let result: any = {};
+            if (keys === null) {
+              result = { ...storage };
+            } else if (typeof keys === "string") {
+              if (keys in storage) {
+                result[keys] = storage[keys];
               }
-            });
-          } else if (typeof keys === 'object') {
-            // Handle object with default values
-            Object.keys(keys).forEach((key) => {
-              result[key] = storage[key] ?? keys[key];
-            });
-          }
+            } else if (Array.isArray(keys)) {
+              keys.forEach((key) => {
+                if (key in storage) {
+                  result[key] = storage[key];
+                }
+              });
+            } else if (typeof keys === "object") {
+              // Handle object with default values
+              Object.keys(keys).forEach((key) => {
+                result[key] = storage[key] ?? keys[key];
+              });
+            }
 
-          if (callback) {
-            callback(result);
-          }
-          resolve(result);
-        });
-      }),
+            if (callback) {
+              callback(result);
+            }
+            resolve(result);
+          });
+        },
+      ),
 
       set: vi.fn((items: Record<string, any>, callback?: () => void) => {
         return new Promise((resolve) => {
@@ -120,18 +122,24 @@ globalThis.chrome = {
 
 // Reset storage between tests
 export function resetChromeStorage() {
-  (globalThis.chrome.storage.local.clear as any)();
+  // Check if chrome.storage exists before trying to clear
+  if (globalThis.chrome?.storage?.local?.clear) {
+    (globalThis.chrome.storage.local.clear as any)();
+  }
 }
 
 // Mock fetch for API tests
-export function mockFetch(response: any, options: { status?: number; ok?: boolean } = {}) {
+export function mockFetch(
+  response: any,
+  options: { status?: number; ok?: boolean } = {},
+) {
   const mockResponse = {
     ok: options.ok ?? true,
     status: options.status ?? 200,
-    statusText: options.status === 401 ? 'Unauthorized' : 'OK',
+    statusText: options.status === 401 ? "Unauthorized" : "OK",
     json: vi.fn(() => Promise.resolve(response)),
     text: vi.fn(() => Promise.resolve(JSON.stringify(response))),
-    headers: new Headers({ 'content-type': 'application/json' }),
+    headers: new Headers({ "content-type": "application/json" }),
   };
 
   global.fetch = vi.fn(() => Promise.resolve(mockResponse as any));

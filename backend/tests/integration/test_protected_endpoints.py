@@ -27,12 +27,12 @@ def test_company(db: Session) -> Company:
 
 @pytest.fixture
 def regular_user(db: Session, test_company: Company) -> User:
-    """Create a regular (non-admin) user."""
+    """Create an editor (non-admin) user."""
     user = User(
         email="user@example.com",
         password_hash="hashed_password",
         company_id=test_company.id,
-        role="regular",
+        role="editor",
         name="Regular User",
     )
     db.add(user)

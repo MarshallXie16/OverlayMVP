@@ -33,7 +33,7 @@ class TestGetCurrentUser:
             email="test@example.com",
             password_hash="hashed_password",
             company_id=company.id,
-            role="regular",
+            role="editor",
             name="Test User",
         )
         db.add(user)
@@ -103,7 +103,7 @@ class TestGetCurrentUser:
             email="test@example.com",
             password_hash="hashed_password",
             company_id=company.id,
-            role="regular",
+            role="editor",
         )
         db.add(user)
         db.commit()
@@ -161,7 +161,7 @@ class TestGetCurrentUser:
         token = create_access_token(
             data={
                 "company_id": 1,
-                "role": "regular",
+                "role": "editor",
                 "email": "test@example.com",
                 # Missing user_id
             }
@@ -178,6 +178,52 @@ class TestGetCurrentUser:
         assert exc_info.value.status_code == 401
         assert exc_info.value.detail["code"] == "INVALID_TOKEN_PAYLOAD"
         assert "missing user_id" in exc_info.value.detail["message"]
+
+    def test_suspended_user_raises_403(self, db: Session):
+        """Test that suspended user with valid token returns 403."""
+        # Create test company
+        company = Company(
+            name="Test Company",
+            invite_token="test-invite-123",
+        )
+        db.add(company)
+        db.commit()
+
+        # Create suspended user
+        user = User(
+            email="suspended@example.com",
+            password_hash="hashed_password",
+            company_id=company.id,
+            role="editor",
+            name="Suspended User",
+            status="suspended",
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+
+        # Create valid token for suspended user
+        token = create_access_token(
+            data={
+                "user_id": user.id,
+                "company_id": user.company_id,
+                "role": user.role,
+                "email": user.email,
+            }
+        )
+
+        credentials = HTTPAuthorizationCredentials(
+            scheme="Bearer",
+            credentials=token,
+        )
+
+        # Call dependency
+        with pytest.raises(HTTPException) as exc_info:
+            get_current_user(credentials=credentials, db=db)
+
+        assert exc_info.value.status_code == 403
+        assert exc_info.value.detail["code"] == "ACCOUNT_SUSPENDED"
+        assert "suspended" in exc_info.value.detail["message"].lower()
 
 
 class TestGetCurrentAdmin:
@@ -227,7 +273,7 @@ class TestGetCurrentAdmin:
             email="user@example.com",
             password_hash="hashed_password",
             company_id=company.id,
-            role="regular",
+            role="editor",
             name="Regular User",
         )
         db.add(user)

@@ -1,13 +1,22 @@
 """
 User model for authentication and authorization.
 
-Users belong to a company and have either admin or regular roles.
+Users belong to a company and have role-based permissions.
 Password is stored as bcrypt hash.
+
+Roles:
+- admin: Full control (manage users, all workflow ops, company settings)
+- editor: Create/edit/delete workflows, run workflows (no user management)
+- viewer: Run workflows only, view team (no create/edit)
+
+Status:
+- active: Normal account
+- suspended: Account disabled by admin
 """
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Literal
 
-from sqlalchemy import DateTime, Enum as SQLEnum, ForeignKey, Index, Integer, String
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -19,6 +28,12 @@ if TYPE_CHECKING:
     from app.models.step import Step
     from app.models.health_log import HealthLog
     from app.models.notification import Notification
+
+
+# Valid role values (validated at application level, not database level for SQLite compatibility)
+VALID_ROLES = {"admin", "editor", "viewer"}
+# Valid status values
+VALID_STATUSES = {"active", "suspended"}
 
 
 class User(Base):
@@ -46,9 +61,14 @@ class User(Base):
     # User Profile
     name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
-    # Authorization
+    # Authorization - Using String for SQLite compatibility (validated at app level)
     role: Mapped[str] = mapped_column(
-        SQLEnum("admin", "regular", name="user_role"), nullable=False
+        String(20), nullable=False, default="viewer"
+    )
+
+    # Account Status - active or suspended
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="active"
     )
 
     # Timestamps

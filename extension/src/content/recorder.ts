@@ -535,28 +535,54 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendRe
 
   if (message.type === 'START_RECORDING') {
     console.log('[ContentRecorder] Processing START_RECORDING message');
-    startRecording().then(() => {
-      console.log('[ContentRecorder] START_RECORDING completed successfully');
-      sendResponse({ success: true });
-    }).catch((error) => {
-      console.error('[ContentRecorder] Error in START_RECORDING:', error);
-      sendResponse({ success: false, error: error.message });
-    });
-    return true; // Keep channel open for async response
+    // Respond immediately to avoid message port timeouts; start async work after
+    try {
+      sendResponse({ success: true, ack: true });
+    } catch (_e) {
+      // ignore sendResponse errors
+    }
+    setTimeout(() => {
+      startRecording().catch((error) => {
+        console.error('[ContentRecorder] Error in START_RECORDING async:', error);
+      });
+    }, 0);
+    return false;
   }
 
   if (message.type === 'STOP_RECORDING') {
     console.log('[ContentRecorder] Processing STOP_RECORDING message');
-    stopRecording().then(() => {
-      console.log('[ContentRecorder] STOP_RECORDING completed successfully');
-      sendResponse({ success: true });
-    }).catch((error) => {
-      console.error('[ContentRecorder] Error in STOP_RECORDING:', error);
-      sendResponse({ success: false, error: error.message });
-    });
-    return true; // Keep channel open for async response
+    // Respond immediately to avoid message port timeouts; stop async after
+    try {
+      sendResponse({ success: true, ack: true });
+    } catch (_e) {}
+    setTimeout(() => {
+      stopRecording().then(() => {
+        console.log('[ContentRecorder] STOP_RECORDING completed successfully');
+      }).catch((error) => {
+        console.error('[ContentRecorder] Error in STOP_RECORDING async:', error);
+      });
+    }, 0);
+    return false;
   }
 
   console.log('[ContentRecorder] Unknown message type:', message.type);
   return true;
 });
+
+// Expose direct start/stop hooks for background to call without messaging
+declare global {
+  interface Window {
+    __overlayRecorderStart?: () => void;
+    __overlayRecorderStop?: () => void;
+  }
+}
+
+window.__overlayRecorderStart = () => {
+  console.log('[ContentRecorder] __overlayRecorderStart invoked');
+  startRecording().catch((e) => console.error('[ContentRecorder] Auto-start error:', e));
+};
+
+window.__overlayRecorderStop = () => {
+  console.log('[ContentRecorder] __overlayRecorderStop invoked');
+  stopRecording().catch((e) => console.error('[ContentRecorder] Auto-stop error:', e));
+};

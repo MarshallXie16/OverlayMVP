@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 # Import routers
-from app.api import auth, screenshots, workflows, steps
+from app.api import auth, screenshots, workflows, steps, healing, company, invites, notifications, health
 
 
 @asynccontextmanager
@@ -56,6 +56,11 @@ app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(screenshots.router, prefix="/api", tags=["Screenshots"])
 app.include_router(workflows.router, prefix="/api/workflows", tags=["Workflows"])
 app.include_router(steps.router, prefix="/api/steps", tags=["Steps"])
+app.include_router(healing.router, prefix="/api/healing", tags=["Healing"])
+app.include_router(company.router, prefix="/api/companies", tags=["Company"])
+app.include_router(invites.router, prefix="/api/invites", tags=["Invites"])
+app.include_router(notifications.router, prefix="/api/notifications", tags=["Notifications"])
+app.include_router(health.router, prefix="/api/health", tags=["Health Dashboard"])
 
 # Mount static files for screenshot storage (MVP only)
 screenshots_dir = Path(__file__).parent.parent / "screenshots"

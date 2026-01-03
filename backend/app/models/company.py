@@ -15,6 +15,7 @@ from app.models.base import Base
 
 if TYPE_CHECKING:
     from app.models.user import User
+    from app.models.invite import Invite
     from app.models.workflow import Workflow
     from app.models.screenshot import Screenshot
     from app.models.notification import Notification
@@ -52,6 +53,9 @@ class Company(Base):
     # Relationships (use string references to avoid circular imports)
     users: Mapped[list["User"]] = relationship(
         "User", back_populates="company", cascade="all, delete-orphan"
+    )
+    invites: Mapped[list["Invite"]] = relationship(
+        "Invite", back_populates="company", cascade="all, delete-orphan"
     )
     workflows: Mapped[list["Workflow"]] = relationship(
         "Workflow", back_populates="company", cascade="all, delete-orphan"

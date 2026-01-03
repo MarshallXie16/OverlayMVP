@@ -4,21 +4,20 @@
  * Necessary because <img> tags cannot send Authorization headers
  */
 
-import { useState, useEffect } from 'react';
-import { apiClient } from '@/api/client';
+import { useState, useEffect } from "react";
 
 interface AuthenticatedImageProps {
   src: string;
   alt: string;
   className?: string;
-  loading?: 'lazy' | 'eager';
+  loading?: "lazy" | "eager";
 }
 
 export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({
   src,
   alt,
-  className = '',
-  loading = 'lazy',
+  className = "",
+  loading = "lazy",
 }) => {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -36,7 +35,7 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({
         const response = await fetch(src, {
           headers: {
             // Get token from localStorage (same method as apiClient)
-            Authorization: `Bearer ${localStorage.getItem('auth_token')}`,
+            Authorization: `Bearer ${localStorage.getItem("auth_token")}`,
           },
         });
 
@@ -49,8 +48,8 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({
         objectUrl = URL.createObjectURL(blob);
         setImageUrl(objectUrl);
       } catch (err) {
-        console.error('Error loading authenticated image:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load image');
+        console.error("Error loading authenticated image:", err);
+        setError(err instanceof Error ? err.message : "Failed to load image");
       } finally {
         setIsLoading(false);
       }
@@ -68,7 +67,9 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({
 
   if (isLoading) {
     return (
-      <div className={`flex items-center justify-center bg-gray-100 ${className}`}>
+      <div
+        className={`flex items-center justify-center bg-gray-100 ${className}`}
+      >
         <div className="animate-pulse">
           <svg
             className="w-8 h-8 text-gray-400"
@@ -90,7 +91,9 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({
 
   if (error || !imageUrl) {
     return (
-      <div className={`flex items-center justify-center bg-gray-100 ${className}`}>
+      <div
+        className={`flex items-center justify-center bg-gray-100 ${className}`}
+      >
         <div className="text-center text-gray-400">
           <svg
             className="w-12 h-12 mx-auto mb-2"
@@ -112,11 +115,6 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({
   }
 
   return (
-    <img
-      src={imageUrl}
-      alt={alt}
-      className={className}
-      loading={loading}
-    />
+    <img src={imageUrl} alt={alt} className={className} loading={loading} />
   );
 };

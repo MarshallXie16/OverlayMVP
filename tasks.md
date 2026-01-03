@@ -749,16 +749,232 @@ Add keyboard shortcuts for walkthrough navigation and focus trapping in tooltip.
 
 ---
 
-### Sprint 4: Auto-Healing & Health Monitoring
-- FE-014: AI-Assisted Auto-Healing Integration
-- BE-009: Health Monitoring Endpoints
-- BE-010: Notification System
+## Sprint 4: Auto-Healing System ✅ COMPLETED
 
-### Sprint 4: Polish & Testing
-- TEST-001: End-to-End Testing Setup
-- PERF-001: Performance Optimization  
-- DOC-001: User Documentation
-- BUG-XXX: Bug fixes from testing
+**Sprint Goal**: Implement auto-healing system - the core differentiator
+**Status**: ✅ Complete (2025-12-19)
+**Story Points Delivered**: 28 SP
+
+**Completed Tasks**:
+- ✅ Phase 0: Enhanced metadata capture (formContext, visualRegion, nearbyLandmarks) - 3 SP
+- ✅ Phase 1: Scoring architecture (types.ts, config.ts) - 4 SP
+- ✅ Phase 2: Scoring factors with veto power (5 factors) - 8 SP
+- ✅ Phase 3: Walkthrough integration + user prompts - 4 SP
+- ✅ Phase 4: Backend AI validation endpoint (Claude Haiku) - 5 SP
+- ✅ Phase 5: Health logging & admin alerts - 4 SP
+- ✅ Testing: False positive prevention test suite (44 tests) - included
+
+**Key Deliverables**:
+- Modular scoring system in `extension/src/content/healing/`
+- AI validation endpoint at `POST /api/healing/validate`
+- Admin notifications for broken workflows, low confidence healing
+- 44 passing tests for false positive prevention
+
+---
+
+## Sprint 5: MVP Completion & Quality (Current)
+
+**Sprint Goal**: Complete MVP-critical items, address code review feedback, improve documentation
+**Target Duration**: 1-2 weeks
+**Committed Story Points**: 25 SP
+
+---
+
+### DOC-001: Auto-Healing Architecture Documentation
+**Type**: Documentation
+**Priority**: P0 (Must-have)
+**Epic**: Documentation
+**Estimate**: 3 SP
+**Status**: 🔄 In Progress
+
+**Description**:
+Create comprehensive architecture documentation for the auto-healing system.
+
+**Deliverables**:
+- Architecture diagram (ASCII)
+- Scoring factor explanation
+- Decision threshold matrix
+- Troubleshooting guide
+
+**File**: `docs/architecture/auto-healing.md`
+
+---
+
+### TEST-001: E2E and Integration Test Suite
+**Type**: Testing
+**Priority**: P0 (Must-have)
+**Epic**: Quality
+**Estimate**: 5 SP
+**Status**: 🔄 In Progress
+
+**Description**:
+Add missing test coverage identified in code review:
+- AI validation flow tests (timeout, malformed responses)
+- Backend edge case tests (missing screenshots, decode errors)
+- Full healing integration flow tests
+
+**Deliverables**:
+- `extension/src/content/healing/__tests__/autoHealer.test.ts`
+- `backend/tests/services/test_healing.py`
+
+---
+
+### DOC-002: API Documentation Update
+**Type**: Documentation
+**Priority**: P0 (Must-have)
+**Epic**: Documentation
+**Estimate**: 2 SP
+**Status**: 🔄 In Progress
+
+**Description**:
+Update API_EXAMPLES.md with healing endpoints and usage examples.
+
+**File**: `backend/API_EXAMPLES.md`
+
+---
+
+### FE-015: Implement logHealingAttempt() Persistence
+**Type**: Frontend + Backend Integration
+**Priority**: P0 (Critical)
+**Epic**: EPIC-005
+**Estimate**: 3 SP
+**Status**: 📋 Todo
+
+**Description**:
+The `logHealingAttempt()` function is called but not implemented. Healing events aren't being persisted for analytics.
+
+**Acceptance Criteria**:
+- [ ] Frontend sends healing log to backend
+- [ ] Backend stores in health_logs table
+- [ ] Logs include: deterministicScore, aiConfidence, candidatesEvaluated, vetoesApplied
+- [ ] Dashboard can query healing analytics (future)
+
+**Technical Files**:
+- `extension/src/content/walkthrough.ts` - Implement function
+- `extension/src/background/messaging.ts` - Add handler
+- `backend/app/api/workflows.py` - Enhance executions endpoint
+
+---
+
+### OPT-001: Levenshtein Algorithm Optimization
+**Type**: Performance Optimization
+**Priority**: P1 (Should-have)
+**Epic**: Technical Debt
+**Estimate**: 2 SP
+**Status**: 📋 Todo
+
+**Description**:
+Current Levenshtein implementation uses O(m*n) space with Map overhead. Optimize to O(min(m,n)) with rolling array.
+
+**Technical Files**:
+- `extension/src/content/healing/factors/textSimilarity.ts`
+
+**Impact**: Performance improvement for text comparisons with many candidates.
+
+---
+
+### SEC-001: AI Prompt Input Sanitization
+**Type**: Security Enhancement
+**Priority**: P1 (Should-have)
+**Epic**: Security
+**Estimate**: 1 SP
+**Status**: 📋 Todo
+
+**Description**:
+Add basic sanitization for element text/attributes before including in AI prompts. Defense in depth against prompt injection.
+
+**Technical Files**:
+- `backend/app/services/healing.py` - Add _sanitize_for_prompt()
+
+---
+
+### FE-016: Health Notifications System
+**Type**: Frontend + Backend
+**Priority**: P1 (Should-have)
+**Epic**: EPIC-005
+**Estimate**: 5 SP
+**Status**: 📋 Todo
+
+**Description**:
+Implement in-app notifications when workflows break. Admin sees badge + notification panel.
+
+**Acceptance Criteria**:
+- [ ] Backend: Notification model and API endpoints exist (partially done)
+- [ ] Frontend: NotificationBell component in header
+- [ ] Click notification → navigate to workflow
+- [ ] Mark as read functionality
+
+**Technical Files**:
+- `dashboard/src/components/NotificationBell.tsx` - New component
+- `backend/app/api/notifications.py` - List/read endpoints
+
+---
+
+### FE-010: Delete Step Functionality
+**Type**: Frontend Feature
+**Priority**: P1 (Should-have)
+**Epic**: EPIC-003
+**Estimate**: 3 SP
+**Status**: 📋 Todo (Carried from Sprint 3)
+
+**Description**:
+Add delete button to step cards with confirmation modal.
+
+---
+
+### DOC-003: User Guide Documentation
+**Type**: Documentation
+**Priority**: P2 (Nice-to-have)
+**Epic**: Documentation
+**Estimate**: 5 SP
+**Status**: 📋 Todo
+
+**Description**:
+Create end-user documentation with screenshots showing how to:
+- Record a workflow
+- Review and edit labels
+- Start a walkthrough
+- Understand health status
+
+**File**: `docs/user-guide.md`
+
+---
+
+### DOC-004: Deployment Guide
+**Type**: Documentation
+**Priority**: P2 (Nice-to-have)
+**Epic**: Documentation
+**Estimate**: 3 SP
+**Status**: 📋 Todo
+
+**Description**:
+Create production deployment guide (Docker, AWS, environment setup).
+
+**File**: `docs/deployment.md`
+
+---
+
+## Sprint 5 Summary
+
+**Committed (P0)**: 13 SP
+- DOC-001: Architecture docs (3 SP) - In Progress
+- TEST-001: Test suite (5 SP) - In Progress
+- DOC-002: API docs (2 SP) - In Progress
+- FE-015: Healing log persistence (3 SP)
+
+**Stretch (P1)**: 12 SP
+- OPT-001: Levenshtein optimization (2 SP)
+- SEC-001: Input sanitization (1 SP)
+- FE-016: Notifications (5 SP)
+- FE-010: Delete step (3 SP)
+
+**If Time Allows (P2)**: 8 SP
+- DOC-003: User guide (5 SP)
+- DOC-004: Deployment guide (3 SP)
+
+---
+
+## Backlog (Future Sprints)
 
 ---
 

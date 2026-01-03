@@ -14,6 +14,7 @@ from app.db.session import get_db
 from app.models.user import User
 from app.models.workflow import Workflow
 from app.utils.dependencies import get_current_user
+from app.utils.permissions import Permission, require_permission
 from app.schemas.workflow import (
     CreateWorkflowRequest,
     CreateWorkflowResponse,
@@ -21,8 +22,9 @@ from app.schemas.workflow import (
     WorkflowResponse,
     WorkflowListResponse,
 )
-from app.schemas.step import StepResponse
+from app.schemas.step import StepResponse, ReorderStepsRequest
 from app.schemas.health import ExecutionLogRequest, ExecutionLogResponse
+from app.models.step import Step
 from app.services.workflow import (
     create_workflow,
     get_workflows,
@@ -78,7 +80,7 @@ def create_workflow_endpoint(
 ):
     """
     Create a new workflow with steps.
-    
+
     Process:
     1. Create workflow and steps in database (status: "processing")
     2. Queue AI labeling task asynchronously
@@ -86,6 +88,9 @@ def create_workflow_endpoint(
     4. AI labeling happens in background
     5. Status updates to "draft" when complete
     """
+    # Check permission (admin, editor only - viewers cannot create)
+    require_permission(current_user, Permission.CREATE_WORKFLOW)
+
     # Create workflow with user's company_id
     workflow = create_workflow(
         db=db,
@@ -140,6 +145,9 @@ def list_workflows_endpoint(
     db: Session = Depends(get_db)
 ):
     """List workflows for current user's company."""
+    # Check permission (all roles can view workflows)
+    require_permission(current_user, Permission.VIEW_WORKFLOW)
+
     workflows, total = get_workflows(
         db=db,
         company_id=current_user.company_id,
@@ -184,6 +192,9 @@ def get_workflow_endpoint(
     db: Session = Depends(get_db)
 ):
     """Get a single workflow with steps."""
+    # Check permission (all roles can view workflows)
+    require_permission(current_user, Permission.VIEW_WORKFLOW)
+
     workflow = get_workflow_by_id(
         db=db,
         workflow_id=workflow_id,
@@ -283,6 +294,9 @@ def update_workflow_endpoint(
     db: Session = Depends(get_db)
 ):
     """Update workflow metadata."""
+    # Check permission (admin, editor only - viewers cannot edit)
+    require_permission(current_user, Permission.EDIT_WORKFLOW)
+
     workflow = update_workflow(
         db=db,
         workflow_id=workflow_id,
@@ -293,6 +307,149 @@ def update_workflow_endpoint(
     # Convert to response format (same as GET)
     steps_data = []
     for step in workflow.steps:
+        step_dict = {
+            "id": step.id,
+            "workflow_id": step.workflow_id,
+            "step_number": step.step_number,
+            "timestamp": step.timestamp,
+            "action_type": step.action_type,
+            "selectors": json.loads(step.selectors),
+            "element_meta": json.loads(step.element_meta),
+            "page_context": json.loads(step.page_context),
+            "action_data": json.loads(step.action_data) if step.action_data else None,
+            "dom_context": json.loads(step.dom_context) if step.dom_context else None,
+            "screenshot_id": step.screenshot_id,
+            "field_label": step.field_label,
+            "instruction": step.instruction,
+            "ai_confidence": step.ai_confidence,
+            "ai_model": step.ai_model,
+            "ai_generated_at": step.ai_generated_at,
+            "label_edited": step.label_edited,
+            "instruction_edited": step.instruction_edited,
+            "edited_by": step.edited_by,
+            "edited_at": step.edited_at,
+            "healed_selectors": json.loads(step.healed_selectors) if step.healed_selectors else None,
+            "healed_at": step.healed_at,
+            "healing_confidence": step.healing_confidence,
+            "healing_method": step.healing_method,
+            "created_at": step.created_at,
+        }
+        steps_data.append(StepResponse(**step_dict))
+
+    workflow_dict = {
+        "id": workflow.id,
+        "company_id": workflow.company_id,
+        "created_by": workflow.created_by,
+        "name": workflow.name,
+        "description": workflow.description,
+        "starting_url": workflow.starting_url,
+        "tags": workflow.tags,
+        "status": workflow.status,
+        "success_rate": workflow.success_rate,
+        "total_uses": workflow.total_uses,
+        "consecutive_failures": workflow.consecutive_failures,
+        "created_at": workflow.created_at,
+        "updated_at": workflow.updated_at,
+        "last_successful_run": workflow.last_successful_run,
+        "last_failed_run": workflow.last_failed_run,
+        "steps": steps_data,
+        "step_count": len(steps_data),
+    }
+
+    return WorkflowResponse(**workflow_dict)
+
+
+@router.patch(
+    "/{workflow_id}/steps/reorder",
+    response_model=WorkflowResponse,
+    summary="Reorder workflow steps",
+    description="""
+    Reorder workflow steps via drag-and-drop.
+
+    **Request:**
+    - step_order: List of step IDs in desired order
+    - All step IDs must belong to this workflow
+    - All steps must be included exactly once
+
+    **Multi-tenant Isolation:**
+    - Returns 404 if workflow doesn't exist or belongs to different company
+    - Returns 400 if step_order is invalid
+
+    **Returns:**
+    - Updated workflow with steps in new order
+    """
+)
+def reorder_steps_endpoint(
+    workflow_id: int,
+    reorder_request: ReorderStepsRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Reorder workflow steps."""
+    # Check permission (admin, editor only - viewers cannot edit)
+    require_permission(current_user, Permission.EDIT_WORKFLOW)
+
+    # Verify workflow exists and belongs to user's company
+    workflow = get_workflow_by_id(
+        db=db,
+        workflow_id=workflow_id,
+        company_id=current_user.company_id
+    )
+
+    # Get all steps for this workflow
+    existing_steps = db.query(Step).filter(Step.workflow_id == workflow_id).all()
+    existing_step_ids = {step.id for step in existing_steps}
+
+    # Validate step_order
+    provided_step_ids = set(reorder_request.step_order)
+
+    if provided_step_ids != existing_step_ids:
+        missing = existing_step_ids - provided_step_ids
+        extra = provided_step_ids - existing_step_ids
+        error_parts = []
+        if missing:
+            error_parts.append(f"Missing step IDs: {sorted(missing)}")
+        if extra:
+            error_parts.append(f"Invalid step IDs: {sorted(extra)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid step_order. {'. '.join(error_parts)}"
+        )
+
+    # Check for duplicates in step_order
+    if len(reorder_request.step_order) != len(set(reorder_request.step_order)):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Duplicate step IDs in step_order"
+        )
+
+    # Create map of step_id -> step object
+    step_map = {step.id: step for step in existing_steps}
+
+    try:
+        # Update step_number based on new order
+        for new_step_number, step_id in enumerate(reorder_request.step_order, start=1):
+            step_map[step_id].step_number = new_step_number
+
+        db.commit()
+
+        logger.info(
+            f"Reordered {len(existing_steps)} steps in workflow {workflow_id}"
+        )
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Failed to reorder steps in workflow {workflow_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to reorder steps"
+        )
+
+    # Refresh and return updated workflow
+    db.refresh(workflow)
+
+    # Convert steps to response format (same pattern as other endpoints)
+    steps_data = []
+    for step in sorted(workflow.steps, key=lambda s: s.step_number):
         step_dict = {
             "id": step.id,
             "workflow_id": step.workflow_id,
@@ -377,6 +534,9 @@ def start_workflow_processing(
     db: Session = Depends(get_db)
 ):
     """Start AI processing for workflow after screenshots are uploaded."""
+    # Check permission (admin, editor only - viewers cannot trigger processing)
+    require_permission(current_user, Permission.EDIT_WORKFLOW)
+
     # Verify workflow exists and belongs to user's company
     workflow = db.query(Workflow).filter(
         Workflow.id == workflow_id,
@@ -445,6 +605,9 @@ def delete_workflow_endpoint(
     db: Session = Depends(get_db)
 ):
     """Delete a workflow."""
+    # Check permission (admin, editor only - viewers cannot delete)
+    require_permission(current_user, Permission.DELETE_WORKFLOW)
+
     delete_workflow(
         db=db,
         workflow_id=workflow_id,
@@ -500,10 +663,13 @@ def log_execution_endpoint(
 ):
     """
     Log workflow execution and update health metrics.
-    
+
     Creates health log entry and updates workflow success rate,
     consecutive failures counter, and status.
     """
+    # Check permission (all roles can run/log executions)
+    require_permission(current_user, Permission.RUN_WORKFLOW)
+
     # Verify workflow exists and belongs to user's company
     workflow = db.query(Workflow).filter(
         Workflow.id == workflow_id,

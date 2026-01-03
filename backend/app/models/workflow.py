@@ -78,8 +78,10 @@ class Workflow(Base):
     )
 
     # Metrics
+    # Initialize to 1.0 - assume healthy until proven otherwise
+    # This prevents new workflows from showing artificially low success rates
     success_rate: Mapped[float] = mapped_column(
-        Float, nullable=False, default=0.0, server_default="0.0"
+        Float, nullable=False, default=1.0, server_default="1.0"
     )
     total_uses: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"

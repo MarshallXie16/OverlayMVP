@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FlowGuide - Workflow Platform</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+              mono: ['JetBrains Mono', 'monospace'],
+            },
+            colors: {
+              primary: {
+                50: '#f0fdfa',
+                100: '#ccfbf1',
+                200: '#99f6e4',
+                300: '#5eead4',
+                400: '#2dd4bf',
+                500: '#14b8a6',
+                600: '#0d9488',
+                700: '#0f766e',
+                800: '#115e59',
+                900: '#134e4a',
+              },
+              accent: {
+                50: '#fff5f5',
+                100: '#ffe3e3',
+                200: '#ffc9c9',
+                300: '#ffa8a8',
+                400: '#ff8787',
+                500: '#ff6b6b',
+                600: '#fa5252',
+                700: '#f03e3e',
+                800: '#e03131',
+                900: '#c92a2a',
+              },
+              neutral: {
+                950: '#0a0a0a',
+              }
+            },
+            backgroundImage: {
+              'gradient-primary': 'linear-gradient(135deg, #14b8a6 0%, #0d9488 100%)',
+              'gradient-hero': 'linear-gradient(135deg, #14b8a6 0%, #0d9488 50%, #5eead4 100%)',
+              'gradient-hero-vibrant': 'linear-gradient(135deg, #2dd4bf 0%, #14b8a6 25%, #0d9488 50%, #ff8787 75%, #ff6b6b 100%)',
+              'gradient-accent': 'linear-gradient(135deg, #ff6b6b 0%, #fa5252 100%)',
+            },
+            boxShadow: {
+              'glass': '0 8px 32px 0 rgba(31, 38, 135, 0.07)',
+              'primary-lg': '0 12px 35px rgba(20, 184, 166, 0.3)',
+            }
+          },
+        },
+      };
+    </script>
+    <style>
+      body {
+        background: #f0fdfa; /* primary-50 */
+      }
+      
+      /* Glassmorphism Utilities */
+      .glass-panel {
+        background: rgba(255, 255, 255, 0.65);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.5);
+      }
+
+      .glass-card {
+        background: rgba(255, 255, 255, 0.8);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.6);
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.554.0",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>

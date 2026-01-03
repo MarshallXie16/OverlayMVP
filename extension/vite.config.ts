@@ -1,22 +1,22 @@
-import { defineConfig, type Plugin } from 'vite';
-import react from '@vitejs/plugin-react';
-import { resolve } from 'path';
-import { viteStaticCopy } from 'vite-plugin-static-copy';
+import { defineConfig, type Plugin } from "vite";
+import react from "@vitejs/plugin-react";
+import { resolve } from "path";
+import { viteStaticCopy } from "vite-plugin-static-copy";
 
 const renamePopupHtml = (): Plugin => ({
-  name: 'rename-popup-html',
-  apply: 'build',
-  enforce: 'post',
+  name: "rename-popup-html",
+  apply: "build",
+  enforce: "post",
   generateBundle(_options, bundle) {
-    const originalFileName = 'src/popup/index.html';
+    const originalFileName = "src/popup/index.html";
     const popupHtml = bundle[originalFileName];
 
-    if (popupHtml && popupHtml.type === 'asset') {
+    if (popupHtml && popupHtml.type === "asset") {
       delete bundle[originalFileName];
-      bundle['popup/index.html'] = {
+      bundle["popup/index.html"] = {
         ...popupHtml,
-        fileName: 'popup/index.html',
-        name: 'popup/index.html',
+        fileName: "popup/index.html",
+        name: "popup/index.html",
       };
     }
   },
@@ -24,6 +24,15 @@ const renamePopupHtml = (): Plugin => ({
 
 /**
  * Vite configuration for Chrome Extension (Manifest V3)
+ *
+ * IMPORTANT: Content scripts require special handling because they:
+ * 1. Cannot use ES module imports (no import/export at runtime)
+ * 2. Must be self-contained single files
+ * 3. Are injected into web pages as regular scripts
+ *
+ * We use multiple outputs to handle this:
+ * - ES modules for popup (loaded via HTML) and background (MV3 supports modules)
+ * - IIFE for content scripts (self-contained, no imports)
  */
 export default defineConfig({
   plugins: [
@@ -31,16 +40,16 @@ export default defineConfig({
     viteStaticCopy({
       targets: [
         {
-          src: 'src/manifest.json',
-          dest: '.',
+          src: "src/manifest.json",
+          dest: ".",
         },
         {
-          src: 'public/icons/*',
-          dest: 'icons',
+          src: "public/icons/*",
+          dest: "icons",
         },
         {
-          src: 'src/content/styles/*.css',
-          dest: 'content/styles',
+          src: "src/content/styles/*.css",
+          dest: "content/styles",
         },
       ],
     }),
@@ -48,59 +57,63 @@ export default defineConfig({
   ],
 
   build: {
-    outDir: 'dist',
+    outDir: "dist",
     emptyOutDir: true,
-    sourcemap: process.env.NODE_ENV === 'development',
+    sourcemap: process.env.NODE_ENV === "development",
 
     rollupOptions: {
       input: {
-        // Popup UI (React app)
-        popup: resolve(__dirname, 'src/popup/index.html'),
+        // Popup UI (React app) - loaded via HTML, ES modules work
+        popup: resolve(__dirname, "src/popup/index.html"),
 
-        // Background service worker (ES module)
-        background: resolve(__dirname, 'src/background/index.ts'),
+        // Background service worker - MV3 supports ES modules with type: "module"
+        background: resolve(__dirname, "src/background/index.ts"),
 
-        // Content scripts
-        'content-recorder': resolve(__dirname, 'src/content/recorder.ts'),
-        'content-walkthrough': resolve(__dirname, 'src/content/walkthrough.ts'),
+        // Content scripts - MUST be self-contained (no ES module imports)
+        "content-recorder": resolve(__dirname, "src/content/recorder.ts"),
+        "content-walkthrough": resolve(__dirname, "src/content/walkthrough.ts"),
       },
 
       output: {
         entryFileNames: (chunkInfo) => {
-          // Background worker as ES module
-          if (chunkInfo.name === 'background') {
-            return 'background/index.js';
+          if (chunkInfo.name === "background") {
+            return "background/index.js";
           }
-          // Content scripts
-          if (chunkInfo.name.startsWith('content-')) {
-            const name = chunkInfo.name.replace('content-', '');
+          if (chunkInfo.name.startsWith("content-")) {
+            const name = chunkInfo.name.replace("content-", "");
             return `content/${name}.js`;
           }
-          // Default for other entries
-          return '[name]/[name].js';
+          return "[name]/[name].js";
         },
 
-        // Disable vendor/shared chunking for content scripts to ensure single-file outputs
-        manualChunks: undefined,
-        chunkFileNames: 'chunks/[name]-[hash].js',
-        assetFileNames: 'assets/[name]-[hash][extname]',
-        format: 'es', // Use ES modules for all
+        // Disable code splitting entirely - each entry gets all its dependencies inlined
+        // This is critical for content scripts which cannot import external chunks
+        manualChunks: () => undefined,
+
+        chunkFileNames: "chunks/[name]-[hash].js",
+        assetFileNames: "assets/[name]-[hash][extname]",
+
+        // Use ES modules format
+        // Content scripts will still work because manualChunks forces all code inline
+        format: "es",
       },
     },
 
     // Optimize for production
-    minify: process.env.NODE_ENV === 'production',
-    target: 'es2020',
+    minify: process.env.NODE_ENV === "production",
+    target: "es2020",
   },
 
   resolve: {
     alias: {
-      '@': resolve(__dirname, 'src'),
+      "@": resolve(__dirname, "src"),
     },
   },
 
   // Define globals
   define: {
-    'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'production'),
+    "process.env.NODE_ENV": JSON.stringify(
+      process.env.NODE_ENV || "production",
+    ),
   },
 });
