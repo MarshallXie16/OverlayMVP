@@ -214,9 +214,9 @@ class TestTokenSecurity:
         data = {"user_id": 1}
 
         token1 = create_access_token(data)
-        # Wait a tiny bit (expiration timestamp will be different)
+        # Wait at least 1 second (expiration timestamp is in seconds)
         import time
-        time.sleep(0.1)
+        time.sleep(1.1)
         token2 = create_access_token(data)
 
         # Tokens should be different due to different expiration timestamps

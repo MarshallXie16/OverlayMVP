@@ -9,10 +9,25 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 from jose import JWTError, jwt
 import os
+import warnings
 
 
 # JWT Configuration
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "dev-secret-key-change-in-production")
+SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+
+if not SECRET_KEY:
+    if os.getenv("ENVIRONMENT", "development") == "production":
+        raise RuntimeError(
+            "CRITICAL: JWT_SECRET_KEY environment variable must be set in production! "
+            "Generate a secure key with: python -c \"import secrets; print(secrets.token_hex(32))\""
+        )
+    warnings.warn(
+        "JWT_SECRET_KEY not set - using insecure default for development. "
+        "Set JWT_SECRET_KEY environment variable before deploying to production.",
+        UserWarning
+    )
+    SECRET_KEY = "dev-secret-key-DO-NOT-USE-IN-PRODUCTION"
+
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_DAYS = 7
 

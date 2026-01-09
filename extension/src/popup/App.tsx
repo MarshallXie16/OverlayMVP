@@ -4,12 +4,13 @@
  *
  * FE-004: Popup UI (Login/Recording Controls)
  */
-import React, { useEffect } from 'react';
-import { useAuthStore } from './store/authStore';
-import { useRecordingStore } from './store/recordingStore';
-import { LoginForm } from './components/LoginForm';
-import { RecordingControls } from './components/RecordingControls';
-import { WorkflowList } from './components/WorkflowList';
+import React, { useEffect } from "react";
+import { useAuthStore } from "./store/authStore";
+import { useRecordingStore } from "./store/recordingStore";
+import { LoginForm } from "./components/LoginForm";
+import { RecordingControls } from "./components/RecordingControls";
+import { WorkflowList } from "./components/WorkflowList";
+import { FailedUploads } from "./components/FailedUploads";
 
 const App: React.FC = () => {
   const { user, isLoading, checkAuth, logout } = useAuthStore();
@@ -109,7 +110,11 @@ const App: React.FC = () => {
       </div>
 
       {/* Main content */}
-      <div className="p-4 space-y-4 overflow-y-auto" style={{ height: 'calc(600px - 60px)' }}>
+      <div
+        className="p-4 space-y-4 overflow-y-auto"
+        style={{ height: "calc(600px - 60px)" }}
+      >
+        <FailedUploads />
         <RecordingControls />
         <WorkflowList />
       </div>

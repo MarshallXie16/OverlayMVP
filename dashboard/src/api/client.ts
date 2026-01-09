@@ -24,13 +24,12 @@ import type {
   SlackSettingsResponse,
   SlackTestResponse,
 } from "./types";
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+import { API_URL } from "@/config";
 
 class ApiClient {
   private baseUrl: string;
 
-  constructor(baseUrl: string = API_BASE_URL) {
+  constructor(baseUrl: string = API_URL) {
     this.baseUrl = baseUrl;
   }
 

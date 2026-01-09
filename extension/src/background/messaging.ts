@@ -18,6 +18,90 @@ import {
 } from "./state";
 
 // ============================================================================
+// FAILED UPLOAD STORAGE (FEAT-012)
+// ============================================================================
+
+interface FailedUpload {
+  localId: string;
+  name: string;
+  stepCount: number;
+  failedAt: string;
+  errorMessage: string;
+  data: {
+    workflowName: string;
+    startingUrl: string;
+    steps: any[];
+    screenshots: any[];
+  };
+}
+
+/**
+ * Store failed upload data for retry
+ */
+async function storeFailedUpload(
+  workflowName: string,
+  startingUrl: string,
+  steps: any[],
+  screenshots: any[],
+  errorMessage: string,
+): Promise<string> {
+  const localId = `failed_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+  const failedUpload: FailedUpload = {
+    localId,
+    name: workflowName,
+    stepCount: steps.length,
+    failedAt: new Date().toISOString(),
+    errorMessage,
+    data: {
+      workflowName,
+      startingUrl,
+      steps,
+      screenshots,
+    },
+  };
+
+  // Get existing failed uploads
+  const result = await chrome.storage.local.get("failedWorkflows");
+  const failedWorkflows: FailedUpload[] = result.failedWorkflows || [];
+
+  // Add new failure
+  failedWorkflows.push(failedUpload);
+
+  // Store back (keep max 10 failed uploads)
+  await chrome.storage.local.set({
+    failedWorkflows: failedWorkflows.slice(-10),
+  });
+
+  console.log(`[Background] Stored failed upload: ${localId}`);
+
+  return localId;
+}
+
+/**
+ * Remove failed upload from storage
+ */
+async function removeFailedUpload(localId: string): Promise<void> {
+  const result = await chrome.storage.local.get("failedWorkflows");
+  const failedWorkflows: FailedUpload[] = result.failedWorkflows || [];
+
+  await chrome.storage.local.set({
+    failedWorkflows: failedWorkflows.filter((f) => f.localId !== localId),
+  });
+
+  console.log(`[Background] Removed failed upload: ${localId}`);
+}
+
+/**
+ * Get failed upload by ID
+ */
+async function getFailedUpload(localId: string): Promise<FailedUpload | null> {
+  const result = await chrome.storage.local.get("failedWorkflows");
+  const failedWorkflows: FailedUpload[] = result.failedWorkflows || [];
+  return failedWorkflows.find((f) => f.localId === localId) || null;
+}
+
+// ============================================================================
 // MESSAGE HANDLER
 // ============================================================================
 
@@ -78,6 +162,18 @@ export function handleMessage(
 
     case "LOG_HEALING_ATTEMPT":
       handleLogHealingAttempt(message, sendResponse);
+      break;
+
+    case "GET_FAILED_UPLOADS":
+      handleGetFailedUploads(message, sendResponse);
+      break;
+
+    case "RETRY_UPLOAD":
+      handleRetryUpload(message, sendResponse);
+      break;
+
+    case "DISCARD_UPLOAD":
+      handleDiscardUpload(message, sendResponse);
       break;
 
     default:
@@ -211,9 +307,12 @@ async function handleStopRecording(
   message: ExtensionMessage,
   sendResponse: (response?: any) => void,
 ): Promise<void> {
+  // Declare outside try so it's accessible in catch for storing failed upload
+  let recordingState: Awaited<ReturnType<typeof stopRecording>> | null = null;
+
   try {
     // Get recording state
-    const recordingState = await stopRecording();
+    recordingState = await stopRecording();
 
     if (!recordingState) {
       throw new Error("No active recording to stop");
@@ -327,6 +426,28 @@ async function handleStopRecording(
     }
 
     console.error("[BackgroundMessaging] Final error message:", errorMessage);
+
+    // Store failed upload data for retry (FEAT-012)
+    const payload = message.payload || {};
+    const steps = payload.steps || recordingState?.steps || [];
+    const screenshots = payload.screenshots || [];
+    const workflowName = recordingState?.workflowName || "Untitled Workflow";
+    const startingUrl =
+      payload.startingUrl || recordingState?.startingUrl || "";
+
+    if (steps.length > 0) {
+      const localId = await storeFailedUpload(
+        workflowName,
+        startingUrl,
+        steps,
+        screenshots,
+        errorMessage,
+      );
+
+      console.log(
+        `[BackgroundMessaging] Failed upload stored with ID: ${localId}`,
+      );
+    }
 
     // Clean up recording state even on error to prevent stuck state
     await cleanupRecordingState();
@@ -741,6 +862,189 @@ async function handleLogHealingAttempt(
           error instanceof Error
             ? error.message
             : "Failed to log healing attempt",
+      },
+    });
+  }
+}
+
+// ============================================================================
+// FAILED UPLOAD HANDLERS (FEAT-012)
+// ============================================================================
+
+/**
+ * Handle GET_FAILED_UPLOADS message
+ * Returns list of failed uploads for the popup
+ */
+async function handleGetFailedUploads(
+  _message: ExtensionMessage,
+  sendResponse: (response?: any) => void,
+): Promise<void> {
+  try {
+    const result = await chrome.storage.local.get("failedWorkflows");
+    const failedWorkflows: FailedUpload[] = result.failedWorkflows || [];
+
+    // Return summary info (not the full data)
+    const uploads = failedWorkflows.map((f) => ({
+      localId: f.localId,
+      name: f.name,
+      stepCount: f.stepCount,
+      failedAt: f.failedAt,
+      errorMessage: f.errorMessage,
+    }));
+
+    sendResponse({
+      type: "GET_FAILED_UPLOADS",
+      payload: { success: true, uploads },
+    });
+  } catch (error) {
+    console.error("[Background] GET_FAILED_UPLOADS failed:", error);
+    sendResponse({
+      type: "GET_FAILED_UPLOADS",
+      payload: {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to get failed uploads",
+        uploads: [],
+      },
+    });
+  }
+}
+
+/**
+ * Handle RETRY_UPLOAD message
+ * Retries uploading a previously failed workflow
+ */
+async function handleRetryUpload(
+  message: ExtensionMessage,
+  sendResponse: (response?: any) => void,
+): Promise<void> {
+  try {
+    const { localId } = message.payload || {};
+
+    if (!localId) {
+      throw new Error("localId is required");
+    }
+
+    console.log(`[Background] RETRY_UPLOAD for: ${localId}`);
+
+    // Get the failed upload data
+    const failedUpload = await getFailedUpload(localId);
+    if (!failedUpload) {
+      throw new Error("Failed upload not found");
+    }
+
+    const { workflowName, startingUrl, steps, screenshots } = failedUpload.data;
+
+    // Build workflow creation request
+    const workflowRequest = {
+      name: workflowName,
+      description: null,
+      starting_url: startingUrl,
+      tags: [],
+      steps,
+    };
+
+    console.log(
+      `[Background] Retrying workflow "${workflowName}" with ${steps.length} steps`,
+    );
+
+    // Attempt to create workflow
+    const workflowResponse = await apiClient.createWorkflow(workflowRequest);
+
+    console.log(
+      `[Background] Workflow created successfully: ${workflowResponse.workflow_id}`,
+    );
+
+    // Upload screenshots in background (if any)
+    if (screenshots.length > 0) {
+      uploadScreenshotsAsync(workflowResponse.workflow_id, screenshots)
+        .then(() => {
+          console.log(
+            `✅ Retry: All ${screenshots.length} screenshots uploaded`,
+          );
+        })
+        .catch((error) => {
+          console.error("❌ Retry: Screenshot upload failed:", error);
+        });
+    }
+
+    // Remove from failed uploads on success
+    await removeFailedUpload(localId);
+
+    sendResponse({
+      type: "RETRY_UPLOAD",
+      payload: {
+        success: true,
+        workflowId: workflowResponse.workflow_id,
+        status: workflowResponse.status,
+      },
+    });
+  } catch (error) {
+    console.error("[Background] RETRY_UPLOAD failed:", error);
+
+    // Update error message in stored data
+    const { localId } = message.payload || {};
+    if (localId) {
+      const failedUpload = await getFailedUpload(localId);
+      if (failedUpload) {
+        failedUpload.errorMessage =
+          error instanceof Error ? error.message : "Retry failed";
+        failedUpload.failedAt = new Date().toISOString();
+
+        const result = await chrome.storage.local.get("failedWorkflows");
+        const failedWorkflows: FailedUpload[] = result.failedWorkflows || [];
+        const index = failedWorkflows.findIndex((f) => f.localId === localId);
+        if (index !== -1) {
+          failedWorkflows[index] = failedUpload;
+          await chrome.storage.local.set({ failedWorkflows });
+        }
+      }
+    }
+
+    sendResponse({
+      type: "RETRY_UPLOAD",
+      payload: {
+        success: false,
+        error:
+          error instanceof Error ? error.message : "Failed to retry upload",
+      },
+    });
+  }
+}
+
+/**
+ * Handle DISCARD_UPLOAD message
+ * Permanently removes a failed upload
+ */
+async function handleDiscardUpload(
+  message: ExtensionMessage,
+  sendResponse: (response?: any) => void,
+): Promise<void> {
+  try {
+    const { localId } = message.payload || {};
+
+    if (!localId) {
+      throw new Error("localId is required");
+    }
+
+    console.log(`[Background] DISCARD_UPLOAD: ${localId}`);
+
+    await removeFailedUpload(localId);
+
+    sendResponse({
+      type: "DISCARD_UPLOAD",
+      payload: { success: true },
+    });
+  } catch (error) {
+    console.error("[Background] DISCARD_UPLOAD failed:", error);
+    sendResponse({
+      type: "DISCARD_UPLOAD",
+      payload: {
+        success: false,
+        error:
+          error instanceof Error ? error.message : "Failed to discard upload",
       },
     });
   }

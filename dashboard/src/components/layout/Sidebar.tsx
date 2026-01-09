@@ -126,6 +126,7 @@ export const Sidebar: React.FC = () => {
               onClick={handleLogout}
               className="p-2 rounded-lg text-neutral-500 hover:text-red-600 hover:bg-red-50 transition-colors"
               title="Logout"
+              aria-label="Logout"
             >
               <LogOut size={18} />
             </button>

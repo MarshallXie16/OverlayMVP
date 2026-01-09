@@ -12,22 +12,22 @@ from app.models.company import Company
 from app.models.health_log import HealthLog
 
 
-def test_log_successful_execution(db_session):
+def test_log_successful_execution(db):
     """Test logging successful execution updates metrics correctly"""
     # Create test data
-    company = Company(name="Test Company")
-    db_session.add(company)
-    db_session.flush()
+    company = Company(name="Test Company", invite_token="test-invite-token")
+    db.add(company)
+    db.flush()
     
     user = User(
         email="test@example.com",
-        hashed_password="fake_hash",
+        password_hash="fake_hash",
         name="Test User",
         role="admin",
         company_id=company.id
     )
-    db_session.add(user)
-    db_session.flush()
+    db.add(user)
+    db.flush()
     
     workflow = Workflow(
         company_id=company.id,
@@ -39,8 +39,8 @@ def test_log_successful_execution(db_session):
         total_uses=5,
         consecutive_failures=2
     )
-    db_session.add(workflow)
-    db_session.commit()
+    db.add(workflow)
+    db.commit()
     
     # Log successful execution
     execution_data = ExecutionLogRequest(
@@ -50,7 +50,7 @@ def test_log_successful_execution(db_session):
     )
     
     health_log, updated_workflow = log_workflow_execution(
-        db=db_session,
+        db=db,
         workflow_id=workflow.id,
         user_id=user.id,
         execution_data=execution_data
@@ -70,22 +70,22 @@ def test_log_successful_execution(db_session):
     assert updated_workflow.last_successful_run is not None
 
 
-def test_log_failed_execution(db_session):
+def test_log_failed_execution(db):
     """Test logging failed execution increments failures"""
     # Create test data
-    company = Company(name="Test Company")
-    db_session.add(company)
-    db_session.flush()
+    company = Company(name="Test Company", invite_token="test-invite-token")
+    db.add(company)
+    db.flush()
     
     user = User(
         email="test@example.com",
-        hashed_password="fake_hash",
+        password_hash="fake_hash",
         name="Test User",
         role="admin",
         company_id=company.id
     )
-    db_session.add(user)
-    db_session.flush()
+    db.add(user)
+    db.flush()
     
     workflow = Workflow(
         company_id=company.id,
@@ -97,8 +97,8 @@ def test_log_failed_execution(db_session):
         total_uses=10,
         consecutive_failures=0
     )
-    db_session.add(workflow)
-    db_session.commit()
+    db.add(workflow)
+    db.commit()
     
     # Log failed execution
     execution_data = ExecutionLogRequest(
@@ -109,7 +109,7 @@ def test_log_failed_execution(db_session):
     )
     
     health_log, updated_workflow = log_workflow_execution(
-        db=db_session,
+        db=db,
         workflow_id=workflow.id,
         user_id=user.id,
         execution_data=execution_data
@@ -128,22 +128,22 @@ def test_log_failed_execution(db_session):
     assert updated_workflow.status == "active"  # Not broken yet
 
 
-def test_workflow_marked_broken_after_threshold(db_session):
+def test_workflow_marked_broken_after_threshold(db):
     """Test workflow status changes to broken after consecutive failures"""
     # Create test data
-    company = Company(name="Test Company")
-    db_session.add(company)
-    db_session.flush()
+    company = Company(name="Test Company", invite_token="test-invite-token")
+    db.add(company)
+    db.flush()
     
     user = User(
         email="test@example.com",
-        hashed_password="fake_hash",
+        password_hash="fake_hash",
         name="Test User",
         role="admin",
         company_id=company.id
     )
-    db_session.add(user)
-    db_session.flush()
+    db.add(user)
+    db.flush()
     
     workflow = Workflow(
         company_id=company.id,
@@ -155,8 +155,8 @@ def test_workflow_marked_broken_after_threshold(db_session):
         total_uses=10,
         consecutive_failures=BROKEN_THRESHOLD - 1  # One away from broken
     )
-    db_session.add(workflow)
-    db_session.commit()
+    db.add(workflow)
+    db.commit()
     
     # Log one more failure
     execution_data = ExecutionLogRequest(
@@ -166,7 +166,7 @@ def test_workflow_marked_broken_after_threshold(db_session):
     )
     
     health_log, updated_workflow = log_workflow_execution(
-        db=db_session,
+        db=db,
         workflow_id=workflow.id,
         user_id=user.id,
         execution_data=execution_data
@@ -177,22 +177,22 @@ def test_workflow_marked_broken_after_threshold(db_session):
     assert updated_workflow.status == "broken"
 
 
-def test_success_after_broken_resets_status(db_session):
+def test_success_after_broken_resets_status(db):
     """Test successful execution after broken changes status back to active"""
     # Create test data
-    company = Company(name="Test Company")
-    db_session.add(company)
-    db_session.flush()
+    company = Company(name="Test Company", invite_token="test-invite-token")
+    db.add(company)
+    db.flush()
     
     user = User(
         email="test@example.com",
-        hashed_password="fake_hash",
+        password_hash="fake_hash",
         name="Test User",
         role="admin",
         company_id=company.id
     )
-    db_session.add(user)
-    db_session.flush()
+    db.add(user)
+    db.flush()
     
     workflow = Workflow(
         company_id=company.id,
@@ -204,8 +204,8 @@ def test_success_after_broken_resets_status(db_session):
         total_uses=20,
         consecutive_failures=5
     )
-    db_session.add(workflow)
-    db_session.commit()
+    db.add(workflow)
+    db.commit()
     
     # Log successful execution
     execution_data = ExecutionLogRequest(
@@ -214,7 +214,7 @@ def test_success_after_broken_resets_status(db_session):
     )
     
     health_log, updated_workflow = log_workflow_execution(
-        db=db_session,
+        db=db,
         workflow_id=workflow.id,
         user_id=user.id,
         execution_data=execution_data
@@ -225,22 +225,22 @@ def test_success_after_broken_resets_status(db_session):
     assert updated_workflow.status == "active"  # Changed back from broken
 
 
-def test_healed_execution_counts_as_success(db_session):
+def test_healed_execution_counts_as_success(db):
     """Test healed execution (deterministic/AI) counts as success"""
     # Create test data
-    company = Company(name="Test Company")
-    db_session.add(company)
-    db_session.flush()
+    company = Company(name="Test Company", invite_token="test-invite-token")
+    db.add(company)
+    db.flush()
     
     user = User(
         email="test@example.com",
-        hashed_password="fake_hash",
+        password_hash="fake_hash",
         name="Test User",
         role="admin",
         company_id=company.id
     )
-    db_session.add(user)
-    db_session.flush()
+    db.add(user)
+    db.flush()
     
     workflow = Workflow(
         company_id=company.id,
@@ -252,8 +252,8 @@ def test_healed_execution_counts_as_success(db_session):
         total_uses=10,
         consecutive_failures=1
     )
-    db_session.add(workflow)
-    db_session.commit()
+    db.add(workflow)
+    db.commit()
     
     # Log healed execution
     execution_data = ExecutionLogRequest(
@@ -264,7 +264,7 @@ def test_healed_execution_counts_as_success(db_session):
     )
     
     health_log, updated_workflow = log_workflow_execution(
-        db=db_session,
+        db=db,
         workflow_id=workflow.id,
         user_id=user.id,
         execution_data=execution_data

@@ -79,9 +79,13 @@ class TestAILabelingTask:
                 return mock_workflow_query
             elif model == Step:
                 return mock_steps_query
-        
+
         mock_db.query.side_effect = query_side_effect
-        
+
+        # Add company_id to mock workflow for notification creation
+        mock_workflow.company_id = 1
+        mock_workflow.name = "Test Workflow"
+
         # Set up mock AI service
         mock_ai_instance = Mock()
         mock_ai_service_class.return_value = mock_ai_instance
@@ -92,10 +96,10 @@ class TestAILabelingTask:
             "ai_model": "claude-3-5-sonnet-20241022",
         }
         mock_ai_instance.get_total_cost.return_value = 0.045
-        
+
         # Execute task
         result = label_workflow_steps(workflow_id=1)
-        
+
         # Verify result
         assert result["workflow_id"] == 1
         assert result["status"] == "success"
@@ -104,15 +108,24 @@ class TestAILabelingTask:
         assert result["steps_failed"] == 0
         assert result["ai_cost"] == 0.045
         assert result["processing_time"] >= 0
-        
+
         # Verify workflow status updated
         assert mock_workflow.status == "draft"
-        
+
         # Verify AI service called for each step
         assert mock_ai_instance.generate_step_labels.call_count == 3
-        
+
         # Verify database commit
         mock_db.commit.assert_called()
+
+        # Verify notification was added to database
+        mock_db.add.assert_called_once()
+        notification = mock_db.add.call_args[0][0]
+        assert notification.type == "workflow_ready"
+        assert notification.severity == "info"
+        assert notification.workflow_id == 1
+        assert notification.company_id == 1
+        assert "ready for review" in notification.title.lower()
     
     @patch("app.tasks.ai_labeling.get_task_db")
     def test_workflow_not_found(self, mock_get_db):
@@ -181,14 +194,14 @@ class TestAILabelingTask:
         mock_db.__enter__.return_value = mock_db
         mock_db.__exit__.return_value = None
         mock_get_db.return_value = mock_db
-        
+
         # Mock queries
         mock_workflow_query = Mock()
         mock_workflow_query.filter_by.return_value.first.return_value = mock_workflow
-        
+
         mock_steps_query = Mock()
         mock_steps_query.filter_by.return_value.order_by.return_value.all.return_value = mock_steps
-        
+
         def query_side_effect(model):
             from app.models.workflow import Workflow
             from app.models.step import Step
@@ -196,13 +209,17 @@ class TestAILabelingTask:
                 return mock_workflow_query
             elif model == Step:
                 return mock_steps_query
-        
+
         mock_db.query.side_effect = query_side_effect
-        
+
+        # Add company_id to mock workflow for notification creation
+        mock_workflow.company_id = 1
+        mock_workflow.name = "Test Workflow"
+
         # Set up AI service to fail on second step
         mock_ai_instance = Mock()
         mock_ai_service_class.return_value = mock_ai_instance
-        
+
         def generate_labels_side_effect(step):
             if step.step_number == 2:
                 raise Exception("AI service error")
@@ -212,28 +229,36 @@ class TestAILabelingTask:
                 "ai_confidence": 0.85,
                 "ai_model": "claude-3-5-sonnet-20241022",
             }
-        
+
         mock_ai_instance.generate_step_labels.side_effect = generate_labels_side_effect
         mock_ai_instance.get_total_cost.return_value = 0.030
-        
+
         # Execute task
         result = label_workflow_steps(workflow_id=1)
-        
+
         # Verify result
         assert result["workflow_id"] == 1
         assert result["status"] == "partial_success"
         assert result["total_steps"] == 3
         assert result["steps_labeled"] == 2
         assert result["steps_failed"] == 1
-        
+
         # Workflow should still be in draft (reviewable)
         assert mock_workflow.status == "draft"
-        
+
         # Verify failed step was marked
         failed_step = mock_steps[1]  # Step 2
         assert failed_step.ai_confidence == 0.0
         assert failed_step.ai_model == "error"
         assert "Error" in failed_step.field_label
+
+        # Verify notification was created with warning severity
+        mock_db.add.assert_called_once()
+        notification = mock_db.add.call_args[0][0]
+        assert notification.type == "workflow_ready"
+        assert notification.severity == "warning"
+        assert "partial" in notification.title.lower()
+        assert "1 failed" in notification.message
     
     @patch("app.tasks.ai_labeling.get_task_db")
     @patch("app.tasks.ai_labeling.AIService")
@@ -243,14 +268,14 @@ class TestAILabelingTask:
         mock_db.__enter__.return_value = mock_db
         mock_db.__exit__.return_value = None
         mock_get_db.return_value = mock_db
-        
+
         # Mock queries
         mock_workflow_query = Mock()
         mock_workflow_query.filter_by.return_value.first.return_value = mock_workflow
-        
+
         mock_steps_query = Mock()
         mock_steps_query.filter_by.return_value.order_by.return_value.all.return_value = mock_steps
-        
+
         def query_side_effect(model):
             from app.models.workflow import Workflow
             from app.models.step import Step
@@ -258,27 +283,34 @@ class TestAILabelingTask:
                 return mock_workflow_query
             elif model == Step:
                 return mock_steps_query
-        
+
         mock_db.query.side_effect = query_side_effect
-        
+
+        # Add company_id to mock workflow
+        mock_workflow.company_id = 1
+        mock_workflow.name = "Test Workflow"
+
         # Set up AI service to always fail
         mock_ai_instance = Mock()
         mock_ai_service_class.return_value = mock_ai_instance
         mock_ai_instance.generate_step_labels.side_effect = Exception("AI service error")
         mock_ai_instance.get_total_cost.return_value = 0.0
-        
+
         # Execute task
         result = label_workflow_steps(workflow_id=1)
-        
+
         # Verify result
         assert result["workflow_id"] == 1
         assert result["status"] == "failed"
         assert result["total_steps"] == 3
         assert result["steps_labeled"] == 0
         assert result["steps_failed"] == 3
-        
+
         # Workflow should be marked as needs_review
         assert mock_workflow.status == "needs_review"
+
+        # Verify NO notification was created for complete failure
+        mock_db.add.assert_not_called()
     
     @patch("app.tasks.ai_labeling.get_task_db")
     @patch("app.tasks.ai_labeling.AIService")

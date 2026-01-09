@@ -454,5 +454,135 @@ class TestUpdateStep:
         assert response2.json()["field_label"] == "Version 3"
 
 
+class TestDeleteStep:
+    """Test DELETE /api/steps/:id endpoint."""
+
+    def test_delete_step_success(self, client, test_user, db):
+        """Test deleting a step successfully with renumbering."""
+        # Create workflow with 3 steps
+        workflow = Workflow(
+            company_id=test_user.company_id,
+            created_by=test_user.id,
+            name="Test Workflow",
+            starting_url="https://example.com",
+            status="draft"
+        )
+        db.add(workflow)
+        db.flush()
+
+        steps = []
+        for i in range(1, 4):
+            step = Step(
+                workflow_id=workflow.id,
+                step_number=i,
+                action_type="click",
+                selectors='{"primary": "#btn"}',
+                element_meta='{"tag_name": "button"}',
+                page_context='{"url": "https://example.com"}',
+                field_label=f"Step {i}",
+                instruction=f"Instruction {i}"
+            )
+            db.add(step)
+            steps.append(step)
+        db.commit()
+
+        # Delete step 2
+        step_to_delete = steps[1]
+        response = client.delete(f"/api/steps/{step_to_delete.id}")
+
+        assert response.status_code == 204
+
+        # Verify remaining steps are renumbered
+        db.expire_all()
+        remaining_steps = db.query(Step).filter(
+            Step.workflow_id == workflow.id
+        ).order_by(Step.step_number).all()
+
+        assert len(remaining_steps) == 2
+        assert remaining_steps[0].step_number == 1
+        assert remaining_steps[0].field_label == "Step 1"
+        assert remaining_steps[1].step_number == 2
+        assert remaining_steps[1].field_label == "Step 3"
+
+    def test_delete_last_step_not_allowed(self, client, test_user, db):
+        """Test that deleting the last step in a workflow is not allowed."""
+        # Create workflow with only 1 step
+        workflow = Workflow(
+            company_id=test_user.company_id,
+            created_by=test_user.id,
+            name="Test Workflow",
+            starting_url="https://example.com",
+            status="draft"
+        )
+        db.add(workflow)
+        db.flush()
+
+        step = Step(
+            workflow_id=workflow.id,
+            step_number=1,
+            action_type="click",
+            selectors='{"primary": "#btn"}',
+            element_meta='{"tag_name": "button"}',
+            page_context='{"url": "https://example.com"}',
+            field_label="Only Step",
+            instruction="Only instruction"
+        )
+        db.add(step)
+        db.commit()
+
+        # Try to delete the only step
+        response = client.delete(f"/api/steps/{step.id}")
+
+        assert response.status_code == 400
+        data = response.json()
+        assert data["detail"]["code"] == "CANNOT_DELETE_LAST_STEP"
+        assert "Cannot delete the last step" in data["detail"]["message"]
+
+        # Verify step was not deleted
+        db.expire_all()
+        remaining_step = db.query(Step).filter(Step.id == step.id).first()
+        assert remaining_step is not None
+
+    def test_delete_step_not_found(self, client, test_user):
+        """Test deleting non-existent step returns 404."""
+        response = client.delete("/api/steps/99999")
+
+        assert response.status_code == 404
+        assert "not found" in response.json()["detail"].lower()
+
+    def test_delete_step_forbidden_other_company(self, client, test_user, other_user, db):
+        """Test users cannot delete steps from other companies."""
+        # Create workflow for other company with 2 steps
+        workflow = Workflow(
+            company_id=other_user.company_id,
+            created_by=other_user.id,
+            name="Other Company Workflow",
+            starting_url="https://example.com",
+            status="draft"
+        )
+        db.add(workflow)
+        db.flush()
+
+        for i in range(1, 3):
+            step = Step(
+                workflow_id=workflow.id,
+                step_number=i,
+                action_type="click",
+                selectors='{"primary": "#btn"}',
+                element_meta='{"tag_name": "button"}',
+                page_context='{"url": "https://example.com"}'
+            )
+            db.add(step)
+        db.commit()
+
+        step = db.query(Step).filter(Step.workflow_id == workflow.id).first()
+
+        # Try to delete with test_user credentials
+        response = client.delete(f"/api/steps/{step.id}")
+
+        assert response.status_code == 403
+        assert "permission" in response.json()["detail"].lower()
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

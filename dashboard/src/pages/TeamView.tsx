@@ -406,6 +406,7 @@ export const TeamView: React.FC = () => {
               onClick={loadData}
               className="p-2 text-neutral-500 hover:bg-neutral-100 rounded-lg transition-colors"
               title="Refresh"
+              aria-label="Refresh team members"
             >
               <RefreshCw size={16} />
             </button>
@@ -483,6 +484,7 @@ export const TeamView: React.FC = () => {
                           <button
                             onClick={(e) => toggleMenu(member.id, e)}
                             className={`p-2 rounded-lg transition-colors ${activeMenuId === member.id ? "bg-primary-50 text-primary-600" : "text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100"}`}
+                            aria-label="Member actions"
                           >
                             <MoreVertical size={18} />
                           </button>
@@ -544,6 +546,7 @@ export const TeamView: React.FC = () => {
             <button
               onClick={() => setIsInviteModalOpen(false)}
               className="absolute top-4 right-4 text-neutral-400 hover:text-neutral-600 p-1 rounded-full hover:bg-neutral-100 transition-colors"
+              aria-label="Close modal"
             >
               <X size={20} />
             </button>
@@ -626,6 +629,7 @@ export const TeamView: React.FC = () => {
             <button
               onClick={() => setEditRoleMember(null)}
               className="absolute top-4 right-4 text-neutral-400 hover:text-neutral-600 p-1 rounded-full hover:bg-neutral-100 transition-colors"
+              aria-label="Close modal"
             >
               <X size={20} />
             </button>

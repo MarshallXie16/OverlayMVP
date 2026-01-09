@@ -22,7 +22,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { apiClient } from "@/api/client";
-import type { WorkflowResponse, StepResponse } from "@/api/types";
+import type { WorkflowResponse } from "@/api/types";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { AuthenticatedImage } from "@/components/AuthenticatedImage";
@@ -32,8 +32,12 @@ import {
   isExtensionInstalled,
 } from "@/utils/extensionBridge";
 import { mapWorkflowStatus } from "@/utils/typeMappers";
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+import {
+  getActionTypeColor,
+  formatActionType,
+  getScreenshotUrl,
+} from "@/utils/stepUtils";
+import { showToast } from "@/utils/toast";
 
 export const WorkflowDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -78,7 +82,9 @@ export const WorkflowDetail: React.FC = () => {
       await apiClient.deleteWorkflow(workflow.id);
       navigate("/dashboard");
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to delete workflow");
+      showToast.error(
+        err instanceof Error ? err.message : "Failed to delete workflow",
+      );
     } finally {
       setIsDeleting(false);
       setShowDeleteModal(false);
@@ -106,31 +112,6 @@ export const WorkflowDetail: React.FC = () => {
     } finally {
       setIsStartingWalkthrough(false);
     }
-  };
-
-  const getScreenshotUrl = (step: StepResponse): string | null => {
-    return step.screenshot_id
-      ? `${API_BASE_URL}/api/screenshots/${step.screenshot_id}/image`
-      : null;
-  };
-
-  const getActionTypeColor = (actionType: string): string => {
-    switch (actionType) {
-      case "click":
-        return "bg-blue-100 text-blue-700 border-blue-200";
-      case "input_commit":
-        return "bg-purple-100 text-purple-700 border-purple-200";
-      case "navigate":
-        return "bg-teal-100 text-teal-700 border-teal-200";
-      case "select_change":
-        return "bg-amber-100 text-amber-700 border-amber-200";
-      default:
-        return "bg-gray-100 text-gray-700 border-gray-200";
-    }
-  };
-
-  const formatActionType = (actionType: string): string => {
-    return actionType.replace("_", " ").toUpperCase();
   };
 
   // Extract domain from URL
@@ -373,7 +354,7 @@ export const WorkflowDetail: React.FC = () => {
       {/* Steps Grid */}
       <div className="grid grid-cols-1 gap-6">
         {workflow.steps.map((step) => {
-          const screenshotUrl = getScreenshotUrl(step);
+          const screenshotUrl = getScreenshotUrl(step.screenshot_id);
 
           return (
             <div

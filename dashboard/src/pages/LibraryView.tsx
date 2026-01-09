@@ -12,6 +12,7 @@ import type { WorkflowListItem } from "@/api/types";
 import { WorkflowCard } from "@/components/workflows/WorkflowCard";
 import { Button } from "@/components/ui/Button";
 import { mapWorkflowListItemToDesign } from "@/utils/typeMappers";
+import { showToast } from "@/utils/toast";
 import { useAuthStore } from "@/store/auth";
 import { WorkflowStatus, DesignWorkflow } from "@/types/design";
 
@@ -72,7 +73,7 @@ export const LibraryView: React.FC = () => {
       setWorkflowToDelete(null);
     } catch (err) {
       console.error("Failed to delete workflow:", err);
-      alert("Failed to delete workflow");
+      showToast.error("Failed to delete workflow");
     }
   };
 

@@ -37,10 +37,14 @@ Example Real Implementation:
             raise Exception(f"S3 upload failed: {e}")
 """
 import hashlib
-from typing import Tuple
-from PIL import Image
-from io import BytesIO
+import logging
 import os
+from io import BytesIO
+from typing import Tuple
+
+from PIL import Image
+
+logger = logging.getLogger(__name__)
 
 
 def calculate_hash(file_content: bytes) -> str:
@@ -211,3 +215,85 @@ def build_storage_key(company_id: int, workflow_id: int, screenshot_id: int, for
         S3 object key string
     """
     return f"companies/{company_id}/workflows/{workflow_id}/screenshots/{screenshot_id}.{format}"
+
+
+def delete_file(storage_key: str) -> bool:
+    """
+    Delete file from local storage (MVP) or S3 (production).
+
+    For MVP, deletes files from local filesystem.
+    In production, this will use boto3 to delete from S3 bucket.
+
+    Args:
+        storage_key: Storage key (path within bucket/directory)
+
+    Returns:
+        True if file was deleted or didn't exist, False if deletion failed
+
+    Real S3 Implementation:
+        import boto3
+        s3 = boto3.client('s3')
+        bucket = os.getenv('S3_BUCKET_NAME', 'workflow-screenshots')
+        s3.delete_object(Bucket=bucket, Key=storage_key)
+        return True
+    """
+    use_local_storage = os.getenv('USE_LOCAL_STORAGE', 'true').lower() == 'true'
+
+    if use_local_storage:
+        import pathlib
+
+        # Build the full path
+        base_dir = pathlib.Path(__file__).parent.parent.parent  # backend/
+        storage_dir = base_dir / "screenshots"
+        file_path = storage_dir / storage_key
+
+        try:
+            if file_path.exists():
+                file_path.unlink()
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to delete file {storage_key}: {e}")
+            return False
+    else:
+        # Production: Use real S3 (not implemented yet)
+        # TODO: Implement real boto3 delete
+        # import boto3
+        # s3 = boto3.client('s3')
+        # bucket = os.getenv('S3_BUCKET_NAME', 'workflow-screenshots')
+        # s3.delete_object(Bucket=bucket, Key=storage_key)
+        return True
+
+
+def delete_directory(storage_key_prefix: str) -> bool:
+    """
+    Delete a directory and all its contents from local storage (MVP) or S3 (production).
+
+    Useful for cleaning up all screenshots for a workflow at once.
+
+    Args:
+        storage_key_prefix: Directory path prefix (e.g., "companies/1/workflows/5/")
+
+    Returns:
+        True if directory was deleted or didn't exist, False if deletion failed
+    """
+    use_local_storage = os.getenv('USE_LOCAL_STORAGE', 'true').lower() == 'true'
+
+    if use_local_storage:
+        import pathlib
+        import shutil
+
+        base_dir = pathlib.Path(__file__).parent.parent.parent  # backend/
+        storage_dir = base_dir / "screenshots"
+        dir_path = storage_dir / storage_key_prefix
+
+        try:
+            if dir_path.exists() and dir_path.is_dir():
+                shutil.rmtree(dir_path)
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to delete directory {storage_key_prefix}: {e}")
+            return False
+    else:
+        # Production: Use real S3 (list and delete objects with prefix)
+        # TODO: Implement real boto3 list_objects_v2 + delete_objects
+        return True

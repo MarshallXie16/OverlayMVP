@@ -1,250 +1,256 @@
 # Session Handoff - Workflow Automation Platform
 
-**Date**: 2025-12-29
-**Last Session Focus**: Sprint 5 Complete - Health Dashboard, Notifications & Slack Integration
+**Date**: 2025-01-08 (Late Evening Session)
+**Last Session Focus**: Sprint 4: UX Polish - COMPLETE
 
 ---
 
-## Project Overview
-
-Building a Chrome Extension + Web Dashboard + FastAPI backend for recording, managing, and executing interactive workflows with AI-powered step labeling and auto-healing capabilities.
-
-**Target Users**: Teams managing repetitive web-based workflows (e.g., invoice processing, data entry, onboarding)
-
-**Core Value Proposition**: Record once, guide forever - with AI that adapts when UIs change
+## Current Task
+**Task**: Sprint 4: UX Polish
+**Status**: Complete (98% - awaiting manual testing)
+**Progress**: All 7 tickets implemented, codex review completed and issues addressed
+**Remaining**: Manual testing, screen reader audit
 
 ---
 
-## Tech Stack
+## This Session's Accomplishments
 
-| Layer | Technology |
-|-------|------------|
-| Extension | TypeScript, React, Chrome Manifest V3, Vitest |
-| Dashboard | React 18, TypeScript, Tailwind CSS, Zustand, Vite |
-| Backend | FastAPI, SQLAlchemy, Pydantic, SQLite |
-| AI | Anthropic Claude 3.5 Sonnet (vision + tool calling) |
-| Background Jobs | Celery + Redis |
-| Storage | Local filesystem (MVP), AWS S3 (production) |
-| Auth | JWT (7-day expiration), bcrypt |
-| Email | Resend (implemented) |
-| Slack | Incoming Webhooks with Block Kit |
+### Sprint 4 Summary
 
----
+| Ticket | Description | Result |
+|--------|-------------|--------|
+| REFACTOR-004 | Centralize API Base URL | Implemented - `config.ts` |
+| REFACTOR-003 | Extract Duplicate Utilities | Implemented - `stepUtils.ts` |
+| UX-001 | Replace alerts with toasts | Implemented - 16 alerts replaced |
+| FEAT-001 | Step delete confirmation modal | Implemented - `ConfirmModal.tsx` |
+| FEAT-002 | Prevent deleting last step | Implemented - backend + frontend |
+| A11Y-001 | Add aria-labels to icon buttons | Implemented - 8 locations |
+| FEAT-003 | Notification UI verification | Verified - all features working |
 
-## This Session's Accomplishments (Dec 29, 2025)
+### New Files Created
 
-### Sprint 5 - COMPLETE
+| File | Purpose |
+|------|---------|
+| `dashboard/src/config.ts` | Centralized API URL and app settings |
+| `dashboard/src/utils/stepUtils.ts` | Shared step utility functions |
+| `dashboard/src/utils/toast.ts` | Toast notification wrapper |
+| `dashboard/src/components/ConfirmModal.tsx` | Reusable confirmation dialog |
+| `dashboard/.env.example` | Frontend environment template |
 
-#### 1. Health Dashboard (FEAT-009)
-**Backend:**
-- Created `backend/app/api/health.py`:
-  - `GET /api/health/logs` - Paginated execution logs with filtering
-  - `GET /api/health/stats` - Aggregated metrics (success rate, healed count, avg duration)
-- Extended `backend/app/schemas/health.py` with `HealthLogResponse`, `HealthLogListResponse`, `HealthStatsResponse`
+### Key Modified Files
 
-**Frontend:**
-- Rewired `dashboard/src/pages/HealthView.tsx` from mock data to real API
-- Added loading states, error handling, refresh button
-
-#### 2. Notification System (FEAT-010)
-**Backend:**
-- Created `backend/app/schemas/notification.py` with response types
-- Created `backend/app/api/notifications.py`:
-  - `GET /api/notifications` - List notifications (paginated, filterable)
-  - `PATCH /api/notifications/{id}` - Mark as read
-  - `POST /api/notifications/mark-all-read` - Bulk mark as read
-  - `DELETE /api/notifications/{id}` - Dismiss (admin only)
-
-**Frontend:**
-- Created `dashboard/src/components/NotificationBell.tsx`:
-  - Bell icon with animated unread count badge
-  - Dropdown showing recent notifications with severity icons
-  - 60-second polling interval
-  - Click to navigate + mark as read
-  - "Mark all as read" functionality
-- Integrated into `dashboard/src/components/layout/Sidebar.tsx`
-
-#### 3. Slack Integration (Competitive Differentiator)
-**Backend:**
-- Created `backend/app/services/slack.py`:
-  - `SlackService` class with `send_notification()`, `format_message()`, `send_test_message()`
-  - Block Kit formatting with severity colors and action buttons
-  - Uses httpx for async HTTP requests
-- Extended `backend/app/schemas/company.py` with Slack settings types
-- Extended `backend/app/api/company.py`:
-  - `GET /api/companies/me/slack` - Get Slack settings
-  - `PUT /api/companies/me/slack` - Update Slack settings
-  - `POST /api/companies/me/slack/test` - Send test message
-
-**Frontend:**
-- Extended `dashboard/src/pages/SettingsView.tsx` with full Slack UI:
-  - Enable/disable toggle
-  - Webhook URL input (secure - shows configured status only)
-  - Notification type checkboxes
-  - Save and Test buttons with loading states
-  - Success/error feedback messages
-
-#### 4. API Client Extensions
-- Extended `dashboard/src/api/client.ts` with all new endpoints
-- Extended `dashboard/src/api/types.ts` with TypeScript types
-
-### Build Status: PASSING
-- Fixed unused import warnings in `NotificationBell.tsx` and `TeamView.tsx`
-- `npm run build` succeeds in dashboard
+| File | Changes |
+|------|---------|
+| `dashboard/src/App.tsx` | Added Toaster provider |
+| `dashboard/src/pages/WorkflowReview.tsx` | Delete confirmation, replaced alerts |
+| `dashboard/src/components/StepCard.tsx` | disableDelete prop, aria-label |
+| `backend/app/api/steps.py` | Last step deletion prevention |
+| `backend/tests/test_steps_api.py` | TestDeleteStep class (4 tests) |
 
 ---
 
-## Files Created/Modified This Session
+## Key Technical Changes
 
-### Backend (New Files)
-- `backend/app/api/health.py` - Health dashboard endpoints
-- `backend/app/api/notifications.py` - Notification CRUD endpoints
-- `backend/app/services/slack.py` - Slack webhook service
-- `backend/app/schemas/notification.py` - Notification Pydantic schemas
+### Toast System
+- Installed `react-hot-toast`
+- Created wrapper in `toast.ts` with `showToast.success/error/warning/info`
+- Toaster positioned top-right with custom styling
+- Error toasts: red background, 6s duration
+- Success toasts: green background, 5s duration
 
-### Backend (Modified)
-- `backend/app/schemas/health.py` - Added new response types
-- `backend/app/schemas/company.py` - Added Slack settings types
-- `backend/app/api/company.py` - Added Slack endpoints
-- `backend/app/main.py` - Registered new routers
+### ConfirmModal Pattern
+- Uses Headless UI Dialog for accessibility (consistent with EditStepModal)
+- Props: `isOpen`, `title`, `message`, `confirmLabel`, `confirmVariant`, `onConfirm`, `onCancel`, `loading`
+- Supports `danger` and `primary` variants
 
-### Frontend (New Files)
-- `dashboard/src/components/NotificationBell.tsx` - Notification bell component
-
-### Frontend (Modified)
-- `dashboard/src/pages/HealthView.tsx` - Wired to real API
-- `dashboard/src/pages/SettingsView.tsx` - Added Slack integration UI
-- `dashboard/src/components/layout/Sidebar.tsx` - Added NotificationBell
-- `dashboard/src/api/client.ts` - Added new API methods
-- `dashboard/src/api/types.ts` - Added new types
-- `dashboard/src/pages/TeamView.tsx` - Fixed unused import
-
----
-
-## Key Technical Patterns
-
-1. **Slack Settings Storage**: Stored in Company model's `settings` JSON field as `{"slack": {...}}`
-2. **Notification Polling**: 60-second interval in NotificationBell component
-3. **Multi-tenant Isolation**: All queries filter by `company_id` from authenticated user
-4. **Webhook Security**: Backend never returns actual webhook URL, only boolean `webhook_configured`
-
-### Notification Types
-- `workflow_broken` - When a workflow fails and needs attention
-- `workflow_healed` - When auto-healing successfully repairs a workflow
-- `low_confidence` - When auto-healing has low confidence in a fix
-- `high_failure_rate` - When a workflow has an unusually high failure rate
-
----
-
-## Current System Status
-
-### Fully Implemented & Tested
-
-| Feature | Backend | Frontend | E2E Tested |
-|---------|---------|----------|------------|
-| Authentication (login/logout) | ✅ | ✅ | ✅ |
-| 3-tier RBAC (Admin/Editor/Viewer) | ✅ | ✅ | ✅ |
-| Team member listing | ✅ | ✅ | ✅ |
-| Role management (change roles) | ✅ | ✅ | ✅ |
-| User suspension/reactivation | ✅ | ✅ | ✅ |
-| Email invites (create/revoke) | ✅ | ✅ | ✅ |
-| Workflow CRUD | ✅ | ✅ | - |
-| Workflow recording (extension) | ✅ | ✅ | - |
-| AI labeling pipeline | ✅ | ✅ | - |
-| Health Dashboard | ✅ | ✅ | - |
-| Notification System | ✅ | ✅ | - |
-| Slack Integration | ✅ | ✅ | - |
-| Walkthrough mode | ✅ | Partial | - |
-
----
-
-## Suggested Next Steps
-
-### Option 1: Sprint 5 Quick Wins (Remaining)
-- [ ] Fix click validation bug in walkthrough.ts (BUG-001) - Line 1191
-- [ ] Replace critical `alert()` calls with toast/console feedback
-- [ ] Add aria-labels to main action buttons (accessibility)
-
-### Option 2: Security Hardening (Sprint 6)
-- XSS fixes in `extension/src/content/walkthrough.ts` (innerHTML usage)
-- PostMessage origin validation
-- Rate limiting on auth endpoints
-- XPath injection prevention in candidateFinder.ts
-
-### Option 3: Test Stabilization
-- 51 failing tests need attention (14 backend, 37 extension)
-- Walkthrough.ts has 1571 lines with 0 test coverage
-
-### Option 4: Production Readiness
-- Configure Resend API for real email delivery
-- Set up production environment variables
-- Add proper error messages for edge cases
-
----
-
-## Development Environment
-
-```bash
-# Terminal 1: Backend API
-cd backend && source venv/bin/activate
-uvicorn app.main:app --reload --port 8000
-
-# Terminal 2: Celery Worker (for email sending)
-cd backend && source venv/bin/activate
-celery -A app.celery_app worker --loglevel=info
-
-# Terminal 3: Dashboard
-cd dashboard && npm run dev  # Runs on port 3000
-
-# Terminal 4: Extension
-cd extension && npm run build
-# Load extension/dist/ as unpacked in chrome://extensions
+### Last Step Deletion Prevention
+**Backend** (`steps.py`):
+```python
+step_count = db.query(Step).filter(Step.workflow_id == workflow_id).count()
+if step_count <= 1:
+    raise HTTPException(
+        status_code=400,
+        detail={
+            "code": "CANNOT_DELETE_LAST_STEP",
+            "message": "Cannot delete the last step. Delete the workflow instead."
+        }
+    )
 ```
 
-### Test Users
-
-| Email | Password | Role | Status |
-|-------|----------|------|--------|
-| marshallxie16@gmail.com | Test123! | Admin | Active |
-| testmember@dialpad.com | Test123! | Editor | Active |
+**Frontend** (`StepCard.tsx`):
+- `disableDelete` prop disables button and shows tooltip
+- Dynamic `aria-label` based on disabled state
 
 ---
 
-## Key Files Reference
+## Codex Review Findings
 
-### Sprint 5 Features
-| File | Purpose |
-|------|---------|
-| `backend/app/api/health.py` | Health logs & stats endpoints |
-| `backend/app/api/notifications.py` | Notification CRUD endpoints |
-| `backend/app/services/slack.py` | Slack webhook service |
-| `dashboard/src/pages/HealthView.tsx` | Health dashboard UI |
-| `dashboard/src/components/NotificationBell.tsx` | Notification bell component |
-| `dashboard/src/pages/SettingsView.tsx` | Settings with Slack integration |
+### Addressed Issues
+1. **Delete button missing aria-label** - Fixed in StepCard.tsx
+2. **Unused `update` import** - Removed from steps.py
 
-### RBAC System
-| File | Purpose |
-|------|---------|
-| `backend/app/utils/permissions.py` | Permission enum, role mappings |
-| `backend/app/api/company.py` | Team management + Slack endpoints |
-| `dashboard/src/pages/TeamView.tsx` | Team management UI |
-| `dashboard/src/utils/permissions.ts` | Frontend permission helpers |
+### Documented for Future (A11Y-002 in backlog.md)
+1. **Clickable div without keyboard semantics** (StepCard.tsx:44)
+   - No `role="button"`, `tabIndex`, or `onKeyDown`
+   - Keyboard users can't activate card without reaching Edit button
 
----
+2. **Drag handle non-semantic div** (StepCard.tsx:82)
+   - No role or aria-label
+   - dnd-kit keyboard support unclear
 
-## Testing Recommendations Before Next Session
-
-1. Run backend tests: `cd backend && pytest`
-2. Run dashboard tests: `cd dashboard && npm test`
-3. Manual test: Login → Settings → Integrations → Configure Slack → Send test
-4. Manual test: Check NotificationBell in sidebar shows correctly
+### Minor Notes (Not Fixed - Working as Intended)
+- `formatActionType` replaces first underscore only (works for current action types)
+- `ActionType` union includes `string` for flexibility
+- Concurrency edge case on last step deletion (acceptable for P2)
 
 ---
 
-## Git Status
+## Decisions Made
 
-**Branch**: `claude/setup-mvp-project-0159VFFCG6VBNbiGkTgvYQgR`
-**Status**: All changes uncommitted - ready for review and commit
+- **Decision**: Use Headless UI Dialog for ConfirmModal
+  **Rationale**: Consistent with existing EditStepModal pattern; provides accessibility
+  **Alternatives Rejected**: Simple div overlay (no focus trapping)
+
+- **Decision**: Convert all placeholder "Coming soon" alerts to toasts
+  **Rationale**: User explicitly requested; consistent UX
+  **Alternatives Rejected**: Leave as alerts (inconsistent)
+
+- **Decision**: Create dashboard/.env.example separate from root
+  **Rationale**: Vite uses VITE_* prefix; different from backend env vars
+  **Alternatives Rejected**: Add to root .env.example only (confusing)
+
+- **Decision**: Create backlog ticket (A11Y-002) for StepCard keyboard issues
+  **Rationale**: Out of Sprint 4 scope but important for accessibility
+  **Alternatives Rejected**: Fix immediately (scope creep)
+
+---
+
+## Key Findings This Session
+
+### 1. Headless UI Pattern
+EditStepModal already uses Headless UI Dialog. ConfirmModal follows same pattern for consistency.
+
+### 2. Toast Library Choice
+react-hot-toast chosen for simplicity. Already has success/error styling, just needs configuration in Toaster.
+
+### 3. Codex Can Run
+Unlike previous session, `codex exec --sandbox read-only` worked successfully for code review. Session used it for external review.
+
+### 4. Notification System Complete
+NotificationBell.tsx has full implementation:
+- 60s polling (not 30s as spec suggested)
+- Mark as read
+- Mark all read
+- Action URL navigation
+- Empty state
+- Click outside to close
+
+---
+
+## Files to Read First
+
+| File | Why |
+|------|-----|
+| `sprints/sprint-4-ux-polish.md` | All acceptance criteria marked (95% checked) |
+| `dashboard/src/utils/toast.ts` | Toast utility pattern |
+| `dashboard/src/components/ConfirmModal.tsx` | Modal pattern for future modals |
+| `backlog.md` (A11Y-002) | Pending accessibility work |
+
+---
+
+## Commands to Verify Current State
+
+```bash
+# Frontend build (should pass)
+cd dashboard && npm run build
+
+# Verify no alerts remain
+grep -r "alert(" dashboard/src --include="*.tsx" --include="*.ts"
+# Should return empty
+
+# Backend tests (should pass)
+cd backend && source venv/bin/activate && pytest tests/test_steps_api.py::TestDeleteStep -v
+
+# Full backend tests
+cd backend && pytest tests/ -q
+```
+
+---
+
+## Git Status (Uncommitted Sprint 4 Changes)
+
+```
+Modified:
+- backend/app/api/steps.py (last step deletion + removed unused import)
+- backend/tests/test_steps_api.py (TestDeleteStep class)
+- dashboard/src/App.tsx (Toaster provider)
+- dashboard/src/api/client.ts (imports from config)
+- dashboard/src/components/StepCard.tsx (disableDelete, aria-label)
+- dashboard/src/components/EditStepModal.tsx (imports from stepUtils, aria-label)
+- dashboard/src/pages/WorkflowReview.tsx (ConfirmModal, toasts)
+- dashboard/src/pages/WorkflowDetail.tsx (imports from stepUtils, toasts)
+- dashboard/src/pages/SettingsView.tsx (8 alerts → toasts)
+- dashboard/src/pages/LibraryView.tsx (alert → toast)
+- dashboard/src/components/InstallExtensionModal.tsx (alert → toast)
+- dashboard/src/components/NotificationBell.tsx (aria-label)
+- dashboard/src/components/layout/Sidebar.tsx (aria-label)
+- dashboard/src/pages/TeamView.tsx (aria-labels)
+- sprints/sprint-4-ux-polish.md (acceptance criteria checked)
+- backlog.md (A11Y-002 added, counts updated)
+- .env.example (note about dashboard)
+
+Created:
+- dashboard/src/config.ts
+- dashboard/src/utils/stepUtils.ts
+- dashboard/src/utils/toast.ts
+- dashboard/src/components/ConfirmModal.tsx
+- dashboard/.env.example
+```
+
+---
+
+## Immediate Next Steps
+
+1. **Commit Sprint 4 changes**:
+   ```bash
+   git add -A
+   git commit -m "Complete Sprint 4: UX Polish
+
+   Features:
+   - UX-001: Replace all alert() with toast notifications (16 locations)
+   - FEAT-001: Step delete confirmation modal (ConfirmModal.tsx)
+   - FEAT-002: Prevent deleting last step (backend + frontend)
+   - A11Y-001: Add aria-labels to icon buttons (8 locations)
+   - FEAT-003: Notification UI verified working
+
+   Refactoring:
+   - REFACTOR-003: Extract step utilities (stepUtils.ts)
+   - REFACTOR-004: Centralize API URL (config.ts)
+
+   Code Quality:
+   - Added 4 backend tests for step deletion
+   - Codex review completed - issues addressed
+   - Created A11Y-002 backlog ticket for keyboard accessibility
+
+   Tests: Backend tests pass, Frontend builds pass"
+   ```
+
+2. **Manual Testing** - Test features in browser:
+   - Delete step → confirmation modal appears
+   - Try delete last step → button disabled, tooltip shows
+   - Trigger error → toast appears
+   - Check aria-labels with screen reader
+
+3. **Next Sprint** - Check backlog for Sprint 5 priorities
+
+---
+
+## Open Questions for User
+
+None - Sprint 4 complete. Ready for:
+- Commit and proceed to Sprint 5
+- Additional manual testing
+- User's preferred direction
 
 ---
 

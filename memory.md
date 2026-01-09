@@ -9,9 +9,70 @@ Building a Chrome Extension + Web Dashboard + API server for recording, managing
 
 ---
 
+## Current Status (Updated 2025-01-08)
+
+### Feature Completion Matrix
+
+| Epic | Feature | Status | Notes |
+|------|---------|--------|-------|
+| **1. Auth & Onboarding** | Company Signup | ✅ Complete | Full flow working |
+| | Team Invite | ⚠️ 90% | Backend works, TeamView uses mock data |
+| | Extension Install | ✅ Complete | Modal works, Chrome Web Store placeholder |
+| **2. Workflow Recording** | Start Recording | ✅ Complete | Widget, step counter working |
+| | Capture Actions | ✅ Complete | Deduplication, screenshots, filtering |
+| | Stop & Upload | ⚠️ 95% | Works, no error UI or completion notification |
+| **3. AI Review** | AI Labels | ✅ Complete | Claude Vision with tool calling |
+| | Edit Steps | ✅ Complete | Modal with validation |
+| | Delete Steps | ⚠️ 80% | Works, no confirmation modal |
+| | Save Workflow | ✅ Complete | Status changes, validation |
+| **4. Walkthrough** | Discover Workflows | ✅ Complete | Dashboard with health badges |
+| | Start Walkthrough | ✅ Complete | Overlay UI, spotlight |
+| | Complete Steps | ✅ Complete | Navigation, progress |
+| | Validation | ⚠️ 70% | Basic works, no format validation |
+| **5. Auto-Healing** | Element Detection | ✅ Complete | 5-factor scoring, AI validation |
+| | Admin Alerts | ⚠️ 40% | Backend creates notifications, no UI |
+| | Health Dashboard | ❌ Mock Data | HealthView uses fake data |
+| **6. Settings** | Company Settings | ⚠️ 30% | TeamView incomplete |
+| | Profile Settings | ❌ Not Started | No profile page |
+
+### Test Status (2025-01-08) - Sprint 2 Complete
+
+| Component | Total | Pass | Fail | Notes |
+|-----------|-------|------|------|-------|
+| Backend | 327 | 326 | 0 | 1 skipped (all passing) |
+| Extension | 435 | 426 | 9 | Environment issues only (jsdom XPath, tag casing) |
+| Dashboard | 41 | 41 | 0 | All passing |
+
+**Sprint 2 Fixes Applied:**
+- Backend: Fixed fixture names, model versions, status codes, timing
+- Extension: Fixed positionSimilarity (effectiveDistance), attributeMatch (conditional factors)
+- Added 25 new walkthrough tests (64 total)
+
+### Critical Gaps
+
+**Security (P0)**:
+- SECURITY-001: XPath injection vulnerability
+- SECURITY-002: XSS via innerHTML in walkthrough
+- SECURITY-003: PostMessage spoofing (no origin check)
+- SECURITY-004: No rate limiting on auth
+
+**Core Features (P1)**:
+- HealthView shows mock data, not real health metrics
+- Notification bell UI doesn't exist
+- Click validation bug (clicks on child elements fail)
+- TeamView uses mock data
+
+### SME Readiness: 6/10
+
+Core value proposition works. Gaps are primarily in admin visibility (health dashboard, notifications) and UX polish (alerts vs toasts, missing confirmations).
+
+See `docs/SME_VALUE_PROPOSITION.md` for detailed analysis.
+
+---
+
 ## Recent Work Summary
 
-### Sprint 4: Company & Team Management (2025-12-24)
+### Sprint 4: Company & Team Management (2024-12-24)
 **Objective:** Implement company management APIs, team invite flow, and dashboard team view.
 
 **What We Built:**
@@ -841,8 +902,8 @@ Sprint plan at: `.claude/plans/mossy-rolling-kettle.md`
 4. Integrate Resend for email invites
 
 **Tech Debt (see backlog.md):**
-- TEST-FIX-001: Fix 14 failing backend tests
-- TEST-FIX-002: Fix 37 failing extension tests
+- ~~TEST-FIX-001: Fix backend tests~~ - COMPLETE (Sprint 2)
+- ~~TEST-FIX-002: Fix extension tests~~ - COMPLETE (Sprint 2)
 - SECURITY-001: XPath injection vulnerability in candidateFinder.ts
 
 See `backlog.md` for full prioritized list and `roadmap.md` for long-term milestones.

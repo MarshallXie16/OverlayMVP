@@ -26,6 +26,7 @@ import {
 import { Button } from "@/components/ui/Button";
 import { useAuthStore } from "@/store/auth";
 import { generateAvatarUrl } from "@/utils/typeMappers";
+import { showToast } from "@/utils/toast";
 import { apiClient } from "@/api/client";
 import type {
   CompanyResponse,
@@ -109,7 +110,9 @@ export const SettingsView: React.FC = () => {
       const updated = await apiClient.updateCompany({ name: companyName });
       setCompany(updated);
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to update company");
+      showToast.error(
+        err instanceof Error ? err.message : "Failed to update company",
+      );
     } finally {
       setIsUpdatingCompany(false);
     }
@@ -146,14 +149,16 @@ export const SettingsView: React.FC = () => {
         setCompany({ ...company, member_count: company.member_count - 1 });
       }
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to remove member");
+      showToast.error(
+        err instanceof Error ? err.message : "Failed to remove member",
+      );
     } finally {
       setRemovingMemberId(null);
     }
   };
 
   const handleSave = () => {
-    alert("Coming soon: Settings will be saved in a future update.");
+    showToast.info("Coming soon: Settings will be saved in a future update.");
   };
 
   // Slack integration handlers
@@ -363,7 +368,7 @@ export const SettingsView: React.FC = () => {
                   <Button
                     variant="secondary"
                     size="sm"
-                    onClick={() => alert("Coming soon")}
+                    onClick={() => showToast.info("Coming soon")}
                   >
                     Update
                   </Button>
@@ -617,14 +622,17 @@ export const SettingsView: React.FC = () => {
                           </p>
                         </div>
                       </div>
-                      <Button size="sm" onClick={() => alert("Coming soon")}>
+                      <Button
+                        size="sm"
+                        onClick={() => showToast.info("Coming soon")}
+                      >
                         Create New Key
                       </Button>
                     </div>
                     <div className="bg-neutral-50 border border-neutral-200 rounded-lg p-3 font-mono text-xs text-neutral-500 flex justify-between items-center">
                       <span>pk_live_59...x829</span>
                       <button
-                        onClick={() => alert("Coming soon")}
+                        onClick={() => showToast.info("Coming soon")}
                         className="text-primary-600 font-bold hover:underline"
                       >
                         Reveal
@@ -650,7 +658,7 @@ export const SettingsView: React.FC = () => {
                       <Button
                         variant="secondary"
                         size="sm"
-                        onClick={() => alert("Coming soon")}
+                        onClick={() => showToast.info("Coming soon")}
                       >
                         Manage
                       </Button>
@@ -931,7 +939,7 @@ export const SettingsView: React.FC = () => {
                     <Button
                       variant="secondary"
                       size="sm"
-                      onClick={() => alert("Coming soon")}
+                      onClick={() => showToast.info("Coming soon")}
                     >
                       Edit
                     </Button>

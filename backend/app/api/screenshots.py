@@ -196,11 +196,20 @@ async def get_screenshot_image(
         relative_path = screenshot.storage_url[len('/screenshots/'):]
     else:
         relative_path = screenshot.storage_url
-    
+
     # Build absolute path
     base_dir = Path(__file__).parent.parent.parent  # backend/
-    file_path = base_dir / "screenshots" / relative_path
-    
+    screenshots_dir = (base_dir / "screenshots").resolve()
+    file_path = (screenshots_dir / relative_path).resolve()
+
+    # SECURITY: Validate path stays within screenshots directory (prevent path traversal)
+    if not str(file_path).startswith(str(screenshots_dir)):
+        logger.error(f"Path traversal attempt detected: {relative_path}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid screenshot path"
+        )
+
     if not file_path.exists():
         logger.error(f"Screenshot file not found on disk: {file_path}")
         raise HTTPException(

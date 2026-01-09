@@ -1,14 +1,17 @@
 """
 FastAPI application entry point for Workflow Automation Platform.
 """
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 from pathlib import Path
+from slowapi.errors import RateLimitExceeded
 
 # Import routers
 from app.api import auth, screenshots, workflows, steps, healing, company, invites, notifications, health
+from app.utils.rate_limit import limiter
 
 
 @asynccontextmanager
@@ -27,6 +30,25 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+# Rate limiting setup
+app.state.limiter = limiter
+
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    """Custom handler for rate limit exceeded errors."""
+    return JSONResponse(
+        status_code=429,
+        content={
+            "error": {
+                "code": "RATE_LIMIT_EXCEEDED",
+                "message": "Too many requests. Please try again later.",
+            }
+        },
+        headers={"Retry-After": str(exc.detail)},
+    )
+
 
 # CORS Configuration
 app.add_middleware(

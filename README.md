@@ -11,7 +11,7 @@ AI-powered Chrome extension for recording, managing, and executing interactive w
 
 ### Project Knowledge
 - **[Memory](./memory.md)** - Project context and architectural decisions
-- **[Backlog](/.claude/backlog.md)** - Prioritized future work
+- **[Backlog](./backlog.md)** - Prioritized future work
 
 ### Design Documentation
 - **[Design Docs](./design_docs/)** - Business plan, product design, roadmap
@@ -126,12 +126,12 @@ Load in Chrome:
 | Component | URL | Expected |
 |-----------|-----|----------|
 | Backend API | http://localhost:8000/docs | Swagger UI |
-| Dashboard | http://localhost:5173 | Login page |
+| Dashboard | http://localhost:3000 | Login page |
 | Extension | Chrome toolbar icon | Popup appears |
 
 ### Step 7: Create Test Account
 
-1. Open http://localhost:5173/signup
+1. Open http://localhost:3000/signup
 2. Enter email, password, name, and company name
 3. Click "Create Account"
 4. You'll be redirected to the dashboard
@@ -151,7 +151,7 @@ Load in Chrome:
 
 ### Viewing in Dashboard
 
-1. Open http://localhost:5173
+1. Open http://localhost:3000
 2. Your recorded workflow appears in the list
 3. Click to view step details and screenshots
 
@@ -188,7 +188,7 @@ lsof -i :8000
 # Verify backend is running
 curl http://localhost:8000/api/health
 
-# Check CORS is configured (backend should allow localhost:5173)
+# Check CORS is configured (backend should allow localhost:3000)
 ```
 
 ### Extension doesn't load

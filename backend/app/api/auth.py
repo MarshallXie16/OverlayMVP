@@ -1,7 +1,11 @@
 """
 Authentication API endpoints for signup and login.
+
+Rate limited to prevent brute force attacks:
+- Login: 5 attempts per minute per IP
+- Signup: 3 attempts per minute per IP
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -9,13 +13,15 @@ from app.schemas.auth import SignupRequest, LoginRequest, TokenResponse, UserRes
 from app.services.auth import create_user, authenticate_user, get_user_response
 from app.utils.jwt import create_access_token
 from app.utils.dependencies import get_current_user
+from app.utils.rate_limit import limiter
 from app.models.user import User
 
 router = APIRouter()
 
 
 @router.post("/signup", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
-async def signup(signup_data: SignupRequest, db: Session = Depends(get_db)):
+@limiter.limit("3/minute")
+async def signup(request: Request, signup_data: SignupRequest, db: Session = Depends(get_db)):
     """
     Create a new user account.
 
@@ -59,7 +65,8 @@ async def signup(signup_data: SignupRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(login_data: LoginRequest, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+async def login(request: Request, login_data: LoginRequest, db: Session = Depends(get_db)):
     """
     Authenticate user and return access token.
 

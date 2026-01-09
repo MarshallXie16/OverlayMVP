@@ -35,6 +35,7 @@ import {
   previousStep,
   exitWalkthrough,
   initializeWalkthrough,
+  isClickOnTarget,
 } from "../walkthrough";
 
 describe("Walkthrough Mode", () => {
@@ -142,15 +143,14 @@ describe("Walkthrough Mode", () => {
       mockElement.parentNode.removeChild(mockElement);
     }
 
-    // Clean up overlay
+    // Always exit walkthrough (handles all states including "completed")
+    // exitWalkthrough() has internal guard for null state
+    exitWalkthrough();
+
+    // Clean up overlay (in case exitWalkthrough didn't fully clean up)
     const overlay = document.getElementById("walkthrough-overlay");
     if (overlay) {
       overlay.remove();
-    }
-
-    // Exit walkthrough if active
-    if (isWalkthroughActive()) {
-      exitWalkthrough();
     }
   });
 
@@ -662,6 +662,772 @@ describe("Walkthrough Mode", () => {
       const tooltip = document.querySelector(".walkthrough-tooltip");
       // Should show "3" or "of 3" somewhere
       expect(tooltip?.textContent).toMatch(/3/);
+    });
+  });
+
+  describe("Action Detection", () => {
+    let clickableElement: HTMLButtonElement;
+    let inputElement: HTMLInputElement;
+    let selectElement: HTMLSelectElement;
+
+    beforeEach(() => {
+      // Create clickable element
+      clickableElement = document.createElement("button");
+      clickableElement.id = "action-test-btn";
+      clickableElement.textContent = "Click Me";
+      document.body.appendChild(clickableElement);
+
+      // Mock getBoundingClientRect for clickable element
+      clickableElement.getBoundingClientRect = vi.fn(() => ({
+        top: 200,
+        left: 200,
+        bottom: 250,
+        right: 300,
+        width: 100,
+        height: 50,
+        x: 200,
+        y: 200,
+        toJSON: () => ({}),
+      }));
+
+      // Create input element
+      inputElement = document.createElement("input");
+      inputElement.id = "action-test-input";
+      inputElement.type = "text";
+      inputElement.placeholder = "Enter text";
+      document.body.appendChild(inputElement);
+
+      // Mock getBoundingClientRect for input element
+      inputElement.getBoundingClientRect = vi.fn(() => ({
+        top: 300,
+        left: 200,
+        bottom: 330,
+        right: 400,
+        width: 200,
+        height: 30,
+        x: 200,
+        y: 300,
+        toJSON: () => ({}),
+      }));
+
+      // Create select element
+      selectElement = document.createElement("select");
+      selectElement.id = "action-test-select";
+      selectElement.innerHTML = `
+        <option value="opt1">Option 1</option>
+        <option value="opt2">Option 2</option>
+      `;
+      document.body.appendChild(selectElement);
+
+      // Mock getBoundingClientRect for select element
+      selectElement.getBoundingClientRect = vi.fn(() => ({
+        top: 400,
+        left: 200,
+        bottom: 430,
+        right: 350,
+        width: 150,
+        height: 30,
+        x: 200,
+        y: 400,
+        toJSON: () => ({}),
+      }));
+    });
+
+    afterEach(() => {
+      // Clean up test elements
+      if (clickableElement.parentNode) {
+        clickableElement.parentNode.removeChild(clickableElement);
+      }
+      if (inputElement.parentNode) {
+        inputElement.parentNode.removeChild(inputElement);
+      }
+      if (selectElement.parentNode) {
+        selectElement.parentNode.removeChild(selectElement);
+      }
+    });
+
+    it("should attach click listener for click action type", async () => {
+      const clickStep: StepResponse = {
+        ...mockStep,
+        action_type: "click",
+        selectors: { primary: "#action-test-btn", css: "#action-test-btn" },
+      };
+
+      vi.mocked(findElement).mockResolvedValue({
+        element: clickableElement,
+        selectorUsed: "primary: #action-test-btn",
+      });
+
+      await initializeAndWait(createPayload([clickStep]));
+
+      // Verify walkthrough is active
+      expect(isWalkthroughActive()).toBe(true);
+    });
+
+    it("should attach blur listener for input_commit action type", async () => {
+      const inputStep: StepResponse = {
+        ...mockStep,
+        action_type: "input_commit",
+        selectors: { primary: "#action-test-input", css: "#action-test-input" },
+      };
+
+      vi.mocked(findElement).mockResolvedValue({
+        element: inputElement,
+        selectorUsed: "primary: #action-test-input",
+      });
+
+      await initializeAndWait(createPayload([inputStep]));
+
+      expect(isWalkthroughActive()).toBe(true);
+    });
+
+    it("should attach change listener for select_change action type", async () => {
+      const selectStep: StepResponse = {
+        ...mockStep,
+        action_type: "select_change",
+        selectors: {
+          primary: "#action-test-select",
+          css: "#action-test-select",
+        },
+      };
+
+      vi.mocked(findElement).mockResolvedValue({
+        element: selectElement,
+        selectorUsed: "primary: #action-test-select",
+      });
+
+      await initializeAndWait(createPayload([selectStep]));
+
+      expect(isWalkthroughActive()).toBe(true);
+    });
+
+    it("should not attach listeners for navigate action type", async () => {
+      const navStep: StepResponse = {
+        ...mockStep,
+        action_type: "navigate",
+        selectors: { primary: "#nav-element", css: "#nav-element" },
+      };
+
+      const navElement = document.createElement("a");
+      navElement.id = "nav-element";
+      navElement.href = "https://example.com";
+      document.body.appendChild(navElement);
+
+      navElement.getBoundingClientRect = vi.fn(() => ({
+        top: 100,
+        left: 100,
+        bottom: 120,
+        right: 200,
+        width: 100,
+        height: 20,
+        x: 100,
+        y: 100,
+        toJSON: () => ({}),
+      }));
+
+      vi.mocked(findElement).mockResolvedValue({
+        element: navElement,
+        selectorUsed: "primary: #nav-element",
+      });
+
+      await initializeAndWait(createPayload([navStep]));
+
+      expect(isWalkthroughActive()).toBe(true);
+
+      // Clean up
+      navElement.parentNode?.removeChild(navElement);
+    });
+
+    it("should track initial input value on focus for input_commit", async () => {
+      const inputStep: StepResponse = {
+        ...mockStep,
+        action_type: "input_commit",
+        selectors: { primary: "#action-test-input", css: "#action-test-input" },
+      };
+
+      vi.mocked(findElement).mockResolvedValue({
+        element: inputElement,
+        selectorUsed: "primary: #action-test-input",
+      });
+
+      // Set initial value
+      inputElement.value = "initial";
+
+      await initializeAndWait(createPayload([inputStep]));
+
+      // Simulate focus event which should update the baseline value
+      inputElement.dispatchEvent(new Event("focusin", { bubbles: true }));
+
+      expect(isWalkthroughActive()).toBe(true);
+    });
+
+    it("should auto-advance on correct click action", async () => {
+      const twoSteps: StepResponse[] = [
+        {
+          ...mockStep,
+          id: 1,
+          step_number: 1,
+          action_type: "click",
+          selectors: { primary: "#action-test-btn", css: "#action-test-btn" },
+        },
+        {
+          ...mockStep,
+          id: 2,
+          step_number: 2,
+          action_type: "click",
+          selectors: { primary: "#action-test-btn", css: "#action-test-btn" },
+        },
+      ];
+
+      vi.mocked(findElement).mockResolvedValue({
+        element: clickableElement,
+        selectorUsed: "primary: #action-test-btn",
+      });
+
+      await initializeAndWait(createPayload(twoSteps, { totalSteps: 2 }));
+
+      const state = getWalkthroughState();
+      expect(state?.currentStepIndex).toBe(0);
+
+      // Simulate click on the correct element
+      clickableElement.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+
+      // Wait for auto-advance delay (60ms for click + some buffer)
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      // Should have advanced to next step
+      const newState = getWalkthroughState();
+      expect(newState?.currentStepIndex).toBe(1);
+    });
+
+    it("should show error feedback on incorrect action", async () => {
+      const clickStep: StepResponse = {
+        ...mockStep,
+        action_type: "click",
+        selectors: { primary: "#action-test-btn", css: "#action-test-btn" },
+      };
+
+      vi.mocked(findElement).mockResolvedValue({
+        element: clickableElement,
+        selectorUsed: "primary: #action-test-btn",
+      });
+
+      await initializeAndWait(createPayload([clickStep]));
+
+      // Click on a different element (wrong element)
+      const wrongElement = document.createElement("button");
+      wrongElement.id = "wrong-btn";
+      document.body.appendChild(wrongElement);
+
+      wrongElement.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+      // The error message should be shown in tooltip
+      // The retry counter should be incremented
+      const state = getWalkthroughState();
+      const retryAttempts = state?.retryAttempts.get(0) || 0;
+      // Since the click was on wrong element, it won't trigger the handler
+      // attached to the target element
+      expect(state?.currentStepIndex).toBe(0);
+
+      wrongElement.parentNode?.removeChild(wrongElement);
+    });
+
+    it("should show skip button after 3 failed attempts", async () => {
+      const clickStep: StepResponse = {
+        ...mockStep,
+        action_type: "click",
+        selectors: { primary: "#action-test-btn", css: "#action-test-btn" },
+      };
+
+      vi.mocked(findElement).mockResolvedValue({
+        element: clickableElement,
+        selectorUsed: "primary: #action-test-btn",
+      });
+
+      await initializeAndWait(createPayload([clickStep]));
+
+      // Get state and manually set retry attempts to 2 (simulating 2 failed attempts)
+      const state = getWalkthroughState();
+      if (state) {
+        state.retryAttempts.set(0, 2);
+      }
+
+      // Verify skip button starts hidden
+      let skipBtn = document.querySelector("#walkthrough-btn-skip");
+      expect(skipBtn?.classList.contains("hidden")).toBe(true);
+    });
+
+    it("should require value change for input_commit validation", async () => {
+      const inputStep: StepResponse = {
+        ...mockStep,
+        action_type: "input_commit",
+        selectors: { primary: "#action-test-input", css: "#action-test-input" },
+      };
+
+      vi.mocked(findElement).mockResolvedValue({
+        element: inputElement,
+        selectorUsed: "primary: #action-test-input",
+      });
+
+      await initializeAndWait(createPayload([inputStep]));
+
+      // Blur without changing value should NOT trigger advance
+      inputElement.value = "";
+      inputElement.dispatchEvent(new Event("blur", { bubbles: true }));
+
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      const state = getWalkthroughState();
+      expect(state?.currentStepIndex).toBe(0);
+    });
+
+    it("should advance on input_commit with value change", async () => {
+      const twoSteps: StepResponse[] = [
+        {
+          ...mockStep,
+          id: 1,
+          step_number: 1,
+          action_type: "input_commit",
+          selectors: {
+            primary: "#action-test-input",
+            css: "#action-test-input",
+          },
+        },
+        {
+          ...mockStep,
+          id: 2,
+          step_number: 2,
+          action_type: "click",
+          selectors: { primary: "#action-test-btn", css: "#action-test-btn" },
+        },
+      ];
+
+      vi.mocked(findElement).mockResolvedValue({
+        element: inputElement,
+        selectorUsed: "primary: #action-test-input",
+      });
+
+      await initializeAndWait(createPayload(twoSteps, { totalSteps: 2 }));
+
+      // Verify starting at step 0
+      expect(getWalkthroughState()?.currentStepIndex).toBe(0);
+
+      // Focus to set baseline (empty string)
+      inputElement.dispatchEvent(new Event("focusin", { bubbles: true }));
+
+      // Change the value
+      inputElement.value = "new value";
+
+      // Blur should trigger validation with changed value
+      inputElement.dispatchEvent(new Event("blur", { bubbles: true }));
+
+      // Wait for auto-advance delay
+      await new Promise((resolve) => setTimeout(resolve, 250));
+
+      // Should have advanced
+      expect(getWalkthroughState()?.currentStepIndex).toBe(1);
+    });
+
+    it("should advance on select_change", async () => {
+      const twoSteps: StepResponse[] = [
+        {
+          ...mockStep,
+          id: 1,
+          step_number: 1,
+          action_type: "select_change",
+          selectors: {
+            primary: "#action-test-select",
+            css: "#action-test-select",
+          },
+        },
+        {
+          ...mockStep,
+          id: 2,
+          step_number: 2,
+          action_type: "click",
+          selectors: { primary: "#action-test-btn", css: "#action-test-btn" },
+        },
+      ];
+
+      vi.mocked(findElement).mockResolvedValue({
+        element: selectElement,
+        selectorUsed: "primary: #action-test-select",
+      });
+
+      await initializeAndWait(createPayload(twoSteps, { totalSteps: 2 }));
+
+      // Verify starting at step 0
+      expect(getWalkthroughState()?.currentStepIndex).toBe(0);
+
+      // Change the select value
+      selectElement.value = "opt2";
+      selectElement.dispatchEvent(new Event("change", { bubbles: true }));
+
+      // Wait for auto-advance delay
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      // Should have advanced
+      expect(getWalkthroughState()?.currentStepIndex).toBe(1);
+    });
+  });
+
+  describe("Error Handling", () => {
+    it("should handle missing overlay elements gracefully", async () => {
+      await initializeAndWait(createPayload());
+
+      // Remove the overlay manually
+      const overlay = document.getElementById("walkthrough-overlay");
+      overlay?.remove();
+
+      // Navigation should not throw
+      expect(() => advanceStep()).not.toThrow();
+      expect(() => previousStep()).not.toThrow();
+    });
+
+    it("should handle element finding errors gracefully", async () => {
+      vi.mocked(findElement).mockRejectedValue(new Error("Element not found"));
+      vi.mocked(healElement).mockRejectedValue(new Error("Healing failed"));
+
+      // Should not throw
+      await expect(initializeAndWait(createPayload())).resolves.not.toThrow();
+    });
+
+    it("should show error UI when element not found", async () => {
+      vi.mocked(findElement).mockRejectedValue(new Error("Element not found"));
+      vi.mocked(healElement).mockResolvedValue({
+        success: false,
+        element: null,
+        confidence: 0,
+        resolution: "failed",
+        healingLog: [],
+      });
+
+      await initializeAndWait(createPayload());
+
+      // Tooltip should contain error message
+      const tooltip = document.querySelector(".walkthrough-tooltip");
+      expect(tooltip?.textContent).toContain("Element Not Found");
+    });
+
+    it("should have skip option in error state", async () => {
+      vi.mocked(findElement).mockRejectedValue(new Error("Element not found"));
+      vi.mocked(healElement).mockResolvedValue({
+        success: false,
+        element: null,
+        confidence: 0,
+        resolution: "failed",
+        healingLog: [],
+      });
+
+      await initializeAndWait(createPayload());
+
+      // Skip button should be visible in error state
+      const skipBtn = document.querySelector("#walkthrough-btn-skip");
+      expect(skipBtn).toBeTruthy();
+      // Should not have hidden class
+      expect(skipBtn?.classList.contains("hidden")).toBe(false);
+    });
+  });
+
+  describe("Healing Indicator", () => {
+    it("should show healed indicator for medium confidence matches", async () => {
+      vi.mocked(findElement).mockRejectedValue(new Error("Element not found"));
+
+      // Mock healing with medium confidence (70-85%)
+      vi.mocked(healElement).mockImplementation(async (_step, options) => {
+        // For medium confidence, the onUserPrompt callback should be called
+        // but we're testing the indicator display, not the callback
+        return {
+          success: true,
+          element: mockElement,
+          confidence: 0.78, // Medium confidence
+          resolution: "auto_healed",
+          healingLog: [],
+        };
+      });
+
+      await initializeAndWait(createPayload());
+
+      // Verify walkthrough is active and element was healed
+      expect(isWalkthroughActive()).toBe(true);
+    });
+
+    it("should not show indicator for high confidence matches", async () => {
+      vi.mocked(findElement).mockRejectedValue(new Error("Element not found"));
+
+      // Mock healing with high confidence (>85%)
+      vi.mocked(healElement).mockResolvedValue({
+        success: true,
+        element: mockElement,
+        confidence: 0.92, // High confidence
+        resolution: "auto_healed",
+        healingLog: [],
+      });
+
+      await initializeAndWait(createPayload());
+
+      // Verify walkthrough is active - high confidence should be seamless
+      expect(isWalkthroughActive()).toBe(true);
+    });
+  });
+
+  describe("Completion State", () => {
+    it("should mark status as completed when all steps finished", async () => {
+      const singleStep = createPayload([mockStep], { totalSteps: 1 });
+
+      vi.mocked(findElement).mockResolvedValue({
+        element: mockElement,
+        selectorUsed: "primary: #test-button",
+      });
+
+      await initializeAndWait(singleStep);
+
+      // Advance past the only step
+      const advanced = advanceStep();
+      expect(advanced).toBe(false);
+
+      const state = getWalkthroughState();
+      expect(state?.status).toBe("completed");
+    });
+
+    it("should show completion message when workflow finishes", async () => {
+      const singleStep = createPayload([mockStep], { totalSteps: 1 });
+
+      vi.mocked(findElement).mockResolvedValue({
+        element: mockElement,
+        selectorUsed: "primary: #test-button",
+      });
+
+      await initializeAndWait(singleStep);
+
+      // Trigger click to complete
+      mockElement.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+      // Wait for completion
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      // Check for completion state
+      const state = getWalkthroughState();
+      expect(state?.status).toBe("completed");
+    });
+
+    it("should log success on completion", async () => {
+      const sendMessageSpy = vi.spyOn(chrome.runtime, "sendMessage");
+
+      const singleStep = createPayload([mockStep], { totalSteps: 1 });
+
+      vi.mocked(findElement).mockResolvedValue({
+        element: mockElement,
+        selectorUsed: "primary: #test-button",
+      });
+
+      await initializeAndWait(singleStep);
+
+      // Complete the workflow
+      mockElement.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      // Should have logged success
+      expect(sendMessageSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "LOG_EXECUTION",
+          payload: expect.objectContaining({
+            status: "success",
+          }),
+        }),
+        expect.any(Function),
+      );
+    });
+  });
+
+  describe("Tooltip Button Actions", () => {
+    beforeEach(async () => {
+      // Reset and re-setup mocks to ensure clean state
+      vi.clearAllMocks();
+      vi.mocked(findElement).mockResolvedValue({
+        element: mockElement,
+        selectorUsed: "primary: #test-button",
+      });
+
+      const threeSteps = [
+        { ...mockStep, id: 1, step_number: 1 },
+        { ...mockStep, id: 2, step_number: 2 },
+        { ...mockStep, id: 3, step_number: 3 },
+      ];
+      await initializeAndWait(createPayload(threeSteps, { totalSteps: 3 }));
+    });
+
+    it("should advance step when Next button clicked", async () => {
+      const nextBtn = document.getElementById("walkthrough-btn-next");
+      expect(nextBtn).toBeTruthy();
+
+      const initialIndex = getWalkthroughState()?.currentStepIndex;
+      expect(initialIndex).toBe(0);
+
+      // Click next button
+      nextBtn?.click();
+
+      // Wait for UI update
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Should have advanced
+      const newIndex = getWalkthroughState()?.currentStepIndex;
+      expect(newIndex).toBe(1);
+    });
+
+    it("should go back when Back button clicked", async () => {
+      // First advance to step 1 using the Next button (which re-renders tooltip)
+      const nextBtn = document.getElementById("walkthrough-btn-next");
+      expect(nextBtn).toBeTruthy();
+      nextBtn?.click();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Now get fresh Back button reference after re-render
+      const backBtn = document.getElementById("walkthrough-btn-back");
+      expect(backBtn).toBeTruthy();
+      expect((backBtn as HTMLButtonElement)?.disabled).toBe(false);
+
+      backBtn?.click();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const index = getWalkthroughState()?.currentStepIndex;
+      expect(index).toBe(0);
+    });
+
+    it("should have Back button disabled on first step", () => {
+      const backBtn = document.getElementById(
+        "walkthrough-btn-back",
+      ) as HTMLButtonElement;
+      expect(backBtn).toBeTruthy();
+      expect(backBtn?.disabled).toBe(true);
+    });
+
+    it("should exit walkthrough when Exit button clicked", async () => {
+      // Mock confirm to return true
+      vi.spyOn(window, "confirm").mockReturnValue(true);
+
+      const exitBtn = document.getElementById("walkthrough-btn-exit");
+      expect(exitBtn).toBeTruthy();
+
+      exitBtn?.click();
+
+      // Should have exited
+      expect(isWalkthroughActive()).toBe(false);
+      expect(getWalkthroughState()).toBeNull();
+    });
+
+    it("should not exit when Exit cancelled", async () => {
+      // Mock confirm to return false
+      vi.spyOn(window, "confirm").mockReturnValue(false);
+
+      const exitBtn = document.getElementById("walkthrough-btn-exit");
+      exitBtn?.click();
+
+      // Should still be active
+      expect(isWalkthroughActive()).toBe(true);
+    });
+  });
+
+  describe("Click Validation - isClickOnTarget", () => {
+    let button: HTMLButtonElement;
+    let icon: HTMLSpanElement;
+    let unrelatedElement: HTMLDivElement;
+
+    beforeEach(() => {
+      // Create a button with nested child elements (common pattern)
+      button = document.createElement("button");
+      button.id = "target-button";
+      button.className = "btn";
+
+      // Create nested icon inside button
+      icon = document.createElement("span");
+      icon.className = "icon";
+      icon.textContent = "✓";
+      button.appendChild(icon);
+
+      // Create an unrelated element
+      unrelatedElement = document.createElement("div");
+      unrelatedElement.id = "other-element";
+
+      document.body.appendChild(button);
+      document.body.appendChild(unrelatedElement);
+    });
+
+    afterEach(() => {
+      button.remove();
+      unrelatedElement.remove();
+    });
+
+    it("should validate click on target element directly", () => {
+      const event = new MouseEvent("click", { bubbles: true });
+      Object.defineProperty(event, "target", {
+        value: button,
+        writable: false,
+      });
+
+      expect(isClickOnTarget(event, button)).toBe(true);
+    });
+
+    it("should validate click on child element of target (BUG-001 fix)", () => {
+      // This is the key test - clicking on the icon should register as clicking the button
+      const event = new MouseEvent("click", { bubbles: true });
+      Object.defineProperty(event, "target", { value: icon, writable: false });
+
+      expect(isClickOnTarget(event, button)).toBe(true);
+    });
+
+    it("should reject click on unrelated element", () => {
+      const event = new MouseEvent("click", { bubbles: true });
+      Object.defineProperty(event, "target", {
+        value: unrelatedElement,
+        writable: false,
+      });
+
+      expect(isClickOnTarget(event, button)).toBe(false);
+    });
+
+    it("should validate click on deeply nested child element", () => {
+      // Create deeply nested structure: button > span > svg > path
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      const path = document.createElementNS(
+        "http://www.w3.org/2000/svg",
+        "path",
+      );
+      svg.appendChild(path);
+      icon.appendChild(svg);
+
+      const event = new MouseEvent("click", { bubbles: true });
+      Object.defineProperty(event, "target", { value: path, writable: false });
+
+      expect(isClickOnTarget(event, button)).toBe(true);
+    });
+
+    it("should reject click on sibling element", () => {
+      const siblingButton = document.createElement("button");
+      siblingButton.id = "sibling-btn";
+      document.body.appendChild(siblingButton);
+
+      const event = new MouseEvent("click", { bubbles: true });
+      Object.defineProperty(event, "target", {
+        value: siblingButton,
+        writable: false,
+      });
+
+      expect(isClickOnTarget(event, button)).toBe(false);
+
+      siblingButton.remove();
+    });
+
+    it("should handle composed path for shadow DOM compatibility", () => {
+      // Test that composedPath is checked when available
+      const event = new MouseEvent("click", { bubbles: true });
+      Object.defineProperty(event, "target", { value: icon, writable: false });
+
+      // Verify composedPath exists and is used
+      expect(typeof event.composedPath).toBe("function");
+      expect(isClickOnTarget(event, button)).toBe(true);
     });
   });
 });

@@ -18,14 +18,14 @@ python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
-# Create .env file
-echo 'DATABASE_URL=sqlite:///./app.db
-JWT_SECRET_KEY=dev-secret-key-change-me
-ANTHROPIC_API_KEY=placeholder
-AWS_ACCESS_KEY_ID=placeholder
-AWS_SECRET_ACCESS_KEY=placeholder
-S3_BUCKET_NAME=placeholder
-REDIS_URL=redis://localhost:6379' > .env
+# Create .env file from template
+cp .env.example .env
+
+# Or create manually - edit these values:
+# JWT_SECRET_KEY - REQUIRED: Generate with: python -c "import secrets; print(secrets.token_urlsafe(32))"
+# ANTHROPIC_API_KEY - REQUIRED for AI labeling: Get from https://console.anthropic.com
+# REDIS_URL - REQUIRED for Celery: redis://localhost:6379 (or your Redis URL)
+# AWS_* - OPTIONAL: For S3 screenshot storage (uses local filesystem if not set)
 
 # Initialize database
 alembic upgrade head

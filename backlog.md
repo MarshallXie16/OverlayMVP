@@ -1,6 +1,49 @@
 # Backlog - Workflow Automation Platform
 
-**Last Updated**: 2025-12-25
+**Last Updated**: 2025-01-08
+
+## Summary
+
+| Priority | Count | Focus Area |
+|----------|-------|------------|
+| **P0 - Critical** | 5 | Security vulnerabilities, test coverage gaps |
+| **P1 - High** | 20 | Core features, admin visibility, tests |
+| **P2 - Medium** | 17 | UX polish, refactoring, documentation, accessibility |
+| **P3 - Low** | 11 | Nice-to-haves, performance, enhancements |
+| **Completed** | 10 | Sprint 4 UX Polish (7), SECURITY-004/005/006 |
+| **Total** | 53 | |
+
+### Sprint 1 Status (2025-01-07)
+**Completed (Backend)**:
+- ✅ SECURITY-004: Rate limiting on auth endpoints
+- ✅ SECURITY-005: JWT secret fallback fix
+- ✅ SECURITY-006: Path traversal fix
+
+**Deferred (Extension - higher risk, wait for stability)**:
+- ⏸️ SECURITY-001: XPath injection (affects healing)
+- ⏸️ SECURITY-002: XSS via innerHTML (affects walkthrough UI)
+- ⏸️ SECURITY-003: PostMessage spoofing (affects dashboard-extension comm)
+- ⏸️ SECURITY-007: Extension API URL config (affects build)
+
+### Recent Additions (from Copilot Review 2025-01-07)
+- ~~SECURITY-005: Hardcoded JWT secret fallback (P0)~~ ✅ Complete
+- ~~SECURITY-006: Path traversal in screenshots (P0)~~ ✅ Complete
+- SECURITY-007: Extension API URL config (P0) → Deferred
+- BUG-002: Screenshot file cleanup on delete (P1) → Sprint 3
+- BUG-003: Deprecated datetime.utcnow() (P2) → Sprint 6
+- BUG-004: Wrong AI pricing estimates (P2) → Sprint 6
+- BUG-005: Whitespace screenshot URLs (P2) → Backlog
+- BUG-006: Invite token validation (P3) → Backlog
+- FEAT-018: Token expiration handling (P2) → Backlog
+- REFACTOR-007: Remove dead code (P3) → Backlog
+
+### Quick Links
+- [P0 - Critical](#p0---critical) - Fix before any deployment
+- [P1 - High Priority](#p1---high-priority) - Fix for SME launch readiness
+- [P2 - Medium Priority](#p2---medium-priority) - Polish and quality
+- [P3 - Low Priority](#p3---low-priority) - Future enhancements
+
+---
 
 ## Priority Levels
 - **P0 - Critical**: Security vulnerabilities, production blockers
@@ -16,6 +59,7 @@
 **Type**: Bug/Security
 **Component**: Extension
 **File**: `extension/src/content/healing/candidateFinder.ts` (Lines 212-223)
+**Status**: ⏸️ DEFERRED - Extension not yet released; fix when extension is more stable
 
 **Description**: User text is directly interpolated into XPath queries without sanitization, creating potential injection vulnerability.
 
@@ -86,6 +130,7 @@ const xpath = options.exact
 **Component**: Extension
 **File**: `extension/src/content/walkthrough.ts` (Lines 507, 828, 976, 1078)
 **Discovered**: 2025-12-25 (Codebase audit with Codex)
+**Status**: ⏸️ DEFERRED - Previous fix attempt broke application; wait for extension stability
 
 **Description**: Walkthrough injects admin-controlled labels and instructions into DOM using `innerHTML` without sanitization. If an admin edits step labels maliciously (or if the backend is compromised), arbitrary HTML/JS can be injected into any page where walkthrough runs.
 
@@ -121,6 +166,7 @@ tooltipElement.innerHTML = `...`;
 **Component**: Extension
 **File**: `extension/src/content/walkthrough.ts` (Lines 1534-1561)
 **Discovered**: 2025-12-25 (Codebase audit with Codex)
+**Status**: ⏸️ DEFERRED - Affects dashboard-extension communication; needs careful testing
 
 **Description**: The walkthrough listens for `window.postMessage` events and only checks `data.source === "overlay-dashboard"` but does NOT validate `event.origin`. Any malicious page can send a message with `{source: "overlay-dashboard", type: "START_WALKTHROUGH"}` and trigger a walkthrough, potentially leaking workflow data or causing unexpected behavior.
 
@@ -151,31 +197,332 @@ window.addEventListener("message", (event: MessageEvent) => {
 
 ---
 
-### SECURITY-004: Missing Rate Limiting on Auth Endpoints
-**Type**: Bug/Security
-**Component**: Backend
-**File**: `backend/app/api/auth.py` (Lines 17, 61)
-**Discovered**: 2025-12-25 (Codebase audit)
-
-**Description**: `/signup` and `/login` endpoints have no rate limiting. Vulnerable to brute force password attacks, credential stuffing, and abuse.
-
-**Risk**: HIGH - Attackers can attempt unlimited login attempts to guess passwords.
-
-**Fix**: Add rate limiting middleware (e.g., `slowapi`) with limits like:
-- Login: 5 attempts per 15 minutes per IP
-- Signup: 10 attempts per hour per IP
-- Failed attempts should trigger progressive delays
-
-**Acceptance Criteria**:
-- [ ] Rate limiting middleware installed and configured
-- [ ] Login limited to 5 attempts / 15 min / IP
-- [ ] Signup limited to 10 attempts / hour / IP
-- [ ] Returns 429 Too Many Requests with retry-after header
-- [ ] Tests for rate limiting behavior
+### ~~SECURITY-004: Missing Rate Limiting on Auth Endpoints~~ ✅ COMPLETE
+**Status**: ✅ Completed 2025-01-07 - See Completed Items section
 
 ---
 
 ## P1 - High Priority
+
+### FEAT-011: Workflow Completion Notification
+**Type**: Enhancement
+**Component**: Dashboard + Extension
+**User Story**: 2.3
+**Discovered**: 2025-01-07 (Feature audit)
+
+**Description**: When AI labeling completes, users have no notification. They must manually check the dashboard to see if their workflow is ready for review. This creates poor UX especially for longer workflows.
+
+**Current Behavior**:
+- User stops recording → workflow shows "Processing"
+- AI labeling runs in background (30-60s)
+- User has to refresh/check dashboard manually
+- No indication when "Draft" status is reached
+
+**Expected Behavior**:
+- Toast notification appears when AI labeling completes
+- Browser notification (if permitted)
+- Dashboard shows badge/indicator for newly ready workflows
+
+**Implementation Notes**:
+- Backend: Celery task completion triggers notification creation
+- Dashboard: Poll `/api/workflows` or use WebSocket for real-time updates
+- Extension: Can show notification via `chrome.notifications` API
+- Existing notification model can be extended
+
+**Files to Investigate**:
+- `backend/app/tasks/ai_labeling.py` - Task completion point
+- `backend/app/models/notification.py` - Existing notification model
+- `dashboard/src/pages/Dashboard.tsx` - Workflow list polling
+
+**Acceptance Criteria**:
+- [ ] Backend creates notification when AI labeling completes
+- [ ] Dashboard shows toast when workflow becomes "draft"
+- [ ] Extension shows chrome notification (optional)
+- [ ] Notification includes workflow name and link to review
+- [ ] Works for concurrent workflow processing
+
+---
+
+### FEAT-012: Upload Error UI with Retry
+**Type**: Enhancement
+**Component**: Extension + Dashboard
+**User Story**: 2.3
+**Discovered**: 2025-01-07 (Feature audit)
+
+**Description**: When workflow upload fails (network error, server error), there's no user-facing error UI or retry mechanism. Users lose their recorded workflow.
+
+**Current Behavior**:
+- Upload fails silently in background
+- Error logged to console only
+- Local storage may or may not be cleared
+- User sees nothing
+
+**Expected Behavior**:
+- Extension shows error toast: "Upload failed. Your recording is saved locally."
+- Retry button available in popup
+- Dashboard shows failed upload in a "Drafts" or "Pending Upload" section
+- Steps retained in IndexedDB until successfully uploaded
+
+**Implementation Notes**:
+- Extension already buffers in IndexedDB (verify retention on error)
+- Need upload retry mechanism in background worker
+- Consider exponential backoff already implemented in API client
+- Dashboard may need "Local Drafts" view (stretch goal)
+
+**Files to Investigate**:
+- `extension/src/background/messaging.ts` - Upload error handling
+- `extension/src/content/storage/indexeddb.ts` - Data retention
+- `extension/src/popup/components/RecordingControls.tsx` - UI for retry
+
+**Acceptance Criteria**:
+- [ ] Error toast shown on upload failure
+- [ ] Steps retained in IndexedDB on failure
+- [ ] Retry button in extension popup
+- [ ] Successful retry clears local storage
+- [ ] 3 automatic retry attempts before manual retry needed
+
+---
+
+### FEAT-013: Complete Settings Page - Team Management
+**Type**: Enhancement
+**Component**: Dashboard
+**User Story**: 6.1
+**Discovered**: 2025-01-07 (Feature audit)
+
+**Description**: Settings page has a TeamView component but it uses mock data. Admins cannot actually see or manage their team members.
+
+**Current State**:
+- TeamView page exists at `/team`
+- Shows invite link with copy button ✓
+- Team member list uses MOCK DATA from `@/data/mockData`
+- Remove member functionality not wired to backend
+- Backend APIs exist (`/api/companies/me/members`, DELETE `/members/{id}`)
+
+**Missing Functionality**:
+1. Fetch real team members from `/api/companies/me/members`
+2. Display actual roles (admin/regular)
+3. Wire "Remove" button to DELETE endpoint
+4. Show loading/error states
+5. Confirmation modal before removing member
+
+**Files to Modify**:
+- `dashboard/src/pages/TeamView.tsx` (or SettingsView.tsx)
+- `dashboard/src/api/client.ts` - Add team member API calls
+- Backend endpoints already exist: `backend/app/api/companies.py`
+
+**API Endpoints Available**:
+```
+GET /api/companies/me/members - List team members
+DELETE /api/companies/me/members/{user_id} - Remove member (admin only)
+PATCH /api/companies/me/members/{user_id}/role - Update role (future)
+```
+
+**Acceptance Criteria**:
+- [ ] Team member list shows real data from API
+- [ ] Each member shows: name, email, role, join date
+- [ ] Admin sees "Remove" button (not on self)
+- [ ] Confirmation modal before removal
+- [ ] Success/error toasts (not alerts)
+- [ ] Loading skeleton during fetch
+- [ ] Empty state if no team members
+
+---
+
+### FEAT-014: Profile Settings Page
+**Type**: Enhancement
+**Component**: Dashboard
+**User Story**: 6.2
+**Discovered**: 2025-01-07 (Feature audit)
+
+**Description**: Users cannot update their profile information (name, password). No profile page exists.
+
+**Current State**:
+- No profile editing page
+- User name set at signup, never changeable
+- Password reset not implemented
+- No avatar support
+
+**Required Features (MVP)**:
+1. View current profile (name, email, role)
+2. Edit display name
+3. Change password (requires current password)
+
+**Future Features (post-MVP)**:
+- Avatar upload
+- Email change (requires verification)
+- Two-factor authentication
+
+**Backend Changes Needed**:
+- `PATCH /api/users/me` - Update name
+- `POST /api/users/me/change-password` - Change password
+
+**Files to Create/Modify**:
+- `dashboard/src/pages/ProfileSettings.tsx` - New page
+- `backend/app/api/users.py` - Profile endpoints
+- `dashboard/src/api/client.ts` - API calls
+
+**Acceptance Criteria**:
+- [ ] Profile page accessible from settings/navbar
+- [ ] Shows current user info (name, email, role)
+- [ ] Can edit display name (saves on blur or button)
+- [ ] Can change password with current password verification
+- [ ] Password validation (8+ chars, match confirmation)
+- [ ] Success/error feedback
+- [ ] Logout after password change (security)
+
+---
+
+### FEAT-015: Email Notifications for Workflow Alerts
+**Type**: Enhancement
+**Component**: Backend
+**User Story**: 5.2
+**Discovered**: 2025-01-07 (Feature audit)
+
+**Description**: When workflows break, admins only see in-app notifications (which currently don't display). Critical alerts should also go via email for immediate awareness.
+
+**Use Cases**:
+1. Workflow marked as "Broken" (3+ consecutive failures)
+2. Weekly health summary digest
+3. Team member invitation (already partially implemented)
+
+**Implementation Options**:
+- Resend (recommended - simple, modern API)
+- SendGrid (more features, higher cost)
+- AWS SES (cheapest at scale)
+
+**Backend Changes**:
+- Add email service (`backend/app/services/email.py`)
+- Extend notification creation to trigger email
+- Add email templates for different notification types
+- User preference for email notifications (future)
+
+**Files to Investigate**:
+- `backend/app/services/health.py` - Where broken workflow detected
+- `backend/app/models/notification.py` - Notification creation
+- `backend/app/services/email_service.py` - May already exist
+
+**Environment Variables Needed**:
+```
+RESEND_API_KEY=re_xxxxx
+EMAIL_FROM=noreply@yourapp.com
+```
+
+**Acceptance Criteria**:
+- [ ] Email service integrated (Resend recommended)
+- [ ] Broken workflow alert emails to admin(s)
+- [ ] Email template with workflow name, link, failure details
+- [ ] Unsubscribe link in email (CAN-SPAM compliance)
+- [ ] Rate limiting (max 1 email per workflow per hour)
+- [ ] Test mode for development (no real emails)
+
+---
+
+### FEAT-016: SSO/SAML Integration (Enterprise)
+**Type**: Enhancement
+**Component**: Backend + Dashboard
+**User Story**: Enterprise requirement
+**Priority Context**: Required for enterprise customers, not for SMEs
+
+**Description**: Enterprise customers require Single Sign-On via SAML 2.0 or OIDC to integrate with their identity providers (Okta, Azure AD, Google Workspace).
+
+**Scope**:
+- SAML 2.0 SP (Service Provider) implementation
+- OIDC support (Google, Microsoft, Okta)
+- JIT (Just-In-Time) user provisioning
+- Mapping IdP groups to app roles
+
+**Implementation Notes**:
+- Use established library (python-saml, authlib for OIDC)
+- SSO is per-company configuration
+- Fallback to email/password for non-SSO users
+- Store IdP metadata in database
+
+**Database Changes**:
+```python
+# New table
+class CompanySSOConfig(Base):
+    company_id: FK
+    provider: str  # 'saml', 'oidc', 'google', 'microsoft'
+    metadata_url: str  # For SAML IdP metadata
+    client_id: str  # For OIDC
+    client_secret: str  # Encrypted
+    enabled: bool
+```
+
+**Endpoints Needed**:
+- `GET /auth/sso/{company_slug}` - Initiate SSO
+- `POST /auth/sso/callback` - SAML ACS or OIDC callback
+- `GET /api/companies/me/sso` - Get SSO config (admin)
+- `PUT /api/companies/me/sso` - Update SSO config (admin)
+
+**Acceptance Criteria**:
+- [ ] SAML 2.0 SP-initiated login flow
+- [ ] OIDC flow for Google/Microsoft
+- [ ] User created on first SSO login (JIT provisioning)
+- [ ] SSO config UI for admins
+- [ ] Graceful fallback if SSO fails
+- [ ] Security: Validate signatures, check assertions
+
+**Estimated Effort**: 2-3 weeks (complex integration)
+
+---
+
+### FEAT-017: Audit Logging (Enterprise)
+**Type**: Enhancement
+**Component**: Backend
+**User Story**: Enterprise compliance requirement
+**Priority Context**: Required for SOC 2, HIPAA, enterprise security reviews
+
+**Description**: Enterprise customers need audit logs for compliance. Track who did what, when, from where.
+
+**Events to Log**:
+- User login/logout
+- User created/invited/removed
+- Role changes
+- Workflow created/updated/deleted/activated
+- Step edited
+- Walkthrough started/completed/failed
+- Settings changes
+- SSO configuration changes
+
+**Data to Capture**:
+```python
+class AuditLog(Base):
+    id: UUID
+    timestamp: datetime
+    user_id: UUID (nullable for system events)
+    company_id: UUID
+    action: str  # 'user.login', 'workflow.create', etc.
+    resource_type: str  # 'user', 'workflow', 'step'
+    resource_id: UUID
+    ip_address: str
+    user_agent: str
+    old_values: JSON (nullable)
+    new_values: JSON (nullable)
+    metadata: JSON
+```
+
+**API Endpoints**:
+- `GET /api/audit-logs` - List logs (admin only, paginated)
+- `GET /api/audit-logs/export` - Export as CSV
+
+**Retention Policy**:
+- Default: 90 days
+- Configurable per company (enterprise plan)
+- Automatic cleanup job
+
+**Acceptance Criteria**:
+- [ ] Audit log model and migrations
+- [ ] Middleware/decorator for automatic logging
+- [ ] API endpoints for viewing logs
+- [ ] Export to CSV functionality
+- [ ] Filter by user, action, resource, date range
+- [ ] Retention cleanup job
+- [ ] Cannot modify/delete logs (append-only)
+
+**Estimated Effort**: 1-2 weeks
+
+---
 
 ### FEAT-009: Wire HealthView to Real Backend Data (Broken Admin Loop)
 **Type**: Enhancement
@@ -362,44 +709,89 @@ if (eventTarget !== targetElement) {
 
 ---
 
-### DOC-001: Create Missing QUICKSTART.md
+### DOC-008: Fix README Dashboard Port Discrepancy
 **Type**: Documentation
 **Component**: Root
+**Discovered**: 2025-01-07 (Documentation audit)
 
-**Description**: README.md references QUICKSTART.md but file doesn't exist. New developers cannot onboard efficiently.
+**Description**: Root README says dashboard runs on port 5173, but vite.config.ts and dashboard/README.md say port 3000. This causes confusion for new developers.
 
-**Required Content**:
-- 5-minute setup guide
-- Environment setup (Python venv, npm install)
-- Database initialization
-- Running all services (backend, celery, dashboard, extension)
-- First workflow recording test
-- Common setup errors and solutions
+**Current State**:
+- `README.md` line ~45: "Dashboard at http://localhost:5173"
+- `dashboard/vite.config.ts`: `port: 3000`
+- `dashboard/README.md`: "http://localhost:3000"
+
+**Fix**: Update root README.md to say port 3000.
 
 **Acceptance Criteria**:
-- [ ] File created with comprehensive setup guide
-- [ ] Tested by following steps on fresh clone
-- [ ] Includes troubleshooting section
+- [ ] Root README says port 3000
+- [ ] Consistent across all documentation
+- [ ] Verified by running `npm run dev` in dashboard
 
 ---
 
-### DOC-002: Create Missing TESTING_GUIDE.md
+### DOC-009: Update QUICKSTART.md with Environment Variables
 **Type**: Documentation
 **Component**: Root
+**Discovered**: 2025-01-07 (Documentation audit)
 
-**Description**: README.md references TESTING_GUIDE.md but file doesn't exist.
+**Description**: QUICKSTART.md doesn't explain required environment variables. Developers get errors when running without them.
 
-**Required Content**:
-- End-to-end testing scenarios
-- How to test recording → AI labeling → walkthrough
-- Manual test checklist
-- Automated test suite overview
-- How to run tests for each package
+**Missing Information**:
+1. Required environment variables:
+   - `JWT_SECRET_KEY` - Required for auth
+   - `ANTHROPIC_API_KEY` - Required for AI labeling
+   - `REDIS_URL` - Required for Celery
+2. How to create `.env` from `.env.example`
+3. What happens if variables are missing
 
 **Acceptance Criteria**:
-- [ ] File created with testing procedures
-- [ ] Test data fixtures documented
-- [ ] E2E scenarios documented
+- [ ] Environment variables section added
+- [ ] Clear distinction between required vs optional
+- [ ] Example values provided
+- [ ] Error messages explained
+
+---
+
+### DOC-010: Update memory.md Recent Work Summary
+**Type**: Documentation
+**Component**: Root
+**Discovered**: 2025-01-07 (Documentation audit)
+
+**Description**: memory.md "Recent Work Summary" and "Next Steps" sections are outdated. Shows Sprint 4 as current but unclear what's complete vs in-progress.
+
+**Issues**:
+- Sprint 4 dates show "2025-12-24" (likely meant 2024)
+- No clear "Current Status" section
+- Test status (14 failed backend, 37 failed extension) not mentioned
+- No mention of what's production-ready vs in-development
+
+**Required Updates**:
+1. Add "Current Status" section with clear feature completion matrix
+2. Update test status with actual numbers
+3. Clarify what's production-ready
+4. Add recent work from 2025-01
+
+**Acceptance Criteria**:
+- [ ] Clear "Current Status" section
+- [ ] Feature completion status (complete/partial/not started)
+- [ ] Current test status with numbers
+- [ ] Recent work summary updated
+- [ ] "Next Steps" reflects actual priorities
+
+---
+
+### DOC-001: ~~Create Missing QUICKSTART.md~~ RESOLVED
+**Status**: File exists - see DOC-009 for updates needed
+
+---
+
+---
+
+### DOC-002: ~~Create Missing TESTING_GUIDE.md~~ RESOLVED
+**Status**: File exists - needs minor updates for new Sprint 4 features
+
+---
 
 ---
 
@@ -624,6 +1016,44 @@ def step_to_response(step: Step) -> StepResponse:
 
 ---
 
+### A11Y-002: StepCard Keyboard Accessibility
+**Type**: Enhancement
+**Component**: Dashboard
+**File**: `dashboard/src/components/StepCard.tsx`
+**Discovered**: 2025-01-08 (Codex Review - Sprint 4)
+
+**Description**: The StepCard component has accessibility issues that affect keyboard-only users and screen reader users.
+
+**Issues Identified**:
+1. **Clickable div without keyboard semantics** (Line 44)
+   - The entire card is a clickable `<div>` with `onClick`
+   - No `role="button"`, `tabIndex`, or `onKeyDown` for Enter/Space
+   - Keyboard users cannot activate the card without reaching the "Edit Labels" button
+
+2. **Drag handle is non-semantic div** (Line 82)
+   - The drag handle is a `<div>` with no `role` or `aria-label`
+   - Keyboard dragging story unclear with dnd-kit
+
+**Recommended Fix**:
+1. For clickable card:
+   - Add `role="button"`, `tabIndex={0}`, and `onKeyDown` handler for Enter/Space
+   - OR wrap card content in a `<button>` element with proper styling
+
+2. For drag handle:
+   - Make it a `<button>` with `aria-label="Reorder step"`
+   - Ensure dnd-kit keyboard dragging still works
+
+**Acceptance Criteria**:
+- [ ] Card is keyboard-navigable and activatable
+- [ ] Drag handle has proper ARIA labeling
+- [ ] Screen reader announces card purpose
+- [ ] Keyboard dragging works with dnd-kit
+- [ ] Build and tests pass
+
+**Related**: A11Y-001 (icon buttons - completed in Sprint 4)
+
+---
+
 ### PERF-002: Add Composite Database Indexes
 **Type**: Tech Debt
 **Component**: Backend
@@ -801,7 +1231,111 @@ if (distance < 50) {
 
 ---
 
+## P2 - Medium Priority (Copilot Review Additions)
+
+### BUG-005: Handle Whitespace Screenshot URLs in AI Service
+**Type**: Bug
+**Component**: Backend
+**File**: `backend/app/services/ai.py` (lines 102-104)
+**Source**: Copilot Review Issue #6
+
+**Description**: AI service checks for empty screenshot URLs but doesn't handle whitespace-only strings like `"   "`. This could cause fallback bypass and API errors.
+
+**Current Code**:
+```python
+if not step.screenshot or not step.screenshot.storage_url:
+    return self._generate_fallback_label(step, element_meta)
+```
+
+**Fix**: Add `.strip()` check:
+```python
+if not step.screenshot or not step.screenshot.storage_url or not step.screenshot.storage_url.strip():
+    return self._generate_fallback_label(step, element_meta)
+```
+
+**Acceptance Criteria**:
+- [ ] Whitespace-only URLs treated as empty
+- [ ] Falls back to template labels correctly
+- [ ] Test for whitespace URL handling
+
+---
+
+### FEAT-018: Extension Token Expiration Handling
+**Type**: Enhancement
+**Component**: Extension
+**File**: `extension/src/shared/api.ts` (lines 100-107)
+**Source**: Copilot Review Issue #8
+
+**Description**: Extension checks for token presence but not expiration. When token expires mid-session, user gets cryptic 401 error instead of graceful logout.
+
+**Current Behavior**: Token exists but expired → 401 error → confusing UX
+
+**Expected Behavior**: Token expired → Clear auth state → Show "Session expired, please log in again"
+
+**Implementation**:
+```typescript
+if (requiresAuth) {
+  const token = await getToken();
+  const tokenExpiry = await getTokenExpiry();
+
+  if (!token) {
+    throw new ApiClientError("Not authenticated", 401);
+  }
+
+  // Check if token expired or expiring within 1 hour
+  if (tokenExpiry && new Date(tokenExpiry) <= new Date(Date.now() + 3600000)) {
+    await clearAuthState();
+    throw new ApiClientError("Session expired. Please log in again.", 401);
+  }
+
+  requestHeaders["Authorization"] = `Bearer ${token}`;
+}
+```
+
+**Acceptance Criteria**:
+- [ ] Token expiration checked before API calls
+- [ ] Expired tokens trigger graceful logout
+- [ ] User-friendly error message shown
+- [ ] Test for token expiration handling
+
+---
+
 ## P3 - Low Priority
+
+### BUG-006: Validate Invite Token Length Before Query
+**Type**: Bug
+**Component**: Backend
+**File**: `backend/app/services/auth.py` (lines 69-125)
+**Source**: Copilot Review Issue #13
+
+**Description**: Invite token lookup queries database without length validation. Extremely long tokens could waste DB resources.
+
+**Fix**: Add length check (tokens are ~43 chars from `secrets.token_urlsafe(32)`):
+```python
+if len(signup_data.invite_token) > 100:
+    raise HTTPException(status_code=400, detail="Invalid invite token format")
+```
+
+**Acceptance Criteria**:
+- [ ] Token length validated before DB query
+- [ ] Clear error message for invalid tokens
+
+---
+
+### REFACTOR-007: Remove Dead Code _extract_json Method
+**Type**: Tech Debt
+**Component**: Backend
+**File**: `backend/app/services/ai.py` (lines 422-441)
+**Source**: Copilot Review Issue #14
+
+**Description**: `_extract_json` static method is never called after refactor to Claude tool calling. Dead code increases maintenance burden.
+
+**Acceptance Criteria**:
+- [ ] Method removed
+- [ ] Build passes
+- [ ] No other code depends on it
+
+---
 
 ### FEAT-005: Workflow Search and Filter
 **Type**: Enhancement
@@ -889,7 +1423,41 @@ if (distance < 50) {
 
 ## Completed Items
 
-_(Move items here when done)_
+### SECURITY-005: Fix Hardcoded JWT Secret Fallback ✅
+**Completed**: 2025-01-07
+**Component**: Backend
+**File**: `backend/app/utils/jwt.py`
+
+**What was done**:
+- Added production check - app fails fast if JWT_SECRET_KEY not set in production
+- Added dev warning when using insecure default
+- No hardcoded fallback used silently
+
+---
+
+### SECURITY-006: Fix Path Traversal in Screenshots API ✅
+**Completed**: 2025-01-07
+**Component**: Backend
+**File**: `backend/app/api/screenshots.py`
+
+**What was done**:
+- Added `.resolve()` to normalize paths
+- Added validation that file path stays within screenshots directory
+- Path traversal attempts now return 400 Bad Request
+
+---
+
+### SECURITY-004: Add Rate Limiting on Auth Endpoints ✅
+**Completed**: 2025-01-07
+**Component**: Backend
+**Files**: `backend/app/main.py`, `backend/app/api/auth.py`, `backend/app/utils/rate_limit.py`
+
+**What was done**:
+- Added slowapi for rate limiting
+- Login: 5 attempts per minute per IP
+- Signup: 3 attempts per minute per IP
+- Returns 429 Too Many Requests with Retry-After header
+- Rate limiting disabled during tests via TESTING env var
 
 ---
 

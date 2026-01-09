@@ -169,7 +169,7 @@ class TestCreateWorkflow:
 
         # Check immediate response (async upload workflow - Story 2.3)
         assert "workflow_id" in data
-        assert data["status"] == "processing"
+        assert data["status"] == "draft"
 
         # Verify workflow was created in database
         workflow = db.query(Workflow).filter(Workflow.id == data["workflow_id"]).first()
@@ -177,7 +177,7 @@ class TestCreateWorkflow:
         assert workflow.name == "Submit Expense Report"
         assert workflow.company_id == user1.company_id
         assert workflow.created_by == user1.id
-        assert workflow.status == "processing"
+        assert workflow.status == "draft"
         assert workflow.starting_url == "https://app.netsuite.com/expenses"
 
         # Verify tags stored as JSON
@@ -299,8 +299,8 @@ class TestCreateWorkflow:
         data = response.json()
         
         assert "workflow_id" in data
-        assert data["status"] == "processing"
-        
+        assert data["status"] == "draft"
+
         # Verify workflow in database
         workflow = db.query(Workflow).filter(Workflow.id == data["workflow_id"]).first()
         assert workflow is not None
@@ -651,14 +651,14 @@ class TestUpdateWorkflow:
         db.add(workflow)
         db.commit()
 
-        # Update workflow
+        # Update workflow (note: can't activate without steps with labels)
         response = client.put(
             f"/api/workflows/{workflow.id}",
             json={
                 "name": "Updated Name",
                 "description": "Updated description",
                 "tags": ["new", "updated"],
-                "status": "active"
+                "status": "needs_review"
             },
             headers={"Authorization": f"Bearer {token1}"}
         )
@@ -669,12 +669,12 @@ class TestUpdateWorkflow:
         assert data["name"] == "Updated Name"
         assert data["description"] == "Updated description"
         assert data["tags"] == ["new", "updated"]
-        assert data["status"] == "active"
+        assert data["status"] == "needs_review"
 
         # Verify in database
         db.refresh(workflow)
         assert workflow.name == "Updated Name"
-        assert workflow.status == "active"
+        assert workflow.status == "needs_review"
 
     def test_update_workflow_partial(
         self,
@@ -816,6 +816,91 @@ class TestDeleteWorkflow:
 
         # Verify workflow NOT deleted
         assert db.query(Workflow).filter(Workflow.id == workflow.id).first() is not None
+
+    def test_delete_workflow_cleans_up_screenshot_files(
+        self,
+        client: TestClient,
+        db: Session,
+        token1: str,
+        user1: User,
+        tmp_path,
+        monkeypatch
+    ):
+        """Test that deleting workflow also deletes screenshot files from storage."""
+        import pathlib
+        import shutil
+        from app.utils import s3
+
+        # Create a mock storage directory
+        mock_storage_dir = tmp_path / "screenshots"
+        mock_storage_dir.mkdir()
+
+        # Patch the s3 module to use our temp directory
+        def mock_delete_directory(storage_key_prefix: str) -> bool:
+            dir_path = mock_storage_dir / storage_key_prefix
+            try:
+                if dir_path.exists() and dir_path.is_dir():
+                    shutil.rmtree(dir_path)
+                return True
+            except Exception:
+                return False
+
+        monkeypatch.setattr(s3, "delete_directory", mock_delete_directory)
+
+        # Also patch in workflow module
+        from app.services import workflow as workflow_module
+        monkeypatch.setattr(workflow_module, "delete_directory", mock_delete_directory)
+
+        # Create workflow
+        workflow = Workflow(
+            company_id=user1.company_id,
+            created_by=user1.id,
+            name="With Screenshots",
+            starting_url="https://example.com",
+            tags=json.dumps([])
+        )
+        db.add(workflow)
+        db.flush()
+
+        step = Step(
+            workflow_id=workflow.id,
+            step_number=1,
+            action_type="click",
+            selectors=json.dumps({"primary": "#btn"}),
+            element_meta=json.dumps({"tag": "BUTTON"}),
+            page_context=json.dumps({"url": "https://example.com"})
+        )
+        db.add(step)
+        db.commit()
+
+        workflow_id = workflow.id
+        company_id = user1.company_id
+
+        # Create mock screenshot files in the expected location
+        screenshot_dir = mock_storage_dir / "companies" / str(company_id) / "workflows" / str(workflow_id) / "screenshots"
+        screenshot_dir.mkdir(parents=True)
+        (screenshot_dir / "1.jpg").write_bytes(b"fake screenshot 1")
+        (screenshot_dir / "2.jpg").write_bytes(b"fake screenshot 2")
+
+        # Verify files exist before deletion
+        assert screenshot_dir.exists()
+        assert (screenshot_dir / "1.jpg").exists()
+        assert (screenshot_dir / "2.jpg").exists()
+
+        # Delete workflow
+        response = client.delete(
+            f"/api/workflows/{workflow_id}",
+            headers={"Authorization": f"Bearer {token1}"}
+        )
+
+        assert response.status_code == 204
+
+        # Verify workflow deleted from DB
+        assert db.query(Workflow).filter(Workflow.id == workflow_id).first() is None
+
+        # Verify screenshot files were cleaned up
+        workflow_dir = mock_storage_dir / "companies" / str(company_id) / "workflows" / str(workflow_id)
+        assert not workflow_dir.exists(), "Screenshot files should be deleted when workflow is deleted"
 
 
 class TestMultiTenancyIsolation:

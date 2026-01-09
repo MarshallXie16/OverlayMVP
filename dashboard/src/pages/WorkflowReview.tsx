@@ -34,9 +34,11 @@ import { apiClient } from "@/api/client";
 import type { WorkflowResponse, StepResponse } from "@/api/types";
 import { StepCard } from "@/components/StepCard";
 import { EditStepModal } from "@/components/EditStepModal";
+import { ConfirmModal } from "@/components/ConfirmModal";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { mapWorkflowStatus } from "@/utils/typeMappers";
+import { showToast } from "@/utils/toast";
 
 /**
  * Sortable wrapper for StepCard that enables drag-and-drop
@@ -45,12 +47,14 @@ interface SortableStepCardProps {
   step: StepResponse;
   onEdit: (step: StepResponse) => void;
   onDelete: (stepId: number) => void;
+  disableDelete?: boolean;
 }
 
 const SortableStepCard: React.FC<SortableStepCardProps> = ({
   step,
   onEdit,
   onDelete,
+  disableDelete,
 }) => {
   const {
     attributes,
@@ -72,6 +76,7 @@ const SortableStepCard: React.FC<SortableStepCardProps> = ({
         step={step}
         onEdit={onEdit}
         onDelete={onDelete}
+        disableDelete={disableDelete}
         dragHandleProps={{ ...attributes, ...listeners }}
         isDragging={isDragging}
       />
@@ -90,6 +95,11 @@ export const WorkflowReview: React.FC = () => {
   const [isReordering, setIsReordering] = useState(false);
   const [editingStep, setEditingStep] = useState<StepResponse | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Delete confirmation state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [stepToDelete, setStepToDelete] = useState<StepResponse | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Drag-and-drop sensors
   const sensors = useSensors(
@@ -140,24 +150,32 @@ export const WorkflowReview: React.FC = () => {
     });
   };
 
-  const handleDeleteStep = async (stepId: number) => {
+  const handleDeleteStep = (stepId: number) => {
     if (!workflow) return;
-
     const step = workflow.steps.find((s) => s.id === stepId);
-    const confirmMessage = step
-      ? `Delete Step ${step.step_number}? This cannot be undone.`
-      : "Delete this step? This cannot be undone.";
+    if (step) {
+      setStepToDelete(step);
+      setShowDeleteConfirm(true);
+    }
+  };
 
-    if (!window.confirm(confirmMessage)) return;
+  const confirmDeleteStep = async () => {
+    if (!workflow || !stepToDelete) return;
 
+    setIsDeleting(true);
     try {
-      await apiClient.deleteStep(stepId);
+      await apiClient.deleteStep(stepToDelete.id);
       // Reload workflow to get updated step numbers
       await loadWorkflow(workflow.id);
+      showToast.success(`Step ${stepToDelete.step_number} deleted`);
     } catch (err) {
       const errorMsg =
         err instanceof Error ? err.message : "Failed to delete step";
-      alert(errorMsg);
+      showToast.error(errorMsg);
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteConfirm(false);
+      setStepToDelete(null);
     }
   };
 
@@ -192,7 +210,7 @@ export const WorkflowReview: React.FC = () => {
       await loadWorkflow(workflow.id);
       const errorMsg =
         err instanceof Error ? err.message : "Failed to reorder steps";
-      alert(errorMsg);
+      showToast.error(errorMsg);
     } finally {
       setIsReordering(false);
     }
@@ -206,7 +224,7 @@ export const WorkflowReview: React.FC = () => {
     );
 
     if (incompleteSteps.length > 0) {
-      alert(
+      showToast.warning(
         `Cannot save: ${incompleteSteps.length} step(s) missing labels. Please review all steps.`,
       );
       return;
@@ -215,12 +233,12 @@ export const WorkflowReview: React.FC = () => {
     setIsSaving(true);
     try {
       await apiClient.updateWorkflow(workflow.id, { status: "active" });
-      alert("Workflow activated successfully!");
+      showToast.success("Workflow activated successfully!");
       navigate("/dashboard");
     } catch (err) {
       const errorMsg =
         err instanceof Error ? err.message : "Failed to save workflow";
-      alert(errorMsg);
+      showToast.error(errorMsg);
     } finally {
       setIsSaving(false);
     }
@@ -364,6 +382,7 @@ export const WorkflowReview: React.FC = () => {
                   step={step}
                   onEdit={handleEditStep}
                   onDelete={handleDeleteStep}
+                  disableDelete={workflow.steps.length <= 1}
                 />
               ))}
             </div>
@@ -410,6 +429,29 @@ export const WorkflowReview: React.FC = () => {
           setEditingStep(null);
         }}
         onSave={handleStepSaved}
+      />
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={showDeleteConfirm}
+        title="Delete Step?"
+        message={
+          stepToDelete
+            ? `This will permanently delete step ${stepToDelete.step_number}. ${
+                workflow && workflow.steps.length > 1
+                  ? "Remaining steps will be renumbered."
+                  : "This is the only step in the workflow."
+              }`
+            : "This action cannot be undone."
+        }
+        confirmLabel="Delete Step"
+        confirmVariant="danger"
+        onConfirm={confirmDeleteStep}
+        onCancel={() => {
+          setShowDeleteConfirm(false);
+          setStepToDelete(null);
+        }}
+        loading={isDeleting}
       />
     </div>
   );

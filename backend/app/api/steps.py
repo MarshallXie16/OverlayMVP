@@ -8,7 +8,6 @@ RESTful API for managing individual workflow steps, including:
 """
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
-from sqlalchemy import update
 import logging
 from datetime import datetime, timezone
 
@@ -286,6 +285,17 @@ def delete_step(
 
     workflow_id = step.workflow_id
     deleted_step_number = step.step_number
+
+    # Check if this is the last step in the workflow
+    step_count = db.query(Step).filter(Step.workflow_id == workflow_id).count()
+    if step_count <= 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "CANNOT_DELETE_LAST_STEP",
+                "message": "Cannot delete the last step in a workflow. Delete the workflow instead."
+            }
+        )
 
     try:
         # Delete the step

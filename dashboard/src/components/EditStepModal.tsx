@@ -11,8 +11,7 @@ import type { StepResponse, UpdateStepRequest } from "@/api/types";
 import { apiClient } from "@/api/client";
 import { AuthenticatedImage } from "./AuthenticatedImage";
 import { Button } from "@/components/ui/Button";
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+import { getScreenshotUrl } from "@/utils/stepUtils";
 
 interface EditStepModalProps {
   step: StepResponse | null;
@@ -94,9 +93,7 @@ export const EditStepModal: React.FC<EditStepModalProps> = ({
 
   if (!step) return null;
 
-  const screenshotUrl = step.screenshot_id
-    ? `${API_BASE_URL}/api/screenshots/${step.screenshot_id}/image`
-    : null;
+  const screenshotUrl = getScreenshotUrl(step.screenshot_id);
 
   return (
     <Transition appear show={isOpen} as={Fragment}>
@@ -129,6 +126,7 @@ export const EditStepModal: React.FC<EditStepModalProps> = ({
                 <button
                   onClick={handleCancel}
                   className="absolute top-4 right-4 z-20 text-neutral-400 hover:text-white md:hover:text-neutral-600 bg-black/20 md:bg-neutral-100 p-2 rounded-full transition-colors"
+                  aria-label="Close modal"
                 >
                   <X size={20} />
                 </button>

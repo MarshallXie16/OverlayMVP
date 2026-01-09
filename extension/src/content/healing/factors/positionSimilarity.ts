@@ -34,7 +34,25 @@ function calculateDistance(
 }
 
 /**
- * Calculate center point of a bounding box
+ * Get top-left corner position of a bounding box
+ */
+function getPosition(box: {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}): {
+  x: number;
+  y: number;
+} {
+  return {
+    x: box.x,
+    y: box.y,
+  };
+}
+
+/**
+ * Get center point of a bounding box
  */
 function getCenter(box: {
   x: number;
@@ -49,6 +67,38 @@ function getCenter(box: {
     x: box.x + box.width / 2,
     y: box.y + box.height / 2,
   };
+}
+
+/**
+ * Calculate the effective position distance between two boxes.
+ * Uses the minimum of position distance and center distance to handle:
+ * - Elements that moved but have same top-left corner (position match)
+ * - Elements that resized but have same center (center match)
+ */
+function effectiveDistance(
+  originalBox: { x: number; y: number; width: number; height: number },
+  candidateBox: { x: number; y: number; width: number; height: number },
+): number {
+  const originalPos = getPosition(originalBox);
+  const candidatePos = getPosition(candidateBox);
+  const positionDist = calculateDistance(
+    originalPos.x,
+    originalPos.y,
+    candidatePos.x,
+    candidatePos.y,
+  );
+
+  const originalCenter = getCenter(originalBox);
+  const candidateCenter = getCenter(candidateBox);
+  const centerDist = calculateDistance(
+    originalCenter.x,
+    originalCenter.y,
+    candidateCenter.x,
+    candidateCenter.y,
+  );
+
+  // Use minimum to handle both position-stable and center-stable elements
+  return Math.min(positionDist, centerDist);
 }
 
 /**
@@ -90,15 +140,8 @@ export const positionSimilarityFactor: ScoringFactor = {
       return 0.3; // Uncertain
     }
 
-    // Calculate center-to-center distance
-    const originalCenter = getCenter(originalBox);
-    const candidateCenter = getCenter(candidateBox);
-    const distance = calculateDistance(
-      originalCenter.x,
-      originalCenter.y,
-      candidateCenter.x,
-      candidateCenter.y,
-    );
+    // Calculate effective distance (minimum of position and center distance)
+    const distance = effectiveDistance(originalBox, candidateBox);
 
     // Calculate size similarity
     const sizeSim = sizeSimilarity(originalBox, candidateBox);
@@ -108,6 +151,8 @@ export const positionSimilarityFactor: ScoringFactor = {
     const maxDistance = CANDIDATE_CONFIG.maxPositionDistance;
 
     let positionScore: number;
+    const softVetoThreshold = VETO_CONFIG.position.softVetoDistanceThreshold;
+
     if (distance === 0) {
       positionScore = 1.0;
     } else if (distance < 50) {
@@ -116,9 +161,15 @@ export const positionSimilarityFactor: ScoringFactor = {
       positionScore = 0.8;
     } else if (distance < 200) {
       positionScore = 0.6;
+    } else if (distance < softVetoThreshold) {
+      // Linear decay from 200 to softVetoThreshold
+      positionScore = 0.6 * (1 - (distance - 200) / (softVetoThreshold - 200));
     } else if (distance < maxDistance) {
-      // Linear decay from 200 to maxDistance
-      positionScore = 0.6 * (1 - (distance - 200) / (maxDistance - 200));
+      // At or beyond soft veto threshold - low score
+      positionScore =
+        0.2 *
+        (1 -
+          (distance - softVetoThreshold) / (maxDistance - softVetoThreshold));
     } else {
       positionScore = 0;
     }
@@ -147,18 +198,13 @@ export const positionSimilarityFactor: ScoringFactor = {
       return null;
     }
 
-    // Calculate distance
-    const originalCenter = getCenter(originalBox);
-    const candidateCenter = getCenter(candidateBox);
-    const distance = calculateDistance(
-      originalCenter.x,
-      originalCenter.y,
-      candidateCenter.x,
-      candidateCenter.y,
-    );
+    // Calculate effective distance (minimum of position and center distance)
+    const distance = effectiveDistance(originalBox, candidateBox);
 
-    // Soft veto for large position changes
-    if (distance > VETO_CONFIG.position.softVetoDistanceThreshold) {
+    // Soft veto for large position changes (round to handle floating point)
+    if (
+      Math.round(distance) >= VETO_CONFIG.position.softVetoDistanceThreshold
+    ) {
       return {
         factorName: "positionSimilarity",
         reason: `Element moved ${Math.round(distance)}px (threshold: ${VETO_CONFIG.position.softVetoDistanceThreshold}px)`,
@@ -175,12 +221,7 @@ export const positionSimilarityFactor: ScoringFactor = {
 
     const originalCenter = getCenter(originalBox);
     const candidateCenter = getCenter(candidateBox);
-    const distance = calculateDistance(
-      originalCenter.x,
-      originalCenter.y,
-      candidateCenter.x,
-      candidateCenter.y,
-    );
+    const distance = effectiveDistance(originalBox, candidateBox);
 
     const sizeSim = sizeSimilarity(originalBox, candidateBox);
 

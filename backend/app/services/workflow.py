@@ -9,11 +9,15 @@ from fastapi import HTTPException, status
 from typing import List, Tuple
 from datetime import datetime, timezone
 import json
+import logging
 
 from app.models.workflow import Workflow
 from app.models.step import Step
 from app.schemas.workflow import CreateWorkflowRequest, UpdateWorkflowRequest, WorkflowListItem
 from app.schemas.step import StepCreate
+from app.utils.s3 import delete_directory
+
+logger = logging.getLogger(__name__)
 
 
 def create_workflow(
@@ -35,9 +39,9 @@ def create_workflow(
     - Commits atomically (all or nothing)
 
     **Initial Status:**
-    - Workflow created with status="processing"
-    - AI labeling job should be queued after this returns
-    - Status updates to "draft" when AI labeling completes
+    - Workflow created with status="draft"
+    - AI labeling is triggered separately via /start-processing endpoint
+    - Status changes to "processing" when AI labeling starts
 
     Args:
         db: Database session
@@ -60,7 +64,7 @@ def create_workflow(
             description=workflow_data.description,
             starting_url=workflow_data.starting_url,
             tags=json.dumps(workflow_data.tags),
-            status="processing",  # Initial status for async AI labeling
+            status="draft",  # Initial status - changes to "processing" when AI labeling starts
         )
 
         db.add(workflow)
@@ -352,7 +356,7 @@ def delete_workflow(
     company_id: int
 ) -> None:
     """
-    Delete a workflow and all associated steps (cascade).
+    Delete a workflow and all associated steps (cascade), including screenshot files.
 
     **Multi-tenant Isolation:**
     - ALWAYS filters by company_id from JWT token
@@ -364,6 +368,7 @@ def delete_workflow(
     - Deletes all screenshots (CASCADE)
     - Deletes all health logs (CASCADE)
     - Deletes all notifications (CASCADE)
+    - Deletes screenshot files from storage (after DB commit)
 
     Args:
         db: Database session
@@ -376,6 +381,18 @@ def delete_workflow(
     # Get workflow with multi-tenant check
     workflow = get_workflow_by_id(db, workflow_id, company_id)
 
+    # Build the storage path for this workflow's screenshots BEFORE deleting DB records
+    # Path: companies/{company_id}/workflows/{workflow_id}/
+    storage_path = f"companies/{company_id}/workflows/{workflow_id}"
+
     # Delete workflow (cascades to steps, screenshots, etc.)
     db.delete(workflow)
     db.commit()
+
+    # Clean up screenshot files AFTER successful DB commit
+    # This prevents orphaned files if the workflow existed
+    if not delete_directory(storage_path):
+        logger.warning(
+            f"Failed to delete screenshot files for workflow {workflow_id} "
+            f"at path: {storage_path}. Files may be orphaned."
+        )

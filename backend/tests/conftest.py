@@ -1,6 +1,11 @@
 """
 Pytest configuration and fixtures for testing.
 """
+import os
+
+# Set TESTING flag before importing app (disables rate limiting)
+os.environ["TESTING"] = "true"
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session

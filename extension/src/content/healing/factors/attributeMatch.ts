@@ -99,7 +99,7 @@ function parentChainSimilarity(
   }
 
   if (originalChain.length === 0 || candidateChain.length === 0) {
-    return 0.3;
+    return 0.35; // One side has parent chain, other doesn't
   }
 
   let matchScore = 0;
@@ -112,16 +112,16 @@ function parentChainSimilarity(
     // Skip if either is undefined
     if (!originalEntry || !candidateEntry) continue;
 
-    // Tag match
+    // Tag match (fundamental structural similarity)
     if (originalEntry.tag === candidateEntry.tag) {
-      matchScore += 0.3;
+      matchScore += 0.55;
     }
 
     // ID match (if both have stable IDs)
     const originalId = getStableId(originalEntry.id);
     const candidateId = getStableId(candidateEntry.id);
     if (originalId && candidateId && originalId === candidateId) {
-      matchScore += 0.5;
+      matchScore += 0.45;
     }
 
     // Role match
@@ -145,6 +145,7 @@ export const attributeMatchFactor: ScoringFactor = {
   score(candidate: CandidateElement, original: ElementContext): number {
     let totalScore = 0;
     let factors = 0;
+    let differentStableIds = false;
 
     // ID matching (strongest signal when present)
     const originalId = getStableId(
@@ -159,35 +160,40 @@ export const attributeMatchFactor: ScoringFactor = {
           totalScore += 1.0; // Perfect ID match
         } else {
           totalScore += 0.1; // Different IDs - bad sign
+          differentStableIds = true; // Flag for cap
         }
       } else {
-        totalScore += 0.3; // One has ID, other doesn't
+        totalScore += 0.35; // One has ID, other doesn't (or generated ID filtered)
       }
     }
 
-    // Name attribute matching
+    // Name attribute matching (strong signal for form elements)
+    let perfectNameMatch = false;
     if (original.name || candidate.metadata.name) {
       factors++;
       if (original.name && candidate.metadata.name) {
         if (original.name === candidate.metadata.name) {
           totalScore += 1.0;
+          perfectNameMatch = true;
         } else {
           totalScore += 0.2;
         }
       } else {
-        totalScore += 0.3;
+        totalScore += 0.35; // One has name, other doesn't
       }
     }
 
     // data-testid matching (strong signal in test-aware apps)
     const originalTestId = original.selectors.dataTestId;
     const candidateTestId = candidate.element.getAttribute("data-testid");
+    let perfectTestIdMatch = false;
 
     if (originalTestId || candidateTestId) {
       factors++;
       if (originalTestId && candidateTestId) {
         if (originalTestId === candidateTestId) {
           totalScore += 1.0;
+          perfectTestIdMatch = true;
         } else {
           totalScore += 0.1;
         }
@@ -196,24 +202,43 @@ export const attributeMatchFactor: ScoringFactor = {
       }
     }
 
-    // CSS class overlap
+    // CSS class overlap (only count if at least one side has classes)
     const classResult = classOverlap(
       original.classes,
       candidate.metadata.classes,
     );
-    factors++;
-    totalScore += classResult.score;
+    if (original.classes.length > 0 || candidate.metadata.classes.length > 0) {
+      factors++;
+      totalScore += classResult.score;
+    }
 
-    // Parent chain similarity
+    // Parent chain similarity (only count if at least one side has parent chain)
     const parentSim = parentChainSimilarity(
       original.parentChain,
       candidate.metadata.parentChain,
     );
-    factors++;
-    totalScore += parentSim;
+    if (
+      original.parentChain.length > 0 ||
+      candidate.metadata.parentChain.length > 0
+    ) {
+      factors++;
+      totalScore += parentSim;
+    }
 
-    // Calculate average score
-    return factors > 0 ? totalScore / factors : 0.5;
+    // Calculate average score (default to 0.5 if no factors)
+    let avgScore = factors > 0 ? totalScore / factors : 0.5;
+
+    // Cap score when stable IDs are different (strong negative signal)
+    if (differentStableIds) {
+      avgScore = Math.min(avgScore, 0.4);
+    }
+
+    // Boost score for strong matches (name/testid are key identifiers)
+    if ((perfectNameMatch || perfectTestIdMatch) && avgScore < 0.75) {
+      avgScore = Math.min(avgScore + 0.15, 0.85);
+    }
+
+    return avgScore;
   },
 
   // Attribute match doesn't veto - attributes can change

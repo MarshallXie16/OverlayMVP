@@ -14,13 +14,17 @@ import {
 import type { StepResponse } from "@/api/types";
 import { AuthenticatedImage } from "./AuthenticatedImage";
 import { Button } from "@/components/ui/Button";
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+import {
+  getActionTypeColor,
+  formatActionType,
+  getScreenshotUrl,
+} from "@/utils/stepUtils";
 
 interface StepCardProps {
   step: StepResponse;
   onEdit: (step: StepResponse) => void;
   onDelete?: (stepId: number) => void;
+  disableDelete?: boolean;
   dragHandleProps?: Record<string, unknown>;
   isDragging?: boolean;
 }
@@ -29,32 +33,11 @@ export const StepCard: React.FC<StepCardProps> = ({
   step,
   onEdit,
   onDelete,
+  disableDelete = false,
   dragHandleProps,
   isDragging = false,
 }) => {
-  const getActionTypeColor = (actionType: string): string => {
-    switch (actionType) {
-      case "click":
-        return "bg-blue-100 text-blue-700 border-blue-200";
-      case "input_commit":
-        return "bg-purple-100 text-purple-700 border-purple-200";
-      case "navigate":
-        return "bg-teal-100 text-teal-700 border-teal-200";
-      case "select_change":
-        return "bg-amber-100 text-amber-700 border-amber-200";
-      default:
-        return "bg-gray-100 text-gray-700 border-gray-200";
-    }
-  };
-
-  const formatActionType = (actionType: string): string => {
-    return actionType.replace("_", " ").toUpperCase();
-  };
-
-  const screenshotUrl = step.screenshot_id
-    ? `${API_BASE_URL}/api/screenshots/${step.screenshot_id}/image`
-    : null;
-
+  const screenshotUrl = getScreenshotUrl(step.screenshot_id);
   const isComplete = step.field_label && step.instruction;
 
   return (
@@ -209,12 +192,23 @@ export const StepCard: React.FC<StepCardProps> = ({
             <Button
               variant="secondary"
               size="sm"
-              className="text-red-600 hover:bg-red-50 hover:border-red-200"
+              className={
+                disableDelete
+                  ? "text-neutral-400 cursor-not-allowed"
+                  : "text-red-600 hover:bg-red-50 hover:border-red-200"
+              }
               icon={<Trash2 size={14} />}
               onClick={(e) => {
                 e.stopPropagation();
-                onDelete(step.id);
+                if (!disableDelete) {
+                  onDelete(step.id);
+                }
               }}
+              disabled={disableDelete}
+              title={disableDelete ? "Cannot delete the last step" : undefined}
+              aria-label={
+                disableDelete ? "Cannot delete the last step" : "Delete step"
+              }
             />
           )}
         </div>

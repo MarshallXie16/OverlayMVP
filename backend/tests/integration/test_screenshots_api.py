@@ -292,7 +292,7 @@ class TestScreenshotUploadEndpoint:
             files={"image": ("screenshot.jpg", image_data, "image/jpeg")},
         )
 
-        assert response.status_code == 403  # FastAPI returns 403 for missing credentials
+        assert response.status_code == 401  # Unauthorized (no auth header)
 
     def test_upload_screenshot_invalid_token(
         self, client: TestClient, db: Session
@@ -442,10 +442,10 @@ class TestGetScreenshotUrlEndpoint:
 
         assert response.status_code == 200
         data = response.json()
-        assert "data" in data
-        assert data["data"]["screenshot_id"] == screenshot_id
-        assert "url" in data["data"]
-        assert "fake-s3.amazonaws.com" in data["data"]["url"]
+        assert data["screenshot_id"] == screenshot_id
+        assert "url" in data
+        # URL should be a valid storage path (local or S3)
+        assert "/screenshots/" in data["url"] or "amazonaws.com" in data["url"]
 
     def test_get_screenshot_url_not_found(
         self, client: TestClient, auth_headers: dict
@@ -492,7 +492,7 @@ class TestGetScreenshotUrlEndpoint:
 
         response = client.get(f"/api/screenshots/{screenshot.id}/url")
 
-        assert response.status_code == 403  # Missing credentials
+        assert response.status_code == 401  # Unauthorized (no auth header)
 
 
 class TestScreenshotEndToEnd:
@@ -524,12 +524,12 @@ class TestScreenshotEndToEnd:
 
         assert url_response.status_code == 200
         url_data = url_response.json()
-        fresh_url = url_data["data"]["url"]
+        fresh_url = url_data["url"]
 
-        # 3. URLs should be different (different expiration params)
-        # but both should be valid
-        assert "fake-s3.amazonaws.com" in original_url
-        assert "fake-s3.amazonaws.com" in fresh_url
+        # 3. Both URLs should be valid storage paths
+        # (local file paths or S3 URLs)
+        assert "/screenshots/" in original_url or "amazonaws.com" in original_url
+        assert "/screenshots/" in fresh_url or "amazonaws.com" in fresh_url
 
     def test_deduplication_across_workflows(
         self, client: TestClient, db: Session, auth_headers: dict

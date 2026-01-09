@@ -5,6 +5,7 @@
 
 import { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { Toaster } from "react-hot-toast";
 import { useAuthStore } from "@/store/auth";
 import { Layout } from "@/components/Layout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -28,102 +29,129 @@ function App() {
   }, [checkAuth]);
 
   return (
-    <BrowserRouter>
-      <Routes>
-        {/* Public routes */}
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
-        <Route path="/invite/:token" element={<InvitePage />} />
+    <>
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 5000,
+          style: {
+            background: "#363636",
+            color: "#fff",
+          },
+          success: {
+            style: {
+              background: "#10B981",
+            },
+            iconTheme: {
+              primary: "#fff",
+              secondary: "#10B981",
+            },
+          },
+          error: {
+            style: {
+              background: "#EF4444",
+            },
+            duration: 6000,
+          },
+        }}
+      />
+      <BrowserRouter>
+        <Routes>
+          {/* Public routes */}
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
+          <Route path="/invite/:token" element={<InvitePage />} />
 
-        {/* Protected routes */}
-        <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <Dashboard />
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/workflows/:id"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <WorkflowDetail />
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/workflows/:id/review"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <WorkflowReview />
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/library"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <LibraryView />
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/team"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <TeamView />
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/health"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <HealthView />
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/settings"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <SettingsView />
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
+          {/* Protected routes */}
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <Dashboard />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/workflows/:id"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <WorkflowDetail />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/workflows/:id/review"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <WorkflowReview />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/library"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <LibraryView />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/team"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <TeamView />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/health"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <HealthView />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/settings"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <SettingsView />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
 
-        {/* Default redirect */}
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          {/* Default redirect */}
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
-        {/* 404 fallback */}
-        <Route
-          path="*"
-          element={
-            <div className="min-h-screen flex items-center justify-center">
-              <div className="text-center">
-                <h1 className="text-4xl font-bold text-gray-900">404</h1>
-                <p className="mt-2 text-gray-600">Page not found</p>
+          {/* 404 fallback */}
+          <Route
+            path="*"
+            element={
+              <div className="min-h-screen flex items-center justify-center">
+                <div className="text-center">
+                  <h1 className="text-4xl font-bold text-gray-900">404</h1>
+                  <p className="mt-2 text-gray-600">Page not found</p>
+                </div>
               </div>
-            </div>
-          }
-        />
-      </Routes>
-    </BrowserRouter>
+            }
+          />
+        </Routes>
+      </BrowserRouter>
+    </>
   );
 }
 

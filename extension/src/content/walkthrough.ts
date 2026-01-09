@@ -1178,6 +1178,36 @@ function hasValueChanged(element: HTMLElement): boolean {
 }
 
 /**
+ * Check if the click event target is on or within the target element.
+ * Handles clicks on nested child elements (e.g., SVG icons inside buttons).
+ * @exported for testing
+ */
+export function isClickOnTarget(
+  event: Event,
+  targetElement: HTMLElement,
+): boolean {
+  const eventTarget = event.target as HTMLElement;
+
+  // Direct match
+  if (eventTarget === targetElement) {
+    return true;
+  }
+
+  // Check if target contains the clicked element (for child elements)
+  if (targetElement.contains(eventTarget)) {
+    return true;
+  }
+
+  // For shadow DOM support, check composed path
+  if (event.composedPath) {
+    const path = event.composedPath();
+    return path.includes(targetElement);
+  }
+
+  return false;
+}
+
+/**
  * Validate that action matches expected step
  */
 function validateAction(
@@ -1187,8 +1217,9 @@ function validateAction(
 ): boolean {
   const eventTarget = event.target as HTMLElement;
 
-  // 1. Check if event target matches expected target element
-  if (eventTarget !== targetElement) {
+  // 1. Check if event target is on or within the expected target element
+  // Uses contains() to handle clicks on child elements (e.g., icon inside button)
+  if (!isClickOnTarget(event, targetElement)) {
     console.log("[Walkthrough] Action validation failed: wrong element");
     return false;
   }
@@ -1200,11 +1231,15 @@ function validateAction(
 
     case "input_commit":
       // Commit on blur only (mirror recorder); ensure value actually changed
+      // Use the actual event target for input validation, not the parent
       return event.type === "blur" && hasValueChanged(eventTarget);
 
     case "select_change":
+      // For select, check if the event target or the targetElement is a select
       return (
-        event.type === "change" && eventTarget instanceof HTMLSelectElement
+        event.type === "change" &&
+        (eventTarget instanceof HTMLSelectElement ||
+          targetElement instanceof HTMLSelectElement)
       );
 
     case "submit":

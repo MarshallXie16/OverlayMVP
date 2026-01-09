@@ -9,6 +9,7 @@
 
 import { useEffect } from "react";
 import { Puzzle, ArrowRight, X } from "lucide-react";
+import { showToast } from "@/utils/toast";
 
 interface InstallExtensionModalProps {
   isOpen: boolean;
@@ -38,8 +39,8 @@ export const InstallExtensionModal: React.FC<InstallExtensionModalProps> = ({
   const handleInstallClick = () => {
     // For MVP: Show placeholder message
     // TODO: Replace with actual Chrome Web Store URL once extension is published
-    alert(
-      "Coming soon to Chrome Web Store!\n\nFor now, the extension can be loaded manually in developer mode.",
+    showToast.info(
+      "Coming soon to Chrome Web Store! For now, load the extension manually in developer mode.",
     );
   };
 

@@ -278,6 +278,9 @@ export type MessageType =
   | "LOG_HEALING_ATTEMPT"
   | "VALIDATE_HEALING"
   | "STEP_SAVED"
+  | "GET_FAILED_UPLOADS"
+  | "RETRY_UPLOAD"
+  | "DISCARD_UPLOAD"
   | "ERROR";
 
 /**

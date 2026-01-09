@@ -26,7 +26,7 @@ class TestAIServiceInit:
         
         service = AIService()
         assert service.api_key == "test-key-123"
-        assert service.model == "claude-3-5-sonnet-20241022"
+        assert service.model == "claude-haiku-4-5-20251001"
         assert service.client is not None
     
     def test_init_with_explicit_key(self):
@@ -225,7 +225,7 @@ class TestPromptBuilding:
         assert "your@email.com" in prompt
         assert "input_commit" in prompt
         assert "test@example.com" in prompt
-        assert "JSON" in prompt  # Request JSON response
+        # Note: JSON is not in prompt - we use tool calling for structured output
     
     def test_build_prompt_without_input_value(self):
         """Test prompt building without input value."""
@@ -304,7 +304,7 @@ class TestGenerateStepLabels:
         
         # Verify result includes model version
         assert result["field_label"] == "Email Address"
-        assert result["ai_model"] == "claude-3-5-sonnet-20241022"
+        assert result["ai_model"] == "claude-haiku-4-5-20251001"
     
     @patch("app.services.ai.AIService._call_claude_api")
     @patch("app.services.ai.logger")
@@ -335,33 +335,37 @@ class TestGenerateStepLabels:
 
 class TestClaudeAPICall:
     """Test Claude API integration (mocked)."""
-    
+
     @pytest.fixture
     def mock_anthropic_response(self):
-        """Create a mock Anthropic API response."""
+        """Create a mock Anthropic API response with tool_use block."""
         response = Mock()
         response.usage = Mock()
         response.usage.input_tokens = 1200
         response.usage.output_tokens = 150
-        
-        response.content = [Mock()]
-        response.content[0].text = json.dumps({
+
+        # Tool calling response structure
+        tool_use_block = Mock()
+        tool_use_block.type = "tool_use"
+        tool_use_block.input = {
             "field_label": "Invoice Number",
             "instruction": "Enter the invoice number from your receipt",
             "confidence": 85,
-        })
-        
+        }
+
+        response.content = [tool_use_block]
+
         return response
-    
+
     @patch("app.services.ai.Anthropic")
     def test_call_claude_api_success(self, mock_anthropic_class, mock_anthropic_response):
-        """Test successful Claude API call."""
+        """Test successful Claude API call with tool calling."""
         mock_client = Mock()
         mock_anthropic_class.return_value = mock_client
         mock_client.messages.create.return_value = mock_anthropic_response
-        
+
         service = AIService(api_key="test-key")
-        
+
         result = service._call_claude_api(
             screenshot_url="https://example.com/screenshot.jpg",
             element_meta={"tag_name": "input"},
@@ -369,32 +373,36 @@ class TestClaudeAPICall:
             action_data={},
             page_context={},
         )
-        
+
         assert result["field_label"] == "Invoice Number"
         assert result["instruction"] == "Enter the invoice number from your receipt"
         assert result["ai_confidence"] == 0.85
-        
+
         # Verify cost tracking
         assert service.total_input_tokens == 1200
         assert service.total_output_tokens == 150
-    
+
     @patch("app.services.ai.Anthropic")
     def test_call_claude_api_invalid_json(self, mock_anthropic_class):
-        """Test handling of invalid JSON response."""
+        """Test handling of response without tool_use block."""
         mock_client = Mock()
         mock_anthropic_class.return_value = mock_client
-        
+
+        # Response without tool_use block (text only)
+        text_block = Mock()
+        text_block.type = "text"
+        text_block.text = "Not valid response"
+
         response = Mock()
-        response.content = [Mock()]
-        response.content[0].text = "Not valid JSON"
+        response.content = [text_block]
         response.usage = Mock()
         response.usage.input_tokens = 1000
         response.usage.output_tokens = 100
-        
+
         mock_client.messages.create.return_value = response
-        
+
         service = AIService(api_key="test-key")
-        
+
         with pytest.raises(AIServiceError) as exc_info:
             service._call_claude_api(
                 screenshot_url="https://example.com/screenshot.jpg",
@@ -403,8 +411,8 @@ class TestClaudeAPICall:
                 action_data={},
                 page_context={},
             )
-        
-        assert "Invalid API response" in str(exc_info.value)
+
+        assert "No tool_use block" in str(exc_info.value)
 
 
 class TestSafeJSONParse:

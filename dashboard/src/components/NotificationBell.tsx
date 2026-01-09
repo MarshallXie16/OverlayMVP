@@ -144,6 +144,7 @@ export const NotificationBell: React.FC = () => {
         onClick={() => setIsOpen(!isOpen)}
         className="relative p-2 rounded-lg text-neutral-500 hover:text-neutral-700 hover:bg-white/60 transition-colors"
         title="Notifications"
+        aria-label="Notifications"
       >
         <Bell size={20} />
         {unreadCount > 0 && (
