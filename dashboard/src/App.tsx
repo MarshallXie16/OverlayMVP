@@ -17,8 +17,14 @@ import { WorkflowReview } from "@/pages/WorkflowReview";
 import { LibraryView } from "@/pages/LibraryView";
 import { TeamView } from "@/pages/TeamView";
 import { HealthView } from "@/pages/HealthView";
-import { SettingsView } from "@/pages/SettingsView";
 import { InvitePage } from "@/pages/InvitePage";
+
+// Settings pages with nested routes
+import { SettingsLayout } from "@/pages/settings/SettingsLayout";
+import { ProfileSettings } from "@/pages/settings/ProfileSettings";
+import { CompanySettings } from "@/pages/settings/CompanySettings";
+import { IntegrationSettings } from "@/pages/settings/IntegrationSettings";
+import { PreferencesSettings } from "@/pages/settings/PreferencesSettings";
 
 function App() {
   const { checkAuth } = useAuthStore();
@@ -123,16 +129,26 @@ function App() {
               </ProtectedRoute>
             }
           />
+          {/* Settings routes with nested layout */}
           <Route
             path="/settings"
             element={
               <ProtectedRoute>
                 <Layout>
-                  <SettingsView />
+                  <SettingsLayout />
                 </Layout>
               </ProtectedRoute>
             }
-          />
+          >
+            <Route
+              index
+              element={<Navigate to="/settings/profile" replace />}
+            />
+            <Route path="profile" element={<ProfileSettings />} />
+            <Route path="company" element={<CompanySettings />} />
+            <Route path="integrations" element={<IntegrationSettings />} />
+            <Route path="preferences" element={<PreferencesSettings />} />
+          </Route>
 
           {/* Default redirect */}
           <Route path="/" element={<Navigate to="/dashboard" replace />} />

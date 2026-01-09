@@ -39,6 +39,24 @@ export interface TokenResponse {
 }
 
 // ============================================================================
+// USER PROFILE TYPES
+// ============================================================================
+
+export interface UpdateProfileRequest {
+  name?: string;
+}
+
+export interface ChangePasswordRequest {
+  current_password: string;
+  new_password: string;
+}
+
+export interface ChangePasswordResponse {
+  success: boolean;
+  message: string;
+}
+
+// ============================================================================
 // WORKFLOW TYPES
 // ============================================================================
 

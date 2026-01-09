@@ -10,7 +10,7 @@ from pathlib import Path
 from slowapi.errors import RateLimitExceeded
 
 # Import routers
-from app.api import auth, screenshots, workflows, steps, healing, company, invites, notifications, health
+from app.api import auth, screenshots, workflows, steps, healing, company, invites, notifications, health, users
 from app.utils.rate_limit import limiter
 
 
@@ -83,6 +83,7 @@ app.include_router(company.router, prefix="/api/companies", tags=["Company"])
 app.include_router(invites.router, prefix="/api/invites", tags=["Invites"])
 app.include_router(notifications.router, prefix="/api/notifications", tags=["Notifications"])
 app.include_router(health.router, prefix="/api/health", tags=["Health Dashboard"])
+app.include_router(users.router, prefix="/api/users", tags=["Users"])
 
 # Mount static files for screenshot storage (MVP only)
 screenshots_dir = Path(__file__).parent.parent / "screenshots"

@@ -509,3 +509,81 @@ D  ../fixed_bugs.md
 ?? ../sprints/
 ```
 
+
+---
+
+### Session: 2026-01-08 16:47
+
+**Branch**: `main`
+
+**Changes**:
+```
+ M ../.claude/session-log.md
+ M app/main.py
+ M ../dashboard/src/App.tsx
+ M ../dashboard/src/api/client.ts
+ M ../dashboard/src/api/types.ts
+ M ../dashboard/src/pages/TeamView.tsx
+?? app/api/users.py
+?? app/schemas/user.py
+?? tests/test_api_users.py
+?? ../dashboard/src/pages/settings/
+```
+
+**Recent Commits**:
+```
+f772547 Improvements to admin dashboard and test fixes
+```
+
+
+---
+
+### Session: 2026-01-08 17:14
+
+**Branch**: `main`
+
+**Changes**:
+```
+ M ../.claude/session-log.md
+ M app/main.py
+ M ../dashboard/src/App.tsx
+ M ../dashboard/src/api/client.ts
+ M ../dashboard/src/api/types.ts
+ M ../dashboard/src/pages/TeamView.tsx
+?? app/api/users.py
+?? app/schemas/user.py
+?? tests/test_api_users.py
+?? ../dashboard/src/pages/settings/
+```
+
+**Recent Commits**:
+```
+f772547 Improvements to admin dashboard and test fixes
+```
+
+
+---
+
+### Session: 2026-01-08 17:18
+
+**Branch**: `main`
+
+**Changes**:
+```
+ M ../.claude/session-log.md
+ M ../backend/app/main.py
+ M ../dashboard/src/App.tsx
+ M ../dashboard/src/api/client.ts
+ M ../dashboard/src/api/types.ts
+ M ../dashboard/src/pages/TeamView.tsx
+?? ../backend/app/api/users.py
+?? ../backend/app/schemas/user.py
+?? ../backend/tests/test_api_users.py
+?? ../dashboard/src/pages/settings/
+```
+
+**Recent Commits**:
+```
+f772547 Improvements to admin dashboard and test fixes
+```
+

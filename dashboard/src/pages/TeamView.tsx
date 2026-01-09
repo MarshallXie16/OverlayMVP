@@ -51,6 +51,7 @@ export const TeamView: React.FC = () => {
   const [inviteRole, setInviteRole] = useState<UserRole>("viewer");
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [revokingInviteId, setRevokingInviteId] = useState<number | null>(null);
 
   const { user } = useAuthStore();
   const menuRef = useRef<HTMLDivElement>(null);
@@ -147,7 +148,7 @@ export const TeamView: React.FC = () => {
   };
 
   const handleRevokeInvite = async (inviteId: number) => {
-    setActionLoading(true);
+    setRevokingInviteId(inviteId);
     try {
       await apiClient.revokeInvite(inviteId);
       setPendingInvites(pendingInvites.filter((i) => i.id !== inviteId));
@@ -156,7 +157,7 @@ export const TeamView: React.FC = () => {
         err instanceof Error ? err.message : "Failed to revoke invite",
       );
     } finally {
-      setActionLoading(false);
+      setRevokingInviteId(null);
     }
   };
 
@@ -382,9 +383,13 @@ export const TeamView: React.FC = () => {
                   variant="secondary"
                   size="sm"
                   onClick={() => handleRevokeInvite(invite.id)}
-                  disabled={actionLoading}
+                  disabled={revokingInviteId === invite.id}
                 >
-                  Revoke
+                  {revokingInviteId === invite.id ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    "Revoke"
+                  )}
                 </Button>
               </div>
             ))}
@@ -542,7 +547,12 @@ export const TeamView: React.FC = () => {
             className="absolute inset-0 bg-neutral-900/40"
             onClick={() => setIsInviteModalOpen(false)}
           ></div>
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-fade-in">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="invite-modal-title"
+            className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-fade-in"
+          >
             <button
               onClick={() => setIsInviteModalOpen(false)}
               className="absolute top-4 right-4 text-neutral-400 hover:text-neutral-600 p-1 rounded-full hover:bg-neutral-100 transition-colors"
@@ -551,7 +561,10 @@ export const TeamView: React.FC = () => {
               <X size={20} />
             </button>
 
-            <h3 className="text-xl font-bold mb-4 text-neutral-900">
+            <h3
+              id="invite-modal-title"
+              className="text-xl font-bold mb-4 text-neutral-900"
+            >
               Invite Team Member
             </h3>
 
@@ -625,7 +638,12 @@ export const TeamView: React.FC = () => {
             className="absolute inset-0 bg-neutral-900/40"
             onClick={() => setEditRoleMember(null)}
           ></div>
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-fade-in">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="edit-role-modal-title"
+            className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-fade-in"
+          >
             <button
               onClick={() => setEditRoleMember(null)}
               className="absolute top-4 right-4 text-neutral-400 hover:text-neutral-600 p-1 rounded-full hover:bg-neutral-100 transition-colors"
@@ -634,7 +652,10 @@ export const TeamView: React.FC = () => {
               <X size={20} />
             </button>
 
-            <h3 className="text-xl font-bold mb-4 text-neutral-900">
+            <h3
+              id="edit-role-modal-title"
+              className="text-xl font-bold mb-4 text-neutral-900"
+            >
               Change Role
             </h3>
             <p className="text-neutral-600 mb-4">
@@ -686,11 +707,19 @@ export const TeamView: React.FC = () => {
             className="absolute inset-0 bg-neutral-900/40 backdrop-blur-sm"
             onClick={() => setMemberToSuspend(null)}
           ></div>
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 animate-fade-in border border-neutral-200">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="suspend-modal-title"
+            className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 animate-fade-in border border-neutral-200"
+          >
             <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center text-amber-600 mb-4 mx-auto">
               <Ban size={24} />
             </div>
-            <h3 className="text-xl font-bold text-center mb-2 text-neutral-900">
+            <h3
+              id="suspend-modal-title"
+              className="text-xl font-bold text-center mb-2 text-neutral-900"
+            >
               {members.find((m) => m.id === memberToSuspend)?.status ===
               "active"
                 ? "Suspend User?"
@@ -743,11 +772,19 @@ export const TeamView: React.FC = () => {
             className="absolute inset-0 bg-neutral-900/40 backdrop-blur-sm"
             onClick={() => setMemberToDelete(null)}
           ></div>
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 animate-fade-in border border-neutral-200">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-modal-title"
+            className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 animate-fade-in border border-neutral-200"
+          >
             <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center text-red-600 mb-4 mx-auto">
               <AlertTriangle size={24} />
             </div>
-            <h3 className="text-xl font-bold text-center mb-2 text-neutral-900">
+            <h3
+              id="delete-modal-title"
+              className="text-xl font-bold text-center mb-2 text-neutral-900"
+            >
               Remove Member?
             </h3>
             <p className="text-neutral-500 text-center mb-6 text-sm">

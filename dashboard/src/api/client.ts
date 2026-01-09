@@ -7,6 +7,10 @@ import type {
   LoginRequest,
   SignupRequest,
   TokenResponse,
+  UserResponse,
+  UpdateProfileRequest,
+  ChangePasswordRequest,
+  ChangePasswordResponse,
   WorkflowListResponse,
   WorkflowResponse,
   TeamMemberResponse,
@@ -251,6 +255,41 @@ class ApiClient {
       this.clearToken();
       return null;
     }
+  }
+
+  // ============================================================================
+  // USER PROFILE ENDPOINTS
+  // ============================================================================
+
+  /**
+   * Update current user's profile (display name)
+   */
+  async updateProfile(data: UpdateProfileRequest): Promise<UserResponse> {
+    const response = await this.request<UserResponse>("/api/users/me", {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+
+    // Update cached user data
+    localStorage.setItem("user_data", JSON.stringify(response));
+
+    return response;
+  }
+
+  /**
+   * Change current user's password
+   * Requires current password verification
+   */
+  async changePassword(
+    data: ChangePasswordRequest,
+  ): Promise<ChangePasswordResponse> {
+    return this.request<ChangePasswordResponse>(
+      "/api/users/me/change-password",
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      },
+    );
   }
 
   // ============================================================================
