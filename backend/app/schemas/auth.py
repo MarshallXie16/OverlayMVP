@@ -61,6 +61,7 @@ class UserResponse(BaseModel):
     role: str
     company_id: int
     company_name: str
+    timezone: Optional[str] = None  # IANA timezone identifier
     created_at: datetime
     last_login_at: Optional[datetime] = None
 

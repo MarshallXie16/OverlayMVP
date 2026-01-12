@@ -587,3 +587,244 @@ f772547 Improvements to admin dashboard and test fixes
 f772547 Improvements to admin dashboard and test fixes
 ```
 
+
+---
+
+### Session: 2026-01-08 18:14
+
+**Branch**: `main`
+
+**Changes**:
+```
+ M ../.claude/session-log.md
+ M ../lessons.md
+```
+
+**Recent Commits**:
+```
+ebd7529 recording and walkthrough bug fix
+```
+
+
+---
+
+### Session: 2026-01-09 17:37
+
+**Branch**: `main`
+
+**Changes**:
+```
+ M ../.claude/hooks/user-prompt.sh
+ M ../.claude/session-log.md
+ M ../lessons.md
+?? ../rules.md
+```
+
+
+---
+
+### Session: 2026-01-09 17:42
+
+**Branch**: `main`
+
+**Changes**:
+```
+ M ../.claude/hooks/user-prompt.sh
+ M ../.claude/session-log.md
+ M ../lessons.md
+ M ../session-handoff.md
+?? ../docs/e2e-test-cases.md
+?? ../rules.md
+```
+
+
+---
+
+### Session: 2026-01-09 17:57
+
+**Branch**: `main`
+
+**Changes**:
+```
+ M ../.claude/hooks/user-prompt.sh
+ M ../.claude/session-log.md
+ M ../lessons.md
+ M ../session-handoff.md
+?? ../docs/e2e-test-cases.md
+?? ../rules.md
+```
+
+
+---
+
+### Session: 2026-01-09 18:35
+
+**Branch**: `main`
+
+**Changes**:
+```
+ M ../.claude/hooks/user-prompt.sh
+ M ../.claude/session-log.md
+ M src/components/NotificationBell.tsx
+ M src/store/auth.ts
+ M ../lessons.md
+ M ../session-handoff.md
+?? ../docs/e2e-test-cases.md
+?? ../notepad.md
+?? ../rules.md
+```
+
+
+---
+
+### Session: 2026-01-10 12:44
+
+**Branch**: `main`
+
+**Changes**:
+```
+ M ../.claude/hooks/user-prompt.sh
+ M ../.claude/session-log.md
+ M ../backlog.md
+ M src/components/NotificationBell.tsx
+ M src/store/auth.ts
+ M ../lessons.md
+ M ../session-handoff.md
+?? ../docs/e2e-test-cases.md
+?? ../notepad.md
+?? ../rules.md
+```
+
+
+---
+
+### Session: 2026-01-10 13:19
+
+**Branch**: `main`
+
+**Changes**:
+```
+ M ../.claude/hooks/user-prompt.sh
+ M ../.claude/session-log.md
+ M ../backlog.md
+ M src/components/NotificationBell.tsx
+ M src/pages/HealthView.tsx
+ M src/pages/TeamView.tsx
+ M src/store/auth.ts
+ M ../lessons.md
+ M ../session-handoff.md
+?? ../docs/e2e-test-cases.md
+?? ../notepad.md
+?? ../rules.md
+```
+
+
+---
+
+### Session: 2026-01-11 12:57
+
+**Branch**: `main`
+
+**Changes**:
+```
+ M .claude/hooks/user-prompt.sh
+ M .claude/session-log.md
+ D backend/screenshots/companies/1/workflows/20/screenshots/100.jpg
+ D backend/screenshots/companies/1/workflows/20/screenshots/101.jpg
+ D backend/screenshots/companies/1/workflows/20/screenshots/102.jpg
+ D backend/screenshots/companies/1/workflows/20/screenshots/103.jpg
+ D backend/screenshots/companies/1/workflows/20/screenshots/99.jpg
+ M backlog.md
+ M dashboard/src/components/NotificationBell.tsx
+ M dashboard/src/pages/HealthView.tsx
+ M dashboard/src/pages/TeamView.tsx
+ M dashboard/src/store/auth.ts
+ M lessons.md
+ M session-handoff.md
+?? docs/e2e-test-cases.md
+?? notepad.md
+?? rules.md
+?? sprint.md
+```
+
+
+---
+
+### Session: 2026-01-11 13:23
+
+**Branch**: `main`
+
+**Changes**:
+```
+ M ../.claude/hooks/user-prompt.sh
+ M ../.claude/session-log.md
+ D ../backend/screenshots/companies/1/workflows/20/screenshots/100.jpg
+ D ../backend/screenshots/companies/1/workflows/20/screenshots/101.jpg
+ D ../backend/screenshots/companies/1/workflows/20/screenshots/102.jpg
+ D ../backend/screenshots/companies/1/workflows/20/screenshots/103.jpg
+ D ../backend/screenshots/companies/1/workflows/20/screenshots/99.jpg
+ M ../backlog.md
+ M src/components/NotificationBell.tsx
+ M src/components/StepCard.tsx
+ M src/components/layout/Sidebar.tsx
+ M src/pages/Dashboard.tsx
+ M src/pages/HealthView.tsx
+ M src/pages/TeamView.tsx
+ M src/pages/WorkflowReview.tsx
+ M src/pages/settings/CompanySettings.tsx
+ M src/store/auth.ts
+ M ../lessons.md
+ M ../session-handoff.md
+?? ../docs/e2e-test-cases.md
+?? ../notepad.md
+?? ../rules.md
+?? ../sprint.md
+```
+
+
+---
+
+### Session: 2026-01-11 13:59
+
+**Branch**: `main`
+
+**Changes**:
+```
+ M ../.claude/hooks/user-prompt.sh
+ M ../.claude/session-log.md
+ M app/api/users.py
+ M app/api/workflows.py
+ M app/models/user.py
+ M app/schemas/auth.py
+ M app/schemas/user.py
+ M app/services/auth.py
+ D screenshots/companies/1/workflows/20/screenshots/100.jpg
+ D screenshots/companies/1/workflows/20/screenshots/101.jpg
+ D screenshots/companies/1/workflows/20/screenshots/102.jpg
+ D screenshots/companies/1/workflows/20/screenshots/103.jpg
+ D screenshots/companies/1/workflows/20/screenshots/99.jpg
+ M tests/test_api_users.py
+ M tests/test_steps_api.py
+ M ../backlog.md
+ M ../dashboard/src/api/types.ts
+ M ../dashboard/src/components/NotificationBell.tsx
+ M ../dashboard/src/components/StepCard.tsx
+ M ../dashboard/src/components/layout/Sidebar.tsx
+ M ../dashboard/src/pages/Dashboard.tsx
+ M ../dashboard/src/pages/HealthView.tsx
+ M ../dashboard/src/pages/TeamView.tsx
+ M ../dashboard/src/pages/WorkflowReview.tsx
+ M ../dashboard/src/pages/settings/CompanySettings.tsx
+ M ../dashboard/src/pages/settings/PreferencesSettings.tsx
+ M ../dashboard/src/store/auth.ts
+ M ../dashboard/src/utils/typeMappers.ts
+ M ../lessons.md
+ M ../session-handoff.md
+?? alembic/versions/add_user_timezone.py
+?? ../dashboard/src/utils/timezone.ts
+?? ../docs/e2e-test-cases.md
+?? ../notepad.md
+?? ../rules.md
+?? ../sprint.md
+```
+

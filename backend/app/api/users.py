@@ -46,6 +46,8 @@ async def update_profile(
     # Only update fields that were provided
     if update_data.name is not None:
         current_user.name = update_data.name
+    if update_data.timezone is not None:
+        current_user.timezone = update_data.timezone
 
     db.commit()
     db.refresh(current_user)

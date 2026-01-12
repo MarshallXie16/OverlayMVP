@@ -347,7 +347,9 @@ export const WorkflowReview: React.FC = () => {
               ? "Saving..."
               : isReordering
                 ? "Reordering..."
-                : "Activate Workflow"}
+                : workflow?.status === "draft"
+                  ? "Activate Workflow"
+                  : "Save Changes"}
           </Button>
         </div>
       </div>
@@ -415,7 +417,13 @@ export const WorkflowReview: React.FC = () => {
             onClick={handleSaveWorkflow}
             disabled={isSaving || isReordering || stepsNeedingReview > 0}
           >
-            {isSaving ? "Saving..." : isReordering ? "..." : "Activate"}
+            {isSaving
+              ? "Saving..."
+              : isReordering
+                ? "..."
+                : workflow?.status === "draft"
+                  ? "Activate"
+                  : "Save"}
           </Button>
         </div>
       </div>

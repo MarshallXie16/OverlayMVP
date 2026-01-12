@@ -143,9 +143,56 @@ def delete_workflow(db, workflow_id, company_id):
 
 ---
 
+## Chrome Extension Build Patterns
+
+### 5. Content Scripts Must Be IIFE Bundles (Not ES Modules)
+
+**Symptom**: Content script fails with "Cannot use import statement outside a module" error.
+
+**Root Cause**: Chrome content scripts cannot use ES module `import` statements - they must be self-contained IIFE (Immediately Invoked Function Expression) bundles. If your build tool (Vite, Webpack) outputs ES modules with chunks, content scripts will break.
+
+**Example (Bad Build Output)**:
+```javascript
+// dist/content/recorder.js - BROKEN
+import{e as A}from"../chunks/metadata-eFzR7xkA.js";
+// Chrome throws: "Cannot use import statement outside a module"
+```
+
+**Example (Good Build Output)**:
+```javascript
+// dist/content/recorder.js - WORKS
+"use strict";
+(() => {
+  // All code inlined, no imports
+  function extractMetadata() { ... }
+})();
+```
+
+**Solution**: Use a two-stage build:
+1. Main build (Vite) for popup, background worker
+2. Separate esbuild step to rebuild content scripts as IIFE
+
+```javascript
+// scripts/build-content-scripts.mjs
+await esbuild.build({
+  entryPoints: ['src/content/recorder.ts'],
+  bundle: true,
+  format: 'iife',  // Critical: self-contained, no imports
+  outfile: 'dist/content/recorder.js',
+});
+```
+
+**Prevention**:
+- Always verify content script output starts with IIFE pattern, not `import`
+- After any build config changes, check `head -5 dist/content/*.js`
+- Include esbuild step in `npm run build`: `"build": "vite build && node scripts/build-content-scripts.mjs"`
+- If recording/walkthrough suddenly breaks, first suspect is build issue - rebuild and reload extension
+
+---
+
 ## Error Recovery Patterns
 
-### 5. Retain Data on Upload Failure
+### 6. Retain Data on Upload Failure
 
 **Symptom**: User loses recorded data when upload fails.
 
@@ -216,6 +263,14 @@ try {
 
 16. **Lost data on upload failure** - Store locally for retry.
 
+### Sprint 5: Team & Settings
+
+17. **Content scripts broken with ES module error** - Vite outputs ES modules with chunks, but Chrome content scripts can't use imports. Must rebuild with esbuild as IIFE. Always run full `npm run build` (not just `vite build`) and verify output format.
+
+18. **Session lost on direct URL navigation** - Zustand auth store initialized with `isLoading: false`, causing ProtectedRoute to redirect to login before `checkAuth()` completes. Fix: Initialize `isLoading: true` so ProtectedRoute shows loading spinner until auth check finishes.
+
+19. **Notification dropdown positioned off-screen** - Bell icon at bottom of sidebar, dropdown CSS used `mt-2` (position below), causing dropdown to appear below viewport. Fix: Use `bottom-full mb-2` to position above the bell instead.
+
 ---
 
 ## Key Patterns Summary
@@ -229,3 +284,6 @@ try {
 | Persist on failure | Valuable user data stored locally for retry |
 | Tool calling for AI | Use tools for structured output, not text parsing |
 | Check before parse | Verify response status before calling .json() |
+| IIFE for content scripts | Chrome content scripts must be IIFE bundles, not ES modules |
+| isLoading starts true | Auth stores should start with isLoading: true to prevent race conditions |
+| Position-aware dropdowns | Dropdowns near viewport edges must position away from the edge |

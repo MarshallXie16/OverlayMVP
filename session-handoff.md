@@ -1,256 +1,198 @@
 # Session Handoff - Workflow Automation Platform
 
-**Date**: 2025-01-08 (Late Evening Session)
-**Last Session Focus**: Sprint 4: UX Polish - COMPLETE
+**Date**: 2025-01-09
+**Last Session Focus**: Sprint 5: Team & Settings + Extension Bug Fix
+**Next Session Focus**: E2E UI Testing with Chrome DevTools MCP
 
 ---
 
-## Current Task
-**Task**: Sprint 4: UX Polish
-**Status**: Complete (98% - awaiting manual testing)
-**Progress**: All 7 tickets implemented, codex review completed and issues addressed
-**Remaining**: Manual testing, screen reader audit
+## Current State
+
+### Sprint 5: Team & Settings - COMPLETE
+All implementation work done. Ready for manual E2E testing.
+
+### Extension Bug Fix - COMPLETE
+Fixed content scripts ES module error. Extension rebuilt and working.
 
 ---
 
 ## This Session's Accomplishments
 
-### Sprint 4 Summary
+### Sprint 5 Implementation
 
-| Ticket | Description | Result |
+| Ticket | Description | Status |
 |--------|-------------|--------|
-| REFACTOR-004 | Centralize API Base URL | Implemented - `config.ts` |
-| REFACTOR-003 | Extract Duplicate Utilities | Implemented - `stepUtils.ts` |
-| UX-001 | Replace alerts with toasts | Implemented - 16 alerts replaced |
-| FEAT-001 | Step delete confirmation modal | Implemented - `ConfirmModal.tsx` |
-| FEAT-002 | Prevent deleting last step | Implemented - backend + frontend |
-| A11Y-001 | Add aria-labels to icon buttons | Implemented - 8 locations |
-| FEAT-003 | Notification UI verification | Verified - all features working |
+| FEAT-013 | Team Management - Wire to API | Complete |
+| FEAT-014 | Profile Settings + Password Change | Complete |
+| FEAT-004 | Settings Navigation Restructure | Complete |
+| Backend | Profile endpoints (users.py) | Complete |
+| Tests | 16 backend tests for profile API | Complete |
 
 ### New Files Created
 
 | File | Purpose |
 |------|---------|
-| `dashboard/src/config.ts` | Centralized API URL and app settings |
-| `dashboard/src/utils/stepUtils.ts` | Shared step utility functions |
-| `dashboard/src/utils/toast.ts` | Toast notification wrapper |
-| `dashboard/src/components/ConfirmModal.tsx` | Reusable confirmation dialog |
-| `dashboard/.env.example` | Frontend environment template |
+| `backend/app/api/users.py` | Profile API endpoints (PATCH /me, POST /me/change-password) |
+| `backend/app/schemas/user.py` | Pydantic schemas for profile requests |
+| `backend/tests/test_api_users.py` | 16 tests for profile endpoints |
+| `dashboard/src/pages/settings/SettingsLayout.tsx` | Settings wrapper with sidebar nav |
+| `dashboard/src/pages/settings/ProfileSettings.tsx` | Profile editing + password change |
+| `dashboard/src/pages/settings/CompanySettings.tsx` | Company info + team members |
+| `dashboard/src/pages/settings/IntegrationSettings.tsx` | Slack integration settings |
+| `dashboard/src/pages/settings/PreferencesSettings.tsx` | Notification & UI preferences |
+| `docs/e2e-test-cases.md` | Comprehensive manual test cases |
+| `rules.md` | Lightweight rules loaded with every prompt |
 
-### Key Modified Files
+### Extension Bug Fix
 
-| File | Changes |
-|------|---------|
-| `dashboard/src/App.tsx` | Added Toaster provider |
-| `dashboard/src/pages/WorkflowReview.tsx` | Delete confirmation, replaced alerts |
-| `dashboard/src/components/StepCard.tsx` | disableDelete prop, aria-label |
-| `backend/app/api/steps.py` | Last step deletion prevention |
-| `backend/tests/test_steps_api.py` | TestDeleteStep class (4 tests) |
+**Problem**: Content scripts (recorder.js, walkthrough.js) were broken with "Cannot use import statement outside a module" error.
+
+**Root Cause**: Vite's build outputs ES modules with chunks. Chrome content scripts cannot use ES module imports - they must be self-contained IIFE bundles.
+
+**Solution**: Ran full `npm run build` which executes esbuild step to rebuild content scripts as IIFE. Verified output starts with `"use strict"; (() => {`.
+
+**Lesson Added**: Added to `lessons.md` (Pattern #5, Bug #17) to prevent future occurrences.
 
 ---
 
 ## Key Technical Changes
 
-### Toast System
-- Installed `react-hot-toast`
-- Created wrapper in `toast.ts` with `showToast.success/error/warning/info`
-- Toaster positioned top-right with custom styling
-- Error toasts: red background, 6s duration
-- Success toasts: green background, 5s duration
+### Settings Nested Routes
 
-### ConfirmModal Pattern
-- Uses Headless UI Dialog for accessibility (consistent with EditStepModal)
-- Props: `isOpen`, `title`, `message`, `confirmLabel`, `confirmVariant`, `onConfirm`, `onCancel`, `loading`
-- Supports `danger` and `primary` variants
-
-### Last Step Deletion Prevention
-**Backend** (`steps.py`):
-```python
-step_count = db.query(Step).filter(Step.workflow_id == workflow_id).count()
-if step_count <= 1:
-    raise HTTPException(
-        status_code=400,
-        detail={
-            "code": "CANNOT_DELETE_LAST_STEP",
-            "message": "Cannot delete the last step. Delete the workflow instead."
-        }
-    )
+```typescript
+// App.tsx route structure
+<Route path="/settings" element={<SettingsLayout />}>
+  <Route index element={<Navigate to="/settings/profile" />} />
+  <Route path="profile" element={<ProfileSettings />} />
+  <Route path="company" element={<CompanySettings />} />
+  <Route path="integrations" element={<IntegrationSettings />} />
+  <Route path="preferences" element={<PreferencesSettings />} />
+</Route>
 ```
 
-**Frontend** (`StepCard.tsx`):
-- `disableDelete` prop disables button and shows tooltip
-- Dynamic `aria-label` based on disabled state
+### Profile API Endpoints
+
+```
+PATCH /api/users/me           - Update profile (name)
+POST /api/users/me/change-password - Change password (validates current password)
+```
+
+Password validation:
+- Minimum 8 characters
+- At least 1 letter
+- At least 1 number
+- User logged out after successful change
+
+### UserPromptSubmit Hook Updated
+
+The hook now loads `rules.md` from project root in addition to the task approach checklist.
 
 ---
 
-## Codex Review Findings
-
-### Addressed Issues
-1. **Delete button missing aria-label** - Fixed in StepCard.tsx
-2. **Unused `update` import** - Removed from steps.py
-
-### Documented for Future (A11Y-002 in backlog.md)
-1. **Clickable div without keyboard semantics** (StepCard.tsx:44)
-   - No `role="button"`, `tabIndex`, or `onKeyDown`
-   - Keyboard users can't activate card without reaching Edit button
-
-2. **Drag handle non-semantic div** (StepCard.tsx:82)
-   - No role or aria-label
-   - dnd-kit keyboard support unclear
-
-### Minor Notes (Not Fixed - Working as Intended)
-- `formatActionType` replaces first underscore only (works for current action types)
-- `ActionType` union includes `string` for flexibility
-- Concurrency edge case on last step deletion (acceptable for P2)
-
----
-
-## Decisions Made
-
-- **Decision**: Use Headless UI Dialog for ConfirmModal
-  **Rationale**: Consistent with existing EditStepModal pattern; provides accessibility
-  **Alternatives Rejected**: Simple div overlay (no focus trapping)
-
-- **Decision**: Convert all placeholder "Coming soon" alerts to toasts
-  **Rationale**: User explicitly requested; consistent UX
-  **Alternatives Rejected**: Leave as alerts (inconsistent)
-
-- **Decision**: Create dashboard/.env.example separate from root
-  **Rationale**: Vite uses VITE_* prefix; different from backend env vars
-  **Alternatives Rejected**: Add to root .env.example only (confusing)
-
-- **Decision**: Create backlog ticket (A11Y-002) for StepCard keyboard issues
-  **Rationale**: Out of Sprint 4 scope but important for accessibility
-  **Alternatives Rejected**: Fix immediately (scope creep)
-
----
-
-## Key Findings This Session
-
-### 1. Headless UI Pattern
-EditStepModal already uses Headless UI Dialog. ConfirmModal follows same pattern for consistency.
-
-### 2. Toast Library Choice
-react-hot-toast chosen for simplicity. Already has success/error styling, just needs configuration in Toaster.
-
-### 3. Codex Can Run
-Unlike previous session, `codex exec --sandbox read-only` worked successfully for code review. Session used it for external review.
-
-### 4. Notification System Complete
-NotificationBell.tsx has full implementation:
-- 60s polling (not 30s as spec suggested)
-- Mark as read
-- Mark all read
-- Action URL navigation
-- Empty state
-- Click outside to close
-
----
-
-## Files to Read First
+## Files to Read First (Next Session)
 
 | File | Why |
 |------|-----|
-| `sprints/sprint-4-ux-polish.md` | All acceptance criteria marked (95% checked) |
-| `dashboard/src/utils/toast.ts` | Toast utility pattern |
-| `dashboard/src/components/ConfirmModal.tsx` | Modal pattern for future modals |
-| `backlog.md` (A11Y-002) | Pending accessibility work |
+| `docs/e2e-test-cases.md` | Comprehensive test cases to execute |
+| `lessons.md` (Pattern #5) | Content scripts IIFE requirement |
+| `rules.md` | Quick reference rules (now loaded every prompt) |
+
+---
+
+## Next Session: E2E UI Testing
+
+### Goal
+Use Chrome DevTools MCP to navigate through the UI and verify all features from Sprints 3, 4, and 5 work correctly.
+
+### Test Cases Document
+Created at `docs/e2e-test-cases.md` with 35+ test cases covering:
+
+1. **Sprint 3** (10 cases): HealthView, Notifications, Failed Uploads
+2. **Sprint 4** (8 cases): Toasts, Confirmation Modals, Aria Labels
+3. **Sprint 5** (16 cases): Settings Navigation, Profile, Team, Integrations
+4. **Extension** (7 cases): Recording, Walkthrough, Nested Click Validation
+
+### Pre-Test Checklist
+- [ ] Backend running at `http://localhost:8000`
+- [ ] Dashboard running at `http://localhost:3000`
+- [ ] Extension reloaded in `chrome://extensions` after rebuild
+- [ ] Test user account available (admin role preferred)
+- [ ] At least one workflow with multiple steps exists
+
+### MCP Commands to Use
+```
+mcp__chrome-devtools__list_pages       - See open pages
+mcp__chrome-devtools__new_page         - Open new tab
+mcp__chrome-devtools__select_page      - Switch to page
+mcp__chrome-devtools__take_screenshot  - Capture current state
+```
 
 ---
 
 ## Commands to Verify Current State
 
 ```bash
-# Frontend build (should pass)
+# Extension build (verify IIFE output)
+cd extension && npm run build
+head -5 dist/content/recorder.js
+# Should start with: "use strict"; (() => {
+
+# Backend tests (362 should pass)
+cd backend && source venv/bin/activate && pytest tests/ -q
+
+# Frontend build
 cd dashboard && npm run build
 
-# Verify no alerts remain
-grep -r "alert(" dashboard/src --include="*.tsx" --include="*.ts"
-# Should return empty
-
-# Backend tests (should pass)
-cd backend && source venv/bin/activate && pytest tests/test_steps_api.py::TestDeleteStep -v
-
-# Full backend tests
-cd backend && pytest tests/ -q
+# Start services for testing
+cd backend && uvicorn app.main:app --reload
+cd dashboard && npm run dev
 ```
 
 ---
 
-## Git Status (Uncommitted Sprint 4 Changes)
+## Git Status (Uncommitted Changes)
 
 ```
 Modified:
-- backend/app/api/steps.py (last step deletion + removed unused import)
-- backend/tests/test_steps_api.py (TestDeleteStep class)
-- dashboard/src/App.tsx (Toaster provider)
-- dashboard/src/api/client.ts (imports from config)
-- dashboard/src/components/StepCard.tsx (disableDelete, aria-label)
-- dashboard/src/components/EditStepModal.tsx (imports from stepUtils, aria-label)
-- dashboard/src/pages/WorkflowReview.tsx (ConfirmModal, toasts)
-- dashboard/src/pages/WorkflowDetail.tsx (imports from stepUtils, toasts)
-- dashboard/src/pages/SettingsView.tsx (8 alerts → toasts)
-- dashboard/src/pages/LibraryView.tsx (alert → toast)
-- dashboard/src/components/InstallExtensionModal.tsx (alert → toast)
-- dashboard/src/components/NotificationBell.tsx (aria-label)
-- dashboard/src/components/layout/Sidebar.tsx (aria-label)
-- dashboard/src/pages/TeamView.tsx (aria-labels)
-- sprints/sprint-4-ux-polish.md (acceptance criteria checked)
-- backlog.md (A11Y-002 added, counts updated)
-- .env.example (note about dashboard)
+- backend/app/main.py (users router registered)
+- dashboard/src/App.tsx (nested settings routes)
+- dashboard/src/api/client.ts (profile API methods)
+- dashboard/src/api/types.ts (profile types)
+- dashboard/src/pages/TeamView.tsx (accessibility improvements)
+- lessons.md (added Pattern #5, Bug #17)
+- .claude/hooks/user-prompt.sh (loads rules.md)
 
 Created:
-- dashboard/src/config.ts
-- dashboard/src/utils/stepUtils.ts
-- dashboard/src/utils/toast.ts
-- dashboard/src/components/ConfirmModal.tsx
-- dashboard/.env.example
+- backend/app/api/users.py
+- backend/app/schemas/user.py
+- backend/tests/test_api_users.py
+- dashboard/src/pages/settings/SettingsLayout.tsx
+- dashboard/src/pages/settings/ProfileSettings.tsx
+- dashboard/src/pages/settings/CompanySettings.tsx
+- dashboard/src/pages/settings/IntegrationSettings.tsx
+- dashboard/src/pages/settings/PreferencesSettings.tsx
+- docs/e2e-test-cases.md
+- rules.md
 ```
 
 ---
 
-## Immediate Next Steps
+## Decisions Made This Session
 
-1. **Commit Sprint 4 changes**:
-   ```bash
-   git add -A
-   git commit -m "Complete Sprint 4: UX Polish
+- **Decision**: Settings restructure uses nested routes with Outlet
+  **Rationale**: Better URL semantics, easier deep linking, follows React Router v6 patterns
 
-   Features:
-   - UX-001: Replace all alert() with toast notifications (16 locations)
-   - FEAT-001: Step delete confirmation modal (ConfirmModal.tsx)
-   - FEAT-002: Prevent deleting last step (backend + frontend)
-   - A11Y-001: Add aria-labels to icon buttons (8 locations)
-   - FEAT-003: Notification UI verified working
+- **Decision**: Added IIFE pattern to lessons.md
+  **Rationale**: This is the second time we've hit this issue; needs to be documented
 
-   Refactoring:
-   - REFACTOR-003: Extract step utilities (stepUtils.ts)
-   - REFACTOR-004: Centralize API URL (config.ts)
-
-   Code Quality:
-   - Added 4 backend tests for step deletion
-   - Codex review completed - issues addressed
-   - Created A11Y-002 backlog ticket for keyboard accessibility
-
-   Tests: Backend tests pass, Frontend builds pass"
-   ```
-
-2. **Manual Testing** - Test features in browser:
-   - Delete step → confirmation modal appears
-   - Try delete last step → button disabled, tooltip shows
-   - Trigger error → toast appears
-   - Check aria-labels with screen reader
-
-3. **Next Sprint** - Check backlog for Sprint 5 priorities
+- **Decision**: Created rules.md as lightweight prompt injection
+  **Rationale**: Quick reference reminders without bloating context
 
 ---
 
 ## Open Questions for User
 
-None - Sprint 4 complete. Ready for:
-- Commit and proceed to Sprint 5
-- Additional manual testing
-- User's preferred direction
+None - ready for E2E testing session.
 
 ---
 

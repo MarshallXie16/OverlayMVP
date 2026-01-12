@@ -15,32 +15,25 @@ import {
   ArrowRight,
   Loader2,
   RefreshCw,
+  Filter,
+  X,
+  ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { apiClient } from "@/api/client";
-import type { HealthStatsResponse, HealthLogResponse } from "@/api/types";
+import type {
+  HealthStatsResponse,
+  HealthLogResponse,
+  WorkflowListItem,
+} from "@/api/types";
+import { useAuthStore } from "@/store/auth";
+import { formatRelativeTimeInTimezone } from "@/utils/timezone";
 
 // Helper to format execution time
 function formatExecutionTime(ms: number | null): string {
   if (ms === null) return "-";
   if (ms < 1000) return `${ms}ms`;
   return `${(ms / 1000).toFixed(1)}s`;
-}
-
-// Helper to format relative time
-function formatRelativeTime(dateString: string): string {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) return "Just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return date.toLocaleDateString();
 }
 
 // Map backend status to display format
@@ -50,21 +43,50 @@ function formatStatus(status: string): "SUCCESS" | "HEALED" | "FAILED" {
   return "FAILED";
 }
 
+// Status filter options
+type StatusFilter = "ALL" | "SUCCESS" | "FAILED";
+const STATUS_FILTERS: { label: string; value: StatusFilter }[] = [
+  { label: "All", value: "ALL" },
+  { label: "Success", value: "SUCCESS" },
+  { label: "Failed", value: "FAILED" },
+];
+
 export const HealthView: React.FC = () => {
+  const { user } = useAuthStore();
   const [stats, setStats] = useState<HealthStatsResponse | null>(null);
   const [logs, setLogs] = useState<HealthLogResponse[]>([]);
+  const [workflows, setWorkflows] = useState<WorkflowListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isFilterLoading, setIsFilterLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const fetchData = async () => {
+  // Filter state
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
+  const [workflowFilter, setWorkflowFilter] = useState<number | null>(null);
+
+  // Check if any filters are active
+  const hasActiveFilters = statusFilter !== "ALL" || workflowFilter !== null;
+
+  // Map UI status filter to API status values
+  const getApiStatus = (filter: StatusFilter): string | undefined => {
+    if (filter === "SUCCESS") return "success";
+    if (filter === "FAILED") return "failed";
+    return undefined;
+  };
+
+  // Fetch initial data (stats + workflows list)
+  const fetchInitialData = async () => {
     try {
-      const [statsResponse, logsResponse] = await Promise.all([
-        apiClient.getHealthStats(30), // Last 30 days
-        apiClient.getHealthLogs({ limit: 20 }),
-      ]);
+      const [statsResponse, logsResponse, workflowsResponse] =
+        await Promise.all([
+          apiClient.getHealthStats(30), // Last 30 days
+          apiClient.getHealthLogs({ limit: 20 }),
+          apiClient.getWorkflows(100, 0), // Get workflows for filter dropdown
+        ]);
       setStats(statsResponse);
       setLogs(logsResponse.logs);
+      setWorkflows(workflowsResponse.workflows);
       setError(null);
     } catch (err) {
       setError(
@@ -76,13 +98,60 @@ export const HealthView: React.FC = () => {
     }
   };
 
+  // Fetch logs with current filters
+  const fetchFilteredLogs = async () => {
+    setIsFilterLoading(true);
+    try {
+      const params: {
+        workflow_id?: number;
+        status?: string;
+        limit?: number;
+      } = { limit: 20 };
+
+      if (workflowFilter !== null) {
+        params.workflow_id = workflowFilter;
+      }
+
+      const apiStatus = getApiStatus(statusFilter);
+      if (apiStatus) {
+        params.status = apiStatus;
+      }
+
+      const logsResponse = await apiClient.getHealthLogs(params);
+      setLogs(logsResponse.logs);
+      setError(null); // Clear any previous errors on success
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to load filtered logs",
+      );
+    } finally {
+      setIsFilterLoading(false);
+    }
+  };
+
+  // Initial load
   useEffect(() => {
-    fetchData();
+    fetchInitialData();
   }, []);
+
+  // Refetch logs when filters change
+  useEffect(() => {
+    // Skip on initial load or during refresh to avoid duplicate requests
+    if (isLoading || isRefreshing) return;
+    fetchFilteredLogs();
+  }, [statusFilter, workflowFilter]);
 
   const handleRefresh = () => {
     setIsRefreshing(true);
-    fetchData();
+    // Reset filters and fetch fresh data
+    setStatusFilter("ALL");
+    setWorkflowFilter(null);
+    fetchInitialData();
+  };
+
+  const handleClearFilters = () => {
+    setStatusFilter("ALL");
+    setWorkflowFilter(null);
   };
 
   if (isLoading) {
@@ -249,24 +318,120 @@ export const HealthView: React.FC = () => {
 
       {/* Recent Logs Table */}
       <div className="bg-white/60 backdrop-blur-xl rounded-2xl border border-white/60 shadow-glass overflow-hidden">
-        <div className="px-6 py-5 border-b border-neutral-200/60 flex justify-between items-center bg-white/40">
-          <h3 className="font-bold text-neutral-900">Recent Executions</h3>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => console.log("View all logs")}
-          >
-            View All Logs <ArrowRight size={16} className="ml-1" />
-          </Button>
+        <div className="px-6 py-5 border-b border-neutral-200/60 bg-white/40">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="font-bold text-neutral-900">Recent Executions</h3>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled
+              title="Full logs view coming soon"
+            >
+              View All Logs <ArrowRight size={16} className="ml-1" />
+            </Button>
+          </div>
+
+          {/* Filters */}
+          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+            {/* Status Filter Pills */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center text-neutral-400 mr-1">
+                <Filter size={16} />
+              </div>
+              {STATUS_FILTERS.map((f) => (
+                <button
+                  key={f.value}
+                  type="button"
+                  onClick={() => setStatusFilter(f.value)}
+                  disabled={isFilterLoading}
+                  aria-pressed={statusFilter === f.value}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap disabled:opacity-50 ${
+                    statusFilter === f.value
+                      ? "bg-neutral-900 text-white shadow-md"
+                      : "bg-white text-neutral-600 hover:bg-neutral-100 border border-neutral-200 hover:border-neutral-300"
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Workflow Dropdown */}
+            <div className="relative">
+              <select
+                value={workflowFilter ?? ""}
+                onChange={(e) => {
+                  const parsed = Number(e.target.value);
+                  setWorkflowFilter(
+                    e.target.value && Number.isFinite(parsed) ? parsed : null,
+                  );
+                }}
+                disabled={isFilterLoading}
+                aria-label="Filter by workflow"
+                className="appearance-none bg-white border border-neutral-200 text-sm rounded-lg pl-3 pr-8 py-1.5 outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:opacity-50 min-w-[180px]"
+              >
+                <option value="">All Workflows</option>
+                {workflows.map((wf) => (
+                  <option key={wf.id} value={wf.id}>
+                    {wf.name}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown
+                size={16}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none"
+              />
+            </div>
+
+            {/* Clear Filters Button */}
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={handleClearFilters}
+                disabled={isFilterLoading}
+                aria-label="Clear all filters"
+                className="flex items-center gap-1 text-sm text-primary-600 hover:text-primary-700 font-medium disabled:opacity-50"
+              >
+                <X size={14} />
+                Clear filters
+              </button>
+            )}
+
+            {/* Loading indicator for filter changes */}
+            {isFilterLoading && (
+              <div
+                className="flex items-center gap-1"
+                role="status"
+                aria-live="polite"
+              >
+                <Loader2 size={16} className="animate-spin text-primary-600" />
+                <span className="sr-only">Loading filtered results...</span>
+              </div>
+            )}
+          </div>
         </div>
 
         {logs.length === 0 ? (
           <div className="p-12 text-center text-neutral-500">
             <Activity size={48} className="mx-auto mb-4 opacity-30" />
-            <p>No execution logs yet.</p>
-            <p className="text-sm mt-1">
-              Logs will appear here when workflows are run.
-            </p>
+            {hasActiveFilters ? (
+              <>
+                <p>No logs match your filters.</p>
+                <button
+                  onClick={handleClearFilters}
+                  className="text-primary-600 hover:text-primary-700 font-semibold mt-2 px-4 py-2 rounded-lg hover:bg-primary-50 transition-colors"
+                >
+                  Clear all filters
+                </button>
+              </>
+            ) : (
+              <>
+                <p>No execution logs yet.</p>
+                <p className="text-sm mt-1">
+                  Logs will appear here when workflows are run.
+                </p>
+              </>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -323,7 +488,10 @@ export const HealthView: React.FC = () => {
                         {formatExecutionTime(log.execution_time_ms)}
                       </td>
                       <td className="px-6 py-4 text-sm text-neutral-500">
-                        {formatRelativeTime(log.created_at)}
+                        {formatRelativeTimeInTimezone(
+                          log.created_at,
+                          user?.timezone,
+                        )}
                       </td>
                     </tr>
                   );

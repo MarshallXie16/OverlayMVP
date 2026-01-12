@@ -28,6 +28,7 @@ export interface UserResponse {
   role: string;
   company_id: number;
   company_name: string;
+  timezone: string | null;
   created_at: string;
   last_login_at: string | null;
 }
@@ -44,6 +45,7 @@ export interface TokenResponse {
 
 export interface UpdateProfileRequest {
   name?: string;
+  timezone?: string;
 }
 
 export interface ChangePasswordRequest {

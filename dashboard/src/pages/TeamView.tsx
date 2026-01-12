@@ -32,6 +32,8 @@ import type {
 } from "@/api/types";
 import { useAuthStore } from "@/store/auth";
 import { canManageUsers, getRoleDisplayName } from "@/utils/permissions";
+import { showToast } from "@/utils/toast";
+import { formatDateInTimezone } from "@/utils/timezone";
 
 export const TeamView: React.FC = () => {
   // State
@@ -109,10 +111,16 @@ export const TeamView: React.FC = () => {
     ? `${window.location.origin}/signup?invite=${company.invite_token}`
     : "";
 
-  const handleCopyInvite = () => {
-    navigator.clipboard.writeText(inviteLink);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopyInvite = async () => {
+    if (!inviteLink) return;
+    try {
+      await navigator.clipboard.writeText(inviteLink);
+      setCopied(true);
+      showToast.success("Invite link copied to clipboard");
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      showToast.error("Failed to copy link. Please copy manually.");
+    }
   };
 
   const toggleMenu = (id: number, e: React.MouseEvent) => {
@@ -247,11 +255,7 @@ export const TeamView: React.FC = () => {
   };
 
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
+    return formatDateInTimezone(dateStr, user?.timezone);
   };
 
   const getAvatarUrl = (name: string | null) => {
@@ -340,6 +344,7 @@ export const TeamView: React.FC = () => {
             <Button
               variant={copied ? "secondary" : "primary"}
               onClick={handleCopyInvite}
+              disabled={!inviteLink}
               className={`w-36 justify-center ${copied ? "bg-green-50 border-green-200 text-green-700 hover:bg-green-100" : ""}`}
               icon={copied ? <Check size={18} /> : <Copy size={18} />}
             >

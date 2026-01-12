@@ -165,6 +165,8 @@ export function mapWorkflowResponseToDesign(
 
 /**
  * Format relative time (e.g., "2 hours ago", "3 days ago")
+ * @deprecated Use formatRelativeTimeInTimezone from @/utils/timezone instead
+ * for timezone-aware formatting.
  */
 export function formatRelativeTime(dateString: string): string {
   const date = new Date(dateString);

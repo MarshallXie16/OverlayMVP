@@ -1,13 +1,42 @@
 /**
  * Preferences Settings Page
- * Manage notification preferences and interface settings
+ * Manage notification preferences, timezone, and interface settings
  */
-import React from "react";
-import { Globe, Moon } from "lucide-react";
+import React, { useState } from "react";
+import { Globe, Moon, Check } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { showToast } from "@/utils/toast";
+import { useAuthStore } from "@/store/auth";
+import {
+  TIMEZONE_OPTIONS,
+  getBrowserTimezone,
+  getTimezoneOffset,
+} from "@/utils/timezone";
 
 export const PreferencesSettings: React.FC = () => {
+  const { user, updateProfile } = useAuthStore();
+  const [selectedTimezone, setSelectedTimezone] = useState<string>(
+    user?.timezone || getBrowserTimezone(),
+  );
+  const [isSaving, setIsSaving] = useState(false);
+
+  const currentTimezone = user?.timezone || getBrowserTimezone();
+  const hasTimezoneChanged = selectedTimezone !== currentTimezone;
+
+  const handleSaveTimezone = async () => {
+    if (!hasTimezoneChanged) return;
+
+    setIsSaving(true);
+    try {
+      await updateProfile({ timezone: selectedTimezone });
+      showToast.success("Timezone updated successfully");
+    } catch {
+      showToast.error("Failed to update timezone");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <div className="glass-card p-8 rounded-2xl border border-white/60 animate-fade-in">
       <h2 className="text-xl font-bold text-neutral-900 mb-6">
@@ -79,17 +108,34 @@ export const PreferencesSettings: React.FC = () => {
                   Timezone
                 </span>
                 <span className="text-neutral-500 text-xs">
-                  Auto-detect (UTC-08:00)
+                  {getTimezoneOffset(selectedTimezone)}
                 </span>
               </div>
             </div>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => showToast.info("Coming soon")}
-            >
-              Edit
-            </Button>
+            <div className="flex items-center gap-2">
+              <select
+                value={selectedTimezone}
+                onChange={(e) => setSelectedTimezone(e.target.value)}
+                className="bg-white border border-neutral-200 text-sm rounded-lg p-2 outline-none focus:ring-2 focus:ring-primary-500 max-w-xs"
+              >
+                {TIMEZONE_OPTIONS.map((tz) => (
+                  <option key={tz.value} value={tz.value}>
+                    {tz.label}
+                  </option>
+                ))}
+              </select>
+              {hasTimezoneChanged && (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleSaveTimezone}
+                  disabled={isSaving}
+                  icon={<Check size={14} />}
+                >
+                  {isSaving ? "Saving..." : "Save"}
+                </Button>
+              )}
+            </div>
           </div>
           <div className="flex items-center justify-between py-3">
             <div className="flex items-center gap-3">

@@ -38,3 +38,12 @@ After Implementation (MANDATORY):
 **Think step-by-step**: What do I know? What do I need to investigate? What's my plan?
 ===================
 EOF
+
+# Load rules.md if it exists (lightweight project-specific reminders)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+if [ -f "$PROJECT_ROOT/rules.md" ]; then
+    echo ""
+    cat "$PROJECT_ROOT/rules.md"
+fi

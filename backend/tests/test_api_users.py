@@ -135,6 +135,70 @@ class TestUpdateProfile:
 
         assert response.status_code == 422  # Validation error (min_length=1)
 
+    def test_update_profile_timezone(self, client, auth_user):
+        """Test updating timezone successfully."""
+        token = auth_user["access_token"]
+
+        response = client.patch(
+            "/api/users/me",
+            json={"timezone": "America/Los_Angeles"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["timezone"] == "America/Los_Angeles"
+        assert data["name"] == "Test User"  # Unchanged
+
+    def test_update_profile_timezone_various_regions(self, client, auth_user):
+        """Test updating timezone with various IANA regions."""
+        token = auth_user["access_token"]
+
+        timezones = [
+            "Europe/London",
+            "Asia/Tokyo",
+            "Australia/Sydney",
+            "Pacific/Auckland",
+            "Africa/Cairo",
+            "UTC",
+        ]
+
+        for tz in timezones:
+            response = client.patch(
+                "/api/users/me",
+                json={"timezone": tz},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            assert response.status_code == 200
+            assert response.json()["timezone"] == tz
+
+    def test_update_profile_invalid_timezone(self, client, auth_user):
+        """Test updating timezone with invalid value."""
+        token = auth_user["access_token"]
+
+        response = client.patch(
+            "/api/users/me",
+            json={"timezone": "Invalid/Timezone"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 422  # Validation error
+
+    def test_update_profile_name_and_timezone(self, client, auth_user):
+        """Test updating both name and timezone together."""
+        token = auth_user["access_token"]
+
+        response = client.patch(
+            "/api/users/me",
+            json={"name": "New Name", "timezone": "Europe/Paris"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["name"] == "New Name"
+        assert data["timezone"] == "Europe/Paris"
+
 
 class TestChangePassword:
     """Test password change endpoint."""

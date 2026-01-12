@@ -8,6 +8,8 @@ import { Bell, X, Check, AlertTriangle, Activity } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { apiClient } from "@/api/client";
 import type { NotificationResponse, NotificationType } from "@/api/types";
+import { useAuthStore } from "@/store/auth";
+import { formatRelativeTimeInTimezone } from "@/utils/timezone";
 
 // Notification type to icon mapping
 const getNotificationIcon = (type: NotificationType) => {
@@ -37,24 +39,9 @@ const getSeverityBg = (severity: string): string => {
   }
 };
 
-// Format relative time
-function formatRelativeTime(dateString: string): string {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) return "Just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return date.toLocaleDateString();
-}
-
 export const NotificationBell: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationResponse[]>(
     [],
@@ -154,9 +141,9 @@ export const NotificationBell: React.FC = () => {
         )}
       </button>
 
-      {/* Dropdown */}
+      {/* Dropdown - positioned above the bell since it's at bottom of sidebar */}
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-xl border border-neutral-200/60 overflow-hidden z-50">
+        <div className="absolute left-0 bottom-full mb-2 w-80 bg-white rounded-xl shadow-xl border border-neutral-200/60 overflow-hidden z-50">
           {/* Header */}
           <div className="px-4 py-3 border-b border-neutral-200/60 flex justify-between items-center bg-neutral-50/50">
             <h3 className="font-semibold text-neutral-900">Notifications</h3>
@@ -215,7 +202,10 @@ export const NotificationBell: React.FC = () => {
                           </p>
                         )}
                         <p className="text-xs text-neutral-400 mt-1">
-                          {formatRelativeTime(notification.created_at)}
+                          {formatRelativeTimeInTimezone(
+                            notification.created_at,
+                            user?.timezone,
+                          )}
                         </p>
                       </div>
                     </div>

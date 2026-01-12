@@ -61,6 +61,9 @@ class User(Base):
     # User Profile
     name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
+    # User Preferences - IANA timezone identifier (e.g., "America/Los_Angeles")
+    timezone: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+
     # Authorization - Using String for SQLite compatibility (validated at app level)
     role: Mapped[str] = mapped_column(
         String(20), nullable=False, default="viewer"

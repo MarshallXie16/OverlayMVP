@@ -8,11 +8,11 @@ import {
   Copy,
   Check,
   Users,
-  Trash2,
   Loader2,
   AlertCircle,
   Link as LinkIcon,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/Button";
 import { useAuthStore } from "@/store/auth";
 import { generateAvatarUrl } from "@/utils/typeMappers";
@@ -21,6 +21,7 @@ import { apiClient } from "@/api/client";
 import type { CompanyResponse, TeamMemberResponse } from "@/api/types";
 
 export const CompanySettings: React.FC = () => {
+  const navigate = useNavigate();
   const { user } = useAuthStore();
   const isAdmin = user?.role === "admin";
 
@@ -34,7 +35,6 @@ export const CompanySettings: React.FC = () => {
   const [companyName, setCompanyName] = useState("");
   const [isUpdatingCompany, setIsUpdatingCompany] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [removingMemberId, setRemovingMemberId] = useState<number | null>(null);
 
   useEffect(() => {
     fetchCompanyData();
@@ -94,25 +94,6 @@ export const CompanySettings: React.FC = () => {
       document.body.removeChild(textArea);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    }
-  };
-
-  const handleRemoveMember = async (memberId: number) => {
-    if (!confirm("Are you sure you want to remove this team member?")) return;
-    setRemovingMemberId(memberId);
-    try {
-      await apiClient.removeTeamMember(memberId);
-      setMembers(members.filter((m) => m.id !== memberId));
-      if (company) {
-        setCompany({ ...company, member_count: company.member_count - 1 });
-      }
-      showToast.success("Team member removed");
-    } catch (err) {
-      showToast.error(
-        err instanceof Error ? err.message : "Failed to remove member",
-      );
-    } finally {
-      setRemovingMemberId(null);
     }
   };
 
@@ -274,6 +255,15 @@ export const CompanySettings: React.FC = () => {
               {members.length !== 1 ? "s" : ""} in your workspace
             </p>
           </div>
+          {isAdmin && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => navigate("/team")}
+            >
+              Manage Team
+            </Button>
+          )}
         </div>
 
         <div className="space-y-3">
@@ -300,33 +290,15 @@ export const CompanySettings: React.FC = () => {
                   <p className="text-xs text-neutral-500">{member.email}</p>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                <span
-                  className={`px-2 py-1 rounded-full text-xs font-medium ${
-                    member.role === "admin"
-                      ? "bg-purple-100 text-purple-700 border border-purple-200"
-                      : "bg-neutral-100 text-neutral-600 border border-neutral-200"
-                  }`}
-                >
-                  {member.role}
-                </span>
-                {isAdmin && member.id !== user?.id && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => handleRemoveMember(member.id)}
-                    disabled={removingMemberId === member.id}
-                    className="text-red-600 hover:bg-red-50 hover:border-red-200"
-                    aria-label={`Remove ${member.name || member.email} from team`}
-                  >
-                    {removingMemberId === member.id ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Trash2 size={16} />
-                    )}
-                  </Button>
-                )}
-              </div>
+              <span
+                className={`px-2 py-1 rounded-full text-xs font-medium ${
+                  member.role === "admin"
+                    ? "bg-purple-100 text-purple-700 border border-purple-200"
+                    : "bg-neutral-100 text-neutral-600 border border-neutral-200"
+                }`}
+              >
+                {member.role}
+              </span>
             </div>
           ))}
         </div>

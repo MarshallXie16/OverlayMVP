@@ -427,7 +427,14 @@ def reorder_steps_endpoint(
     step_map = {step.id: step for step in existing_steps}
 
     try:
-        # Update step_number based on new order
+        # Two-phase update to avoid unique constraint violations:
+        # Phase 1: Set all step_numbers to temporary negative values
+        # This avoids collisions when reassigning step numbers
+        for step_id in reorder_request.step_order:
+            step_map[step_id].step_number = -step_map[step_id].step_number - 1000
+        db.flush()  # Apply the temporary values
+
+        # Phase 2: Set final step_numbers based on new order
         for new_step_number, step_id in enumerate(reorder_request.step_order, start=1):
             step_map[step_id].step_number = new_step_number
 

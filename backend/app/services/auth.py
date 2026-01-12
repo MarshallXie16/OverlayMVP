@@ -207,6 +207,7 @@ def get_user_response(user: User) -> UserResponse:
         role=user.role,
         company_id=user.company_id,
         company_name=user.company.name,
+        timezone=user.timezone,
         created_at=user.created_at,
         last_login_at=user.last_login_at,
     )

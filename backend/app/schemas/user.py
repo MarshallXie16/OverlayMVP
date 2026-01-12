@@ -12,9 +12,43 @@ class UpdateProfileRequest(BaseModel):
     name: Optional[str] = Field(
         None, min_length=1, max_length=255, description="Display name"
     )
+    timezone: Optional[str] = Field(
+        None,
+        max_length=50,
+        description="IANA timezone identifier (e.g., 'America/Los_Angeles')",
+    )
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, v: Optional[str]) -> Optional[str]:
+        """Validate timezone is a valid IANA identifier."""
+        if v is None:
+            return v
+        # Common IANA timezone prefixes for basic validation
+        valid_prefixes = (
+            "Africa/",
+            "America/",
+            "Antarctica/",
+            "Arctic/",
+            "Asia/",
+            "Atlantic/",
+            "Australia/",
+            "Europe/",
+            "Indian/",
+            "Pacific/",
+            "Etc/",
+            "UTC",
+        )
+        if not v.startswith(valid_prefixes):
+            raise ValueError(
+                "Invalid timezone. Must be a valid IANA timezone identifier (e.g., 'America/Los_Angeles')"
+            )
+        return v
 
     class Config:
-        json_schema_extra = {"example": {"name": "Sarah Johnson"}}
+        json_schema_extra = {
+            "example": {"name": "Sarah Johnson", "timezone": "America/Los_Angeles"}
+        }
 
 
 class ChangePasswordRequest(BaseModel):

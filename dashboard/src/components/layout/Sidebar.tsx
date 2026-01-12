@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   Home,
@@ -14,11 +14,13 @@ import { generateAvatarUrl } from "@/utils/typeMappers";
 import type { UserRole } from "@/api/types";
 import { canCreateWorkflow, getRoleDisplayName } from "@/utils/permissions";
 import { NotificationBell } from "@/components/NotificationBell";
+import { InstallExtensionModal } from "@/components/InstallExtensionModal";
 
 export const Sidebar: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuthStore();
+  const [showExtensionModal, setShowExtensionModal] = useState(false);
 
   // Permission check for workflow creation
   const userRole = (user?.role as UserRole) || "viewer";
@@ -64,7 +66,7 @@ export const Sidebar: React.FC = () => {
       {showCreateWorkflow && (
         <div className="px-6 mb-8">
           <button
-            onClick={() => navigate("/dashboard")}
+            onClick={() => setShowExtensionModal(true)}
             className="w-full py-3 px-4 bg-gradient-to-r from-accent-500 to-accent-600 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 flex items-center justify-center gap-2"
           >
             <Plus size={18} />
@@ -72,6 +74,13 @@ export const Sidebar: React.FC = () => {
           </button>
         </div>
       )}
+
+      {/* Extension Installation Modal */}
+      <InstallExtensionModal
+        isOpen={showExtensionModal}
+        onClose={() => setShowExtensionModal(false)}
+        onSkip={() => setShowExtensionModal(false)}
+      />
 
       {/* Navigation */}
       <nav className="flex-1 px-4 space-y-2">

@@ -1,6 +1,6 @@
 # Backlog - Workflow Automation Platform
 
-**Last Updated**: 2025-01-08
+**Last Updated**: 2025-01-09
 
 ## Summary
 
@@ -8,10 +8,10 @@
 |----------|-------|------------|
 | **P0 - Critical** | 5 | Security vulnerabilities, test coverage gaps |
 | **P1 - High** | 20 | Core features, admin visibility, tests |
-| **P2 - Medium** | 17 | UX polish, refactoring, documentation, accessibility |
+| **P2 - Medium** | 19 | UX polish, refactoring, documentation, accessibility |
 | **P3 - Low** | 11 | Nice-to-haves, performance, enhancements |
 | **Completed** | 10 | Sprint 4 UX Polish (7), SECURITY-004/005/006 |
-| **Total** | 53 | |
+| **Total** | 55 | |
 
 ### Sprint 1 Status (2025-01-07)
 **Completed (Backend)**:
@@ -1297,6 +1297,58 @@ if (requiresAuth) {
 - [ ] Expired tokens trigger graceful logout
 - [ ] User-friendly error message shown
 - [ ] Test for token expiration handling
+
+---
+
+### UX-010: HealthView Missing Filter UI
+**Type**: Enhancement
+**Component**: Dashboard
+**File**: `dashboard/src/pages/HealthView.tsx`
+**Discovered**: 2025-01-09 (E2E Testing)
+
+**Description**: The HealthView page displays execution logs but has no filter controls. The backend API (`GET /api/health/logs`) already supports filtering by `workflow_id` and `status`, but the UI doesn't expose these filters.
+
+**Expected Behavior** (per TC-3.2):
+- Filter by status (Success/Failed)
+- Filter by workflow (dropdown)
+- Loading state while fetching filtered data
+- Clear filters option
+
+**Current Behavior**: Only shows "Refresh" button and "View All Logs" link - no filter controls.
+
+**Fix**:
+1. Add filter dropdown for status (All/Success/Failed)
+2. Add filter dropdown for workflow (populated from available workflows)
+3. Update API calls to include filter params
+4. Show loading state during filter changes
+
+**Acceptance Criteria**:
+- [ ] Status filter dropdown exists
+- [ ] Workflow filter dropdown exists
+- [ ] Filters update the displayed data
+- [ ] Loading state shown while fetching
+- [ ] Clear filters option available
+
+---
+
+### UX-011: Inconsistent Copy Link Feedback
+**Type**: Bug
+**Component**: Dashboard
+**Discovered**: 2025-01-09 (E2E Testing)
+
+**Description**: Copy link feedback is inconsistent across pages:
+- **TeamView.tsx**: Button changes to "Copied!" (no toast)
+- **CompanySettings.tsx**: Button changes AND shows toast `showToast.success("Invite link copied to clipboard")`
+
+**Expected**: Consistent feedback across all copy actions.
+
+**Fix**: Add toast notification to TeamView.tsx copy handler to match CompanySettings.tsx behavior.
+
+**File to Update**: `dashboard/src/pages/TeamView.tsx` (line ~114)
+
+**Acceptance Criteria**:
+- [ ] TeamView shows toast on copy like CompanySettings
+- [ ] All copy actions have consistent feedback (button change + toast)
 
 ---
 

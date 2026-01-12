@@ -7,7 +7,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, AlertTriangle, Loader2 } from "lucide-react";
 import { apiClient } from "@/api/client";
-import type { WorkflowListItem } from "@/api/types";
+import type { WorkflowListItem, HealthStatsResponse } from "@/api/types";
 import { useAuthStore } from "@/store/auth";
 import { Button } from "@/components/ui/Button";
 import { WorkflowCard } from "@/components/workflows/WorkflowCard";
@@ -17,6 +17,9 @@ import { DesignWorkflow, WorkflowStatus } from "@/types/design";
 
 export const Dashboard: React.FC = () => {
   const [workflows, setWorkflows] = useState<WorkflowListItem[]>([]);
+  const [healthStats, setHealthStats] = useState<HealthStatsResponse | null>(
+    null,
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -33,9 +36,16 @@ export const Dashboard: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await apiClient.getWorkflows(50, 0);
-      const sortedWorkflows = [...response.workflows].sort(compareByHealth);
+      // Fetch workflows and health stats in parallel
+      const [workflowsResponse, healthStatsResponse] = await Promise.all([
+        apiClient.getWorkflows(50, 0),
+        apiClient.getHealthStats(30), // Last 30 days to match HealthView
+      ]);
+      const sortedWorkflows = [...workflowsResponse.workflows].sort(
+        compareByHealth,
+      );
       setWorkflows(sortedWorkflows);
+      setHealthStats(healthStatsResponse);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load workflows");
     } finally {
@@ -61,31 +71,22 @@ export const Dashboard: React.FC = () => {
     );
   }, [designWorkflows, searchQuery]);
 
-  // Calculate health stats
-  const healthStats = useMemo(() => {
-    const total = workflows.length;
-    const totalRuns = workflows.reduce((sum, wf) => sum + wf.total_uses, 0);
-    const successRates = workflows
-      .filter((wf) => wf.total_uses > 0)
-      .map((wf) => wf.success_rate);
-    const avgSuccessRate =
-      successRates.length > 0
-        ? Math.round(
-            (successRates.reduce((a, b) => a + b, 0) / successRates.length) *
-              100,
-          )
-        : 100;
+  // Derive display stats from API health stats and workflow data
+  const dashboardStats = useMemo(() => {
     const brokenCount = designWorkflows.filter(
       (wf) => wf.status === WorkflowStatus.BROKEN,
     ).length;
 
     return {
-      successRate: avgSuccessRate,
-      totalWorkflows: total,
-      totalRuns,
+      // Use API health stats for accuracy (matches HealthView)
+      successRate: healthStats
+        ? Math.round(healthStats.success_rate * 100)
+        : 100,
+      totalWorkflows: workflows.length,
+      totalRuns: healthStats?.total_executions ?? 0,
       brokenWorkflows: brokenCount,
     };
-  }, [workflows, designWorkflows]);
+  }, [healthStats, workflows, designWorkflows]);
 
   const handleSelectWorkflow = (wf: DesignWorkflow) => {
     navigate(`/workflows/${wf.id}`);
@@ -153,10 +154,10 @@ export const Dashboard: React.FC = () => {
               Success Rate
             </span>
             <span className="text-3xl font-bold text-neutral-900">
-              {healthStats.successRate}%
+              {dashboardStats.successRate}%
             </span>
             <span className="text-xs text-green-600 font-medium mt-1">
-              All time average
+              Last 30 days
             </span>
           </div>
 
@@ -166,7 +167,7 @@ export const Dashboard: React.FC = () => {
               Total Workflows
             </span>
             <span className="text-3xl font-bold text-neutral-900">
-              {healthStats.totalWorkflows}
+              {dashboardStats.totalWorkflows}
             </span>
             <span className="text-xs text-neutral-500 mt-1">
               Active workflows
@@ -179,9 +180,9 @@ export const Dashboard: React.FC = () => {
               Total Runs
             </span>
             <span className="text-3xl font-bold text-neutral-900">
-              {healthStats.totalRuns.toLocaleString()}
+              {dashboardStats.totalRuns.toLocaleString()}
             </span>
-            <span className="text-xs text-neutral-500 mt-1">All time</span>
+            <span className="text-xs text-neutral-500 mt-1">Last 30 days</span>
           </div>
 
           {/* Failing Workflows */}
@@ -190,11 +191,11 @@ export const Dashboard: React.FC = () => {
               Failing Workflows
             </span>
             <span
-              className={`text-3xl font-bold ${healthStats.brokenWorkflows > 0 ? "text-red-600" : "text-neutral-900"}`}
+              className={`text-3xl font-bold ${dashboardStats.brokenWorkflows > 0 ? "text-red-600" : "text-neutral-900"}`}
             >
-              {healthStats.brokenWorkflows}
+              {dashboardStats.brokenWorkflows}
             </span>
-            {healthStats.brokenWorkflows > 0 ? (
+            {dashboardStats.brokenWorkflows > 0 ? (
               <span className="text-xs text-red-600 font-medium mt-1">
                 Needs attention
               </span>

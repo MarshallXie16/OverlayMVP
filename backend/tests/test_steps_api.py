@@ -584,5 +584,245 @@ class TestDeleteStep:
         assert "permission" in response.json()["detail"].lower()
 
 
+class TestReorderSteps:
+    """Test PATCH /api/workflows/:id/steps/reorder endpoint."""
+
+    def test_reorder_steps_success(self, client, test_user, db):
+        """Test reordering steps successfully."""
+        # Create workflow with 3 steps
+        workflow = Workflow(
+            company_id=test_user.company_id,
+            created_by=test_user.id,
+            name="Test Workflow",
+            starting_url="https://example.com",
+            status="active"
+        )
+        db.add(workflow)
+        db.flush()
+
+        steps = []
+        for i in range(1, 4):
+            step = Step(
+                workflow_id=workflow.id,
+                step_number=i,
+                action_type="click",
+                selectors='{"primary": "#btn"}',
+                element_meta='{"tag_name": "button"}',
+                page_context='{"url": "https://example.com"}',
+                field_label=f"Step {i}",
+                instruction=f"Instruction {i}"
+            )
+            db.add(step)
+            steps.append(step)
+        db.commit()
+
+        step_ids = [s.id for s in steps]
+
+        # Reorder: move step 3 to position 1 (reverse order)
+        new_order = [step_ids[2], step_ids[0], step_ids[1]]  # Step 3, 1, 2
+
+        response = client.patch(
+            f"/api/workflows/{workflow.id}/steps/reorder",
+            json={"step_order": new_order}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # Verify new order
+        assert len(data["steps"]) == 3
+        assert data["steps"][0]["id"] == step_ids[2]
+        assert data["steps"][0]["step_number"] == 1
+        assert data["steps"][0]["field_label"] == "Step 3"
+
+        assert data["steps"][1]["id"] == step_ids[0]
+        assert data["steps"][1]["step_number"] == 2
+        assert data["steps"][1]["field_label"] == "Step 1"
+
+        assert data["steps"][2]["id"] == step_ids[1]
+        assert data["steps"][2]["step_number"] == 3
+        assert data["steps"][2]["field_label"] == "Step 2"
+
+    def test_reorder_steps_swap_two(self, client, test_user, db):
+        """Test swapping two adjacent steps (common drag-drop scenario)."""
+        workflow = Workflow(
+            company_id=test_user.company_id,
+            created_by=test_user.id,
+            name="Test Workflow",
+            starting_url="https://example.com",
+            status="active"
+        )
+        db.add(workflow)
+        db.flush()
+
+        steps = []
+        for i in range(1, 3):  # Just 2 steps
+            step = Step(
+                workflow_id=workflow.id,
+                step_number=i,
+                action_type="click",
+                selectors='{"primary": "#btn"}',
+                element_meta='{"tag_name": "button"}',
+                page_context='{"url": "https://example.com"}',
+                field_label=f"Step {i}"
+            )
+            db.add(step)
+            steps.append(step)
+        db.commit()
+
+        step_ids = [s.id for s in steps]
+
+        # Swap positions
+        new_order = [step_ids[1], step_ids[0]]  # Step 2 first, then Step 1
+
+        response = client.patch(
+            f"/api/workflows/{workflow.id}/steps/reorder",
+            json={"step_order": new_order}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # Verify swap
+        assert data["steps"][0]["id"] == step_ids[1]
+        assert data["steps"][0]["step_number"] == 1
+        assert data["steps"][1]["id"] == step_ids[0]
+        assert data["steps"][1]["step_number"] == 2
+
+    def test_reorder_steps_missing_step_ids(self, client, test_user, db):
+        """Test reordering with missing step IDs returns 400."""
+        workflow = Workflow(
+            company_id=test_user.company_id,
+            created_by=test_user.id,
+            name="Test Workflow",
+            starting_url="https://example.com",
+            status="active"
+        )
+        db.add(workflow)
+        db.flush()
+
+        steps = []
+        for i in range(1, 4):
+            step = Step(
+                workflow_id=workflow.id,
+                step_number=i,
+                action_type="click",
+                selectors='{"primary": "#btn"}',
+                element_meta='{"tag_name": "button"}',
+                page_context='{"url": "https://example.com"}'
+            )
+            db.add(step)
+            steps.append(step)
+        db.commit()
+
+        # Only provide 2 of 3 step IDs
+        response = client.patch(
+            f"/api/workflows/{workflow.id}/steps/reorder",
+            json={"step_order": [steps[0].id, steps[1].id]}  # Missing step 3
+        )
+
+        assert response.status_code == 400
+        assert "Missing step IDs" in response.json()["detail"]
+
+    def test_reorder_steps_invalid_step_ids(self, client, test_user, db):
+        """Test reordering with invalid step IDs returns 400."""
+        workflow = Workflow(
+            company_id=test_user.company_id,
+            created_by=test_user.id,
+            name="Test Workflow",
+            starting_url="https://example.com",
+            status="active"
+        )
+        db.add(workflow)
+        db.flush()
+
+        step = Step(
+            workflow_id=workflow.id,
+            step_number=1,
+            action_type="click",
+            selectors='{"primary": "#btn"}',
+            element_meta='{"tag_name": "button"}',
+            page_context='{"url": "https://example.com"}'
+        )
+        db.add(step)
+        db.commit()
+
+        # Provide invalid step ID
+        response = client.patch(
+            f"/api/workflows/{workflow.id}/steps/reorder",
+            json={"step_order": [step.id, 99999]}
+        )
+
+        assert response.status_code == 400
+        assert "Invalid step IDs" in response.json()["detail"]
+
+    def test_reorder_steps_duplicate_ids(self, client, test_user, db):
+        """Test reordering with duplicate step IDs returns 400."""
+        workflow = Workflow(
+            company_id=test_user.company_id,
+            created_by=test_user.id,
+            name="Test Workflow",
+            starting_url="https://example.com",
+            status="active"
+        )
+        db.add(workflow)
+        db.flush()
+
+        step = Step(
+            workflow_id=workflow.id,
+            step_number=1,
+            action_type="click",
+            selectors='{"primary": "#btn"}',
+            element_meta='{"tag_name": "button"}',
+            page_context='{"url": "https://example.com"}'
+        )
+        db.add(step)
+        db.commit()
+
+        # Duplicate step ID
+        response = client.patch(
+            f"/api/workflows/{workflow.id}/steps/reorder",
+            json={"step_order": [step.id, step.id]}
+        )
+
+        assert response.status_code == 400
+        assert "Duplicate" in response.json()["detail"]
+
+    def test_reorder_steps_other_company_forbidden(self, client, test_user, other_user, db):
+        """Test users cannot reorder steps in other company's workflow."""
+        workflow = Workflow(
+            company_id=other_user.company_id,
+            created_by=other_user.id,
+            name="Other Workflow",
+            starting_url="https://example.com",
+            status="active"
+        )
+        db.add(workflow)
+        db.flush()
+
+        steps = []
+        for i in range(1, 3):
+            step = Step(
+                workflow_id=workflow.id,
+                step_number=i,
+                action_type="click",
+                selectors='{"primary": "#btn"}',
+                element_meta='{"tag_name": "button"}',
+                page_context='{"url": "https://example.com"}'
+            )
+            db.add(step)
+            steps.append(step)
+        db.commit()
+
+        step_ids = [s.id for s in steps]
+
+        response = client.patch(
+            f"/api/workflows/{workflow.id}/steps/reorder",
+            json={"step_order": [step_ids[1], step_ids[0]]}
+        )
+
+        assert response.status_code == 404  # Workflow not found for this company
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

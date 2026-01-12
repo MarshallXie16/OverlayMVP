@@ -76,15 +76,15 @@ export const StepCard: React.FC<StepCardProps> = ({
             </div>
           )}
 
-          {/* Step number badge with drag handle */}
-          <div className="absolute top-3 left-3 flex items-center gap-1">
+          {/* Step number badge with drag handle - z-20 ensures it stays above hover overlay */}
+          <div className="absolute top-3 left-3 flex items-center gap-1 z-20">
             {dragHandleProps && (
               <div
                 {...dragHandleProps}
-                className="bg-neutral-900/80 backdrop-blur-sm text-white/70 hover:text-white p-1 rounded-md shadow-lg cursor-grab active:cursor-grabbing"
+                className="bg-neutral-900/80 backdrop-blur-sm text-white/70 hover:text-white p-1.5 rounded-md shadow-lg cursor-grab active:cursor-grabbing hover:bg-neutral-800"
                 onClick={(e) => e.stopPropagation()}
               >
-                <GripVertical size={14} />
+                <GripVertical size={16} />
               </div>
             )}
             <div className="bg-neutral-900/80 backdrop-blur-sm text-white text-xs font-bold font-mono px-2.5 py-1 rounded-md shadow-lg">
@@ -107,8 +107,8 @@ export const StepCard: React.FC<StepCardProps> = ({
             </div>
           )}
 
-          {/* Edit overlay */}
-          <div className="absolute inset-0 bg-primary-900/20 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
+          {/* Edit overlay - z-10 keeps it below drag handle (z-20) */}
+          <div className="absolute inset-0 z-10 bg-primary-900/20 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
             <span className="bg-white text-neutral-900 px-4 py-2 rounded-xl font-semibold shadow-lg transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 flex items-center gap-2">
               <Edit2 size={14} /> Edit Step
             </span>

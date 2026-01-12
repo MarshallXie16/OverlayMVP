@@ -3,9 +3,14 @@
  * Manages user state and auth operations
  */
 
-import { create } from 'zustand';
-import { apiClient } from '@/api/client';
-import type { UserResponse, LoginRequest, SignupRequest } from '@/api/types';
+import { create } from "zustand";
+import { apiClient } from "@/api/client";
+import type {
+  UserResponse,
+  LoginRequest,
+  SignupRequest,
+  UpdateProfileRequest,
+} from "@/api/types";
 
 interface AuthState {
   user: UserResponse | null;
@@ -18,11 +23,12 @@ interface AuthState {
   logout: () => void;
   checkAuth: () => Promise<void>;
   clearError: () => void;
+  updateProfile: (data: UpdateProfileRequest) => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
-  isLoading: false,
+  isLoading: true, // Start true - assume we need to check auth on load
   error: null,
 
   login: async (data: LoginRequest) => {
@@ -31,7 +37,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       const response = await apiClient.login(data);
       set({ user: response.user, isLoading: false });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Login failed';
+      const message = error instanceof Error ? error.message : "Login failed";
       set({ error: message, isLoading: false });
       throw error;
     }
@@ -43,7 +49,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       const response = await apiClient.signup(data);
       set({ user: response.user, isLoading: false });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Signup failed';
+      const message = error instanceof Error ? error.message : "Signup failed";
       set({ error: message, isLoading: false });
       throw error;
     }
@@ -65,4 +71,16 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   clearError: () => set({ error: null }),
+
+  updateProfile: async (data: UpdateProfileRequest) => {
+    try {
+      const updatedUser = await apiClient.updateProfile(data);
+      set({ user: updatedUser });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Profile update failed";
+      set({ error: message });
+      throw error;
+    }
+  },
 }));
