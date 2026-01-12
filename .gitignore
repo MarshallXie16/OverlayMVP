@@ -54,3 +54,6 @@ coverage/
 # Temporary files
 *.tmp
 .temp/
+
+# local images
+backend/screenshots
