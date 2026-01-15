@@ -281,7 +281,14 @@ export type MessageType =
   | "GET_FAILED_UPLOADS"
   | "RETRY_UPLOAD"
   | "DISCARD_UPLOAD"
-  | "ERROR";
+  | "ERROR"
+  // GAP-001/GAP-002: Multi-page and multi-tab walkthrough messages
+  | "WALKTHROUGH_GET_STATE"
+  | "WALKTHROUGH_STATE_UPDATE"
+  | "WALKTHROUGH_NAVIGATION_DONE"
+  | "WALKTHROUGH_TAB_JOINED"
+  | "WALKTHROUGH_TAB_LEFT"
+  | "WALKTHROUGH_SESSION_END";
 
 /**
  * Extension message structure
@@ -324,6 +331,54 @@ export interface WalkthroughState {
   // EXT-006: Execution timing
   startTime: number | null; // Date.now() timestamp
 }
+
+/**
+ * GAP-001/GAP-002: Persisted walkthrough session state
+ * Stored in chrome.storage.session for multi-page and multi-tab support
+ * Survives page navigations and service worker restarts, cleared on browser close
+ */
+export interface WalkthroughSessionState {
+  // Session identification
+  sessionId: string; // UUID for this walkthrough session
+
+  // Workflow data
+  workflowId: number;
+  workflowName: string;
+  startingUrl: string;
+  steps: StepResponse[];
+  totalSteps: number;
+
+  // Progress tracking
+  currentStepIndex: number;
+  status: "active" | "paused" | "completed" | "error";
+  error: string | null;
+
+  // Tab management (GAP-002: multi-tab support)
+  primaryTabId: number; // Original tab where walkthrough started
+  tabIds: number[]; // All tabs participating in walkthrough (serialized from Set)
+
+  // Timing
+  startedAt: number; // Date.now() when started
+  lastUpdatedAt: number; // Date.now() of last state update
+  expiresAt: number; // Date.now() + 30 minutes (session timeout)
+
+  // Navigation context (GAP-001: multi-page support)
+  expectedUrl: string | null; // URL we expect after navigation (from step's page_context)
+  navigationInProgress: boolean; // True between navigation start and page load complete
+
+  // Retry tracking (step index -> attempt count)
+  retryAttempts: Record<number, number>; // Serialized from Map for JSON storage
+}
+
+/**
+ * Storage key for walkthrough session state
+ */
+export const WALKTHROUGH_SESSION_STORAGE_KEY = "walkthrough_session";
+
+/**
+ * Session timeout in milliseconds (30 minutes)
+ */
+export const WALKTHROUGH_SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 
 /**
  * Auth state stored in chrome.storage

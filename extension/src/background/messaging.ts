@@ -16,6 +16,13 @@ import {
   getCurrentRecordingState,
   cleanupRecordingState,
 } from "./state";
+// GAP-001: Multi-page walkthrough session management
+import {
+  startSession,
+  getSessionForTab,
+  updateSession,
+  handleNavigationComplete,
+} from "./walkthroughSession";
 
 // ============================================================================
 // FAILED UPLOAD STORAGE (FEAT-012)
@@ -174,6 +181,19 @@ export function handleMessage(
 
     case "DISCARD_UPLOAD":
       handleDiscardUpload(message, sendResponse);
+      break;
+
+    // GAP-001: Multi-page walkthrough session handlers
+    case "WALKTHROUGH_GET_STATE":
+      handleGetWalkthroughState(sender, sendResponse);
+      break;
+
+    case "WALKTHROUGH_STATE_UPDATE":
+      handleWalkthroughStateUpdate(message, sendResponse);
+      break;
+
+    case "WALKTHROUGH_NAVIGATION_DONE":
+      handleWalkthroughNavigationDone(sender, sendResponse);
       break;
 
     default:
@@ -502,6 +522,12 @@ async function handleStartWalkthrough(
     }
 
     const tabId = tabs[0].id;
+
+    // GAP-001: Create walkthrough session for multi-page persistence
+    const session = await startSession(workflow, tabId);
+    console.log(
+      `[Background] Created walkthrough session: ${session.sessionId}`,
+    );
 
     // Ensure walkthrough content script is injected before messaging
     console.log(
@@ -1046,6 +1072,125 @@ async function handleDiscardUpload(
         error:
           error instanceof Error ? error.message : "Failed to discard upload",
       },
+    });
+  }
+}
+
+// ============================================================================
+// GAP-001: MULTI-PAGE WALKTHROUGH SESSION HANDLERS
+// ============================================================================
+
+/**
+ * Handle WALKTHROUGH_GET_STATE message
+ * Returns session state for content script restoration after page navigation
+ * GAP-001: Multi-page workflow support
+ */
+async function handleGetWalkthroughState(
+  sender: chrome.runtime.MessageSender,
+  sendResponse: (response?: any) => void,
+): Promise<void> {
+  try {
+    const tabId = sender.tab?.id;
+    if (!tabId) {
+      sendResponse({
+        type: "WALKTHROUGH_GET_STATE",
+        payload: { session: null, shouldRestore: false },
+      });
+      return;
+    }
+
+    console.log(`[Background] WALKTHROUGH_GET_STATE from tab ${tabId}`);
+
+    const { session, shouldRestore } = await getSessionForTab(tabId);
+
+    console.log(
+      `[Background] Session for tab ${tabId}:`,
+      session ? `found (step ${session.currentStepIndex + 1})` : "none",
+      `shouldRestore: ${shouldRestore}`,
+    );
+
+    sendResponse({
+      type: "WALKTHROUGH_GET_STATE",
+      payload: { session, shouldRestore },
+    });
+  } catch (error) {
+    console.error("[Background] WALKTHROUGH_GET_STATE failed:", error);
+    sendResponse({
+      type: "WALKTHROUGH_GET_STATE",
+      payload: { session: null, shouldRestore: false },
+    });
+  }
+}
+
+/**
+ * Handle WALKTHROUGH_STATE_UPDATE message
+ * Updates session state from content script sync
+ * GAP-001: Multi-page workflow support
+ */
+async function handleWalkthroughStateUpdate(
+  message: ExtensionMessage,
+  sendResponse: (response?: any) => void,
+): Promise<void> {
+  try {
+    const payload = message.payload || {};
+
+    console.log("[Background] WALKTHROUGH_STATE_UPDATE:", {
+      currentStepIndex: payload.currentStepIndex,
+      status: payload.status,
+    });
+
+    const updated = await updateSession({
+      currentStepIndex: payload.currentStepIndex,
+      status: payload.status,
+      error: payload.error,
+      retryAttempts: payload.retryAttempts,
+    });
+
+    sendResponse({
+      type: "WALKTHROUGH_STATE_UPDATE",
+      payload: { success: updated },
+    });
+  } catch (error) {
+    console.error("[Background] WALKTHROUGH_STATE_UPDATE failed:", error);
+    sendResponse({
+      type: "WALKTHROUGH_STATE_UPDATE",
+      payload: { success: false },
+    });
+  }
+}
+
+/**
+ * Handle WALKTHROUGH_NAVIGATION_DONE message
+ * Marks navigation as complete in session
+ * GAP-001: Multi-page workflow support
+ */
+async function handleWalkthroughNavigationDone(
+  sender: chrome.runtime.MessageSender,
+  sendResponse: (response?: any) => void,
+): Promise<void> {
+  try {
+    const tabId = sender.tab?.id;
+    if (!tabId) {
+      sendResponse({
+        type: "WALKTHROUGH_NAVIGATION_DONE",
+        payload: { success: false },
+      });
+      return;
+    }
+
+    console.log(`[Background] WALKTHROUGH_NAVIGATION_DONE from tab ${tabId}`);
+
+    await handleNavigationComplete(tabId);
+
+    sendResponse({
+      type: "WALKTHROUGH_NAVIGATION_DONE",
+      payload: { success: true },
+    });
+  } catch (error) {
+    console.error("[Background] WALKTHROUGH_NAVIGATION_DONE failed:", error);
+    sendResponse({
+      type: "WALKTHROUGH_NAVIGATION_DONE",
+      payload: { success: false },
     });
   }
 }

@@ -908,3 +908,51 @@ ebd7529 recording and walkthrough bug fix
 ?? src/content/utils/sanitize.ts
 ```
 
+
+---
+
+### Session: 2026-01-15 11:25
+
+**Branch**: `main`
+
+**Changes**:
+```
+ M .claude/session-log.md
+ M extension/src/background/index.ts
+ M extension/src/background/messaging.ts
+ M extension/src/content/healing/candidateFinder.ts
+ M extension/src/content/styles/walkthrough.css
+ M extension/src/content/utils/sanitize.ts
+ M extension/src/content/walkthrough.ts
+ M extension/src/shared/types.ts
+?? codex-review.md
+?? extension/src/background/walkthroughSession.ts
+?? extension/src/content/utils/__tests__/sanitize.test.ts
+```
+
+
+---
+
+### Session: 2026-01-15 13:34
+
+**Branch**: `main`
+
+**Changes**:
+```
+ M ../.claude/session-log.md
+ M src/background/index.ts
+ M src/background/messaging.ts
+ M src/content/healing/__tests__/candidateFinder.test.ts
+ M src/content/healing/candidateFinder.ts
+ M src/content/styles/walkthrough.css
+ M src/content/utils/sanitize.ts
+ M src/content/walkthrough.ts
+ M src/manifest.json
+ M src/shared/types.ts
+ M src/test/setup.ts
+?? ../codex-review.md
+?? ../docs/architecture/walkthrough-system.md
+?? src/background/walkthroughSession.ts
+?? src/content/utils/__tests__/sanitize.test.ts
+```
+

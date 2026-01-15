@@ -1,0 +1,3 @@
+## Codex Code Review
+
+Remember that codex is starting out as a blank slate; it does not have any context on the codebase. You need to instruct it what files to read (including files with project context like memory.md and sprint.md, etc.) and what you want it to do. Think of codex as a senior engineer you want feedback from, but they know nothing about the current project. Be detailed, be specified for the best result. You can call codex using this command: codex exec --sandbox read-only --skip-git-repo-check --model gpt-5.2 "[enter your prompt here]". Codex will run for some time before reporting back with some result. If you don't want to block yourself, you may want to run in the background and check on it when it's done.

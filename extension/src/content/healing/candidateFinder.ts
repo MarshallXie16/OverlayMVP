@@ -8,6 +8,7 @@
 import type { CandidateElement, ElementContext } from "./types";
 import { CANDIDATE_CONFIG } from "./config";
 import { extractMetadata } from "../utils/metadata";
+import { escapeXPathString } from "../utils/sanitize";
 
 /**
  * Check if an element is visible and interactable
@@ -208,10 +209,14 @@ export function findCandidatesByText(
   const candidates: CandidateElement[] = [];
   const normalizedText = text.toLowerCase().trim();
 
+  // SECURITY-001: Escape text to prevent XPath injection
+  const escapedText = escapeXPathString(text);
+  const escapedNormalizedText = escapeXPathString(normalizedText);
+
   // Use XPath for text search (more flexible)
   const xpath = options.exact
-    ? `//*[normalize-space(text())="${text}"]`
-    : `//*[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "${normalizedText}")]`;
+    ? `//*[normalize-space(text())=${escapedText}]`
+    : `//*[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), ${escapedNormalizedText})]`;
 
   try {
     const result = document.evaluate(

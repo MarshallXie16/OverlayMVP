@@ -455,3 +455,18 @@
     flex: 1;
   }
 }
+
+/* ============================================================================
+   GAP-003 ENHANCEMENT: Click Warning Toast Animation
+   ============================================================================ */
+
+@keyframes walkthroughToastSlideUp {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}

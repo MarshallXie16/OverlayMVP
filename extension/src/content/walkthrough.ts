@@ -6,7 +6,11 @@
  * EXT-002: Overlay UI Foundation
  */
 
-import type { WalkthroughState, StepResponse } from "@/shared/types";
+import type {
+  WalkthroughState,
+  WalkthroughSessionState,
+  StepResponse,
+} from "@/shared/types";
 import { findElement, scrollToElement } from "./utils/elementFinder";
 import { escapeHtml } from "./utils/sanitize";
 import {
@@ -16,6 +20,174 @@ import {
 } from "./healing";
 
 console.log("🎯 Walkthrough Mode: Content script loaded");
+
+// ============================================================================
+// GAP-001: Multi-page session management
+// ============================================================================
+
+/**
+ * Initialize content script on page load
+ * Checks for active walkthrough session and restores if present
+ * GAP-001: Multi-page workflow support
+ */
+export async function initializeContentScript(): Promise<void> {
+  console.log(
+    "[Walkthrough] Content script initializing, checking for active session...",
+  );
+
+  try {
+    // Query background for active session
+    const response = await chrome.runtime.sendMessage({
+      type: "WALKTHROUGH_GET_STATE",
+      payload: {},
+    });
+
+    if (response?.payload?.session && response?.payload?.shouldRestore) {
+      const session = response.payload.session as WalkthroughSessionState;
+      console.log(
+        "[Walkthrough] Found active session, restoring:",
+        session.sessionId,
+      );
+      await restoreWalkthrough(session);
+    } else {
+      console.log("[Walkthrough] No active session to restore");
+    }
+  } catch (error) {
+    // This is expected if background is not ready or no session exists
+    console.log(
+      "[Walkthrough] Session check completed (no active session):",
+      error,
+    );
+  }
+}
+
+/**
+ * Restore walkthrough from session state
+ * Called after page navigation to resume walkthrough
+ * GAP-001: Multi-page workflow support
+ */
+export async function restoreWalkthrough(
+  session: WalkthroughSessionState,
+): Promise<void> {
+  console.log(
+    `[Walkthrough] Restoring walkthrough for "${session.workflowName}"`,
+    {
+      sessionId: session.sessionId,
+      currentStepIndex: session.currentStepIndex,
+      totalSteps: session.totalSteps,
+    },
+  );
+
+  // Validate session data
+  if (!session.steps || session.steps.length === 0) {
+    console.error("[Walkthrough] Cannot restore - no steps in session");
+    return;
+  }
+
+  // Check if already active (prevent duplicate restoration)
+  if (walkthroughState !== null) {
+    console.log("[Walkthrough] Already active, skipping restoration");
+    return;
+  }
+
+  // Convert session state to walkthrough state
+  walkthroughState = {
+    workflowId: session.workflowId,
+    workflowName: session.workflowName,
+    startingUrl: session.startingUrl,
+    steps: session.steps,
+    currentStepIndex: session.currentStepIndex,
+    totalSteps: session.totalSteps,
+    status: session.status === "active" ? "active" : "initializing",
+    error: session.error,
+    retryAttempts: new Map(
+      Object.entries(session.retryAttempts).map(([k, v]) => [Number(k), v]),
+    ),
+    startTime: session.startedAt,
+  };
+
+  console.log("[Walkthrough] State restored:", walkthroughState);
+
+  // Create overlay UI
+  createOverlay();
+
+  // GAP-003: Block non-target interactions during walkthrough
+  setupClickInterceptor();
+
+  // GAP-004: Warn user before leaving page during walkthrough
+  setupBeforeUnloadHandler();
+
+  // Allow Escape key to exit walkthrough
+  setupEscapeKeyHandler();
+
+  // Show current step
+  await showCurrentStep();
+
+  walkthroughState.status = "active";
+
+  // Notify background that navigation is complete
+  chrome.runtime
+    .sendMessage({
+      type: "WALKTHROUGH_NAVIGATION_DONE",
+      payload: { sessionId: session.sessionId },
+    })
+    .catch(() => {
+      // Ignore errors - background may not be ready
+    });
+
+  console.log(
+    `[Walkthrough] Restored! Current step: ${walkthroughState.currentStepIndex + 1}/${walkthroughState.totalSteps}`,
+  );
+}
+
+/**
+ * Sync current state to background session manager
+ * Called when step changes to keep session in sync
+ * GAP-001: Multi-page workflow support
+ */
+function syncStateToBackground(): void {
+  if (!walkthroughState) return;
+
+  chrome.runtime
+    .sendMessage({
+      type: "WALKTHROUGH_STATE_UPDATE",
+      payload: {
+        currentStepIndex: walkthroughState.currentStepIndex,
+        status: walkthroughState.status,
+        error: walkthroughState.error,
+        retryAttempts: Object.fromEntries(walkthroughState.retryAttempts),
+      },
+    })
+    .catch((error) => {
+      console.debug("[Walkthrough] State sync ignored:", error);
+    });
+}
+
+// Initialize on script load (GAP-001)
+// Use retry with backoff to handle service worker cold starts
+async function initializeWithRetry(
+  maxRetries: number = 3,
+  baseDelay: number = 100,
+): Promise<void> {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      await initializeContentScript();
+      return; // Success
+    } catch (error) {
+      const delay = baseDelay * Math.pow(2, attempt); // Exponential backoff
+      console.debug(
+        `[Walkthrough] Init attempt ${attempt + 1} failed, retrying in ${delay}ms`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+  console.log("[Walkthrough] Session check completed (no active session)");
+}
+
+// Start initialization after a short delay to ensure DOM is ready
+setTimeout(() => {
+  initializeWithRetry();
+}, 50);
 
 // SVG Icons (inline to avoid dependencies)
 const ICONS = {
@@ -185,6 +357,49 @@ export function isWalkthroughActive(): boolean {
  * GAP-003 Fix: Set up click interceptor to block non-target interactions
  * Uses capture phase to intercept clicks before they reach elements
  */
+/**
+ * GAP-003 Enhancement: Show visible warning toast when user clicks wrong element
+ */
+function showClickWarning(): void {
+  const TOAST_ID = "walkthrough-click-warning";
+
+  // Remove existing warning if present (prevents stacking)
+  const existing = document.getElementById(TOAST_ID);
+  if (existing) {
+    existing.remove();
+  }
+
+  const toast = document.createElement("div");
+  toast.id = TOAST_ID;
+  toast.textContent = "Please interact with the highlighted element";
+  toast.style.cssText = `
+    position: fixed;
+    bottom: 100px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(239, 68, 68, 0.95);
+    color: white;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 2147483647;
+    animation: walkthroughToastSlideUp 0.3s ease-out;
+    pointer-events: none;
+  `;
+  document.body.appendChild(toast);
+
+  // Auto-remove after 2.5 seconds
+  setTimeout(() => {
+    if (toast.parentNode) {
+      toast.style.opacity = "0";
+      toast.style.transition = "opacity 0.3s ease-out";
+      setTimeout(() => toast.remove(), 300);
+    }
+  }, 2500);
+}
+
 function setupClickInterceptor(): void {
   if (clickInterceptor) return; // Already set up
 
@@ -219,6 +434,9 @@ function setupClickInterceptor(): void {
         }
       }, 300);
     }
+
+    // GAP-003 Enhancement: Show visible warning toast
+    showClickWarning();
 
     console.log(
       "[Walkthrough] Blocked click on non-target element:",
@@ -317,12 +535,16 @@ export function advanceStep(): boolean {
     console.log(
       `[Walkthrough] Advanced to step ${walkthroughState.currentStepIndex + 1}/${walkthroughState.totalSteps}`,
     );
+    // GAP-001: Sync state to background for multi-page persistence
+    syncStateToBackground();
     return true;
   }
 
   // Reached end of workflow
   console.log("[Walkthrough] Workflow completed!");
   walkthroughState.status = "completed";
+  // GAP-001: Sync completed status to background
+  syncStateToBackground();
   return false;
 }
 
@@ -337,6 +559,8 @@ export function previousStep(): boolean {
     console.log(
       `[Walkthrough] Went back to step ${walkthroughState.currentStepIndex + 1}/${walkthroughState.totalSteps}`,
     );
+    // GAP-001: Sync state to background for multi-page persistence
+    syncStateToBackground();
     return true;
   }
 
@@ -1735,6 +1959,24 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       walkthroughState.error = message.payload.error;
     }
     sendResponse({ success: false });
+    return false;
+  }
+
+  // GAP-001: Handle session end notification from background
+  if (message.type === "WALKTHROUGH_SESSION_END") {
+    console.log(
+      "[Walkthrough] Session ended by background:",
+      message.payload?.reason,
+    );
+    // Clean up without logging (background already handled it)
+    removeActionListeners();
+    removeClickInterceptor();
+    removeBeforeUnloadHandler();
+    removeEscapeKeyHandler();
+    cleanupFlashEffects();
+    destroyOverlay();
+    walkthroughState = null;
+    sendResponse({ success: true });
     return false;
   }
 

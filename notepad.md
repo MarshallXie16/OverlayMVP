@@ -1,109 +1,247 @@
-# QA Testing Notepad
+# Multi-Page Workflow Investigation
 
-**Date**: 2025-01-09
-**Tester**: Claude (automated via Chrome DevTools MCP)
-**Test User**: test@test.com / Test1234 (admin role)
+**Started**: 2026-01-15
+**Objective**: Enable multi-page/multi-tab workflow recording and playback
 
 ---
 
-## Bugs Found
+## Problem Statement
 
-### BUG-001: Session Lost on Direct URL Navigation (CRITICAL) - ✅ FIXED
-**Severity**: Critical
-**Status**: FIXED
+User reported:
+1. Recording bar (widget) disappears when navigating to another page
+2. No visibility into whether steps are being recorded after navigation
+3. Cannot stop recording after navigation - shows "No active recording to stop"
+4. Must reload page to reset extension state
 
-**Root Cause Found**:
-Race condition in auth state initialization:
-1. Zustand store initializes with `user: null, isLoading: false`
-2. `ProtectedRoute` renders and sees `user === null && isLoading === false`
-3. Immediately redirects to `/login` BEFORE `checkAuth()` useEffect completes
-4. The `checkAuth` call in App.tsx happens too late
+**Target Workflow Example**:
+1. Search article on google.com
+2. Click link in search results
+3. Copy text from article
+4. Open docs.google.com, create blank document
+5. Paste text
+6. Name document
 
-**Fix Applied**:
-Changed initial state in `dashboard/src/store/auth.ts`:
+This spans multiple pages and multiple tabs - our app should handle this.
+
+---
+
+## Investigation Status
+
+### Phase 1: Architecture Understanding - COMPLETE
+- [x] Recording system architecture
+- [x] State management during recording
+- [x] Navigation handling
+- [x] Widget/popup behavior
+- [x] Background worker role
+- [x] Content script lifecycle
+
+### Phase 2: Root Cause Analysis - COMPLETE
+- [x] Why does widget disappear on navigation?
+- [x] Why is recording state lost?
+- [x] How is state persisted (if at all)?
+- [x] What happens to content scripts on navigation?
+
+### Phase 3: Solution Design - IN PROGRESS
+- [ ] State persistence strategy
+- [ ] Cross-page communication
+- [ ] Tab management
+- [ ] UI/UX for multi-page recording
+
+---
+
+## ROOT CAUSE ANALYSIS - CRITICAL FINDINGS
+
+### 1. Recording State is Stored in Content Script Memory (THE BUG)
+
+**File**: `extension/src/content/recorder.ts:55-61`
 ```typescript
-// Before: isLoading: false
-// After:  isLoading: true  // Start true - assume we need to check auth on load
+const state: RecorderState = {
+  isRecording: false,
+  currentStepNumber: 0,
+  startingUrl: null,
+  debouncer: new InputDebouncer(),
+  deduplicator: new EventDeduplicator(),
+};
 ```
 
-This makes `ProtectedRoute` show a loading spinner until `checkAuth()` completes, preventing premature redirect.
+This `state` object lives in JavaScript memory within the content script. When the user navigates:
+1. Browser destroys the current page's content script
+2. Browser loads new page
+3. New content script is injected with **fresh state** (isRecording: false)
+4. All previous state is lost
 
----
+### 2. Widget is DOM Element - Lost on Navigation
 
-### BUG-002: Notification Dropdown Positioned Off-Screen - ✅ FIXED
-**Severity**: Medium
-**Status**: FIXED
+The recording widget (`widget.ts`) creates a DOM element appended to `document.body`. On navigation:
+1. Entire DOM is replaced
+2. Widget element is gone
+3. No restoration logic exists
 
-**Root Cause**:
-Dropdown CSS used `absolute right-0 mt-2` which always positions below the button.
-Since the bell is at the bottom of the sidebar, the dropdown appeared below the viewport.
+### 3. Background Has Storage But Recorder Never Reads It
 
-**Fix Applied**:
-Changed CSS in `dashboard/src/components/NotificationBell.tsx`:
+**File**: `extension/src/background/state.ts` has `saveRecordingState()` that persists to `chrome.storage.local`
+**BUT** the content script `recorder.ts` **NEVER** queries this on initialization!
+
+Compare with **walkthrough.ts** which DOES work across pages:
 ```typescript
-// Before: absolute right-0 mt-2
-// After:  absolute left-0 bottom-full mb-2
+// walkthrough.ts:33-62 - WORKS
+export async function initializeContentScript(): Promise<void> {
+  const response = await chrome.runtime.sendMessage({
+    type: "WALKTHROUGH_GET_STATE",
+    payload: {},
+  });
+  if (response?.payload?.session && response?.payload?.shouldRestore) {
+    await restoreWalkthrough(session);
+  }
+}
 ```
 
-This positions the dropdown above the bell button instead of below.
+**Recorder has NO equivalent initialization logic!**
+
+### 4. The Pattern That Works (Walkthrough)
+
+The walkthrough system has a complete multi-page solution:
+
+1. **Session Manager** (`walkthroughSession.ts`):
+   - Stores session in `chrome.storage.session`
+   - Tracks: sessionId, currentStepIndex, tabIds, navigationInProgress
+   - Methods: startSession, updateSession, getSessionForTab
+
+2. **Content Script Restoration** (`walkthrough.ts:168-190`):
+   - On load, calls `initializeWithRetry()`
+   - Queries background for active session
+   - If found, calls `restoreWalkthrough()` to recreate UI
+
+3. **Background Navigation Tracking** (`index.ts:155-212`):
+   - Listens to `webNavigation.onBeforeNavigate`
+   - Listens to `webNavigation.onCompleted`
+   - Tracks navigation state in session
+
+### 5. What Recording LACKS
+
+| Feature | Walkthrough | Recording |
+|---------|-------------|-----------|
+| Session manager in background | ✅ walkthroughSession.ts | ❌ None |
+| Content script init check | ✅ initializeContentScript() | ❌ None |
+| Navigation tracking in background | ✅ webNavigation listeners | ❌ None (partial) |
+| State sync messages | ✅ WALKTHROUGH_STATE_UPDATE | ❌ None |
+| Session restoration | ✅ restoreWalkthrough() | ❌ None |
 
 ---
 
-## Test Results Summary (Final)
+## SOLUTION DESIGN
 
-### Sprint 3: Admin Dashboard Features
+### Approach: Mirror the Walkthrough Pattern
 
-| Test Case | Status | Notes |
-|-----------|--------|-------|
-| TC-3.1: HealthView - Real Data | ✅ PASS | Shows real stats (100% success, 14 runs, 31.9s avg) |
-| TC-3.2: HealthView - Filters | ⚠️ NOT IMPLEMENTED | No filter controls visible on page |
-| TC-3.3: Notification Bell - Display | ✅ PASS | Bell icon visible in sidebar footer |
-| TC-3.4: Notification Bell - Dropdown | ✅ PASS | Fixed - dropdown opens above bell |
-| TC-3.5-3.7: Notification Bell | ✅ PASS | Shows "No notifications yet", closes on click outside |
-| TC-3.8-3.10: Failed Uploads | ⏭️ SKIPPED | Requires simulating network failure |
+Create equivalent recording session management by adapting the proven walkthrough architecture.
 
-### Sprint 4: UX Polish Features
+### Files to Create
 
-| Test Case | Status | Notes |
-|-----------|--------|-------|
-| TC-4.4: Step Delete - Modal | ✅ PASS | Confirmation modal appears (not browser confirm) |
-| TC-4.5: Step Delete - Last Step | ⏭️ SKIPPED | Requires single-step workflow |
-| TC-4.6: Step Delete - Renumbering | ✅ PASS | Modal says "Remaining steps will be renumbered" |
-| TC-4.7: Aria Labels | ✅ PASS | Delete buttons have aria-label="Delete step" |
-| TC-4.8: Notification Bell Verify | ✅ PASS | After fix, dropdown works correctly |
+1. **`extension/src/background/recordingSession.ts`** (NEW)
+   - Mirror of `walkthroughSession.ts` for recording
+   - Store in `chrome.storage.session`
+   - Track: sessionId, workflowName, startingUrl, currentStepNumber, tabId, status, startedAt
 
-### Sprint 5: Team & Settings Features
+### Files to Modify
 
-| Test Case | Status | Notes |
-|-----------|--------|-------|
-| TC-5.1: Settings Routes | ✅ PASS | /settings redirects to /settings/profile |
-| TC-5.2: Settings Sidebar | ✅ PASS | Shows Profile, Company, Integrations, Preferences |
-| TC-5.3: Profile View | ✅ PASS | Shows name, email (read-only), role |
-| TC-5.5: Password Form | ✅ PASS | Shows 3 fields with validation hint |
-| TC-5.9: Team Members | ✅ PASS | Shows 4 real members with full details |
-| TC-5.10: Invite Link | ✅ PASS | Link visible with Copy button |
-| TC-5.11: Remove Member | ✅ PASS | Confirmation modal works |
-| TC-5.12: Cannot Remove Self | ✅ PASS | Current user has no action menu |
-| TC-5.15: Slack Integration | ✅ PASS | Toggle, webhook URL, notification options |
+2. **`extension/src/content/recorder.ts`**
+   - Add `initializeContentScript()` on load
+   - Query background: `RECORDING_GET_STATE`
+   - If active session, restore state and show widget
+   - Add `syncStateToBackground()` to persist step count changes
 
-### Extension Features
+3. **`extension/src/background/index.ts`**
+   - Import recordingSession.ts
+   - Add navigation handlers for recording tabs (currently only for walkthrough)
 
-| Test Case | Status | Notes |
-|-----------|--------|-------|
-| TC-EXT.1 - TC-EXT.7 | ⏭️ SKIPPED | Requires extension interaction |
+4. **`extension/src/background/messaging.ts`**
+   - Add message handlers:
+     - `RECORDING_GET_STATE` - return session for content script restoration
+     - `RECORDING_STATE_UPDATE` - sync step count, status
+     - `RECORDING_NAVIGATION_DONE` - clear navigation flag
+
+5. **`extension/src/shared/types.ts`**
+   - Add `RecordingSessionState` type
+   - Add session storage key constant
+
+### Message Flow After Fix
+
+```
+START_RECORDING:
+  Popup → Background → Creates session → Injects recorder.js
+  → recorder.js receives START_RECORDING → shows widget
+
+NAVIGATION:
+  User clicks link → webNavigation.onBeforeNavigate fires
+  → Background marks session.navigationInProgress = true
+  → Page loads, new recorder.js injected
+  → recorder.js calls initializeContentScript()
+  → Sends RECORDING_GET_STATE to background
+  → Background returns session (shouldRestore: true)
+  → recorder.js restores state, shows widget with correct step count
+  → Sends RECORDING_NAVIGATION_DONE
+  → Recording continues normally
+
+STOP_RECORDING:
+  User clicks Stop → stopRecording() → uploads workflow
+  → Background clears session
+```
 
 ---
 
-## Summary
+## Technical Observations
 
-**Total Tests**: 18 passed, 0 failed, 1 not implemented, several skipped
-**Bugs Found & Fixed**: 2 (auth race condition, notification dropdown positioning)
+### Key Files to Change
+- `extension/src/content/recorder.ts` - Main recording logic (ADD init on load)
+- `extension/src/content/widget.ts` - Widget can be reused as-is
+- `extension/src/background/index.ts` - Add recording navigation handlers
+- `extension/src/background/messaging.ts` - Add new message types
+- `extension/src/shared/types.ts` - Add session types
+
+### IndexedDB Consideration
+- Steps and screenshots are stored in IndexedDB (origin-based)
+- IndexedDB persists across navigations on same origin
+- BUT different domains (google.com → docs.google.com) = different IndexedDB
+- **Decision needed**: Store steps in session storage OR keep in IndexedDB per-origin?
+
+### Multi-Tab Consideration
+- Walkthrough tracks `tabIds[]` for multi-tab support
+- Recording might need same if user opens new tab during workflow
+- Need to decide: single-tab or multi-tab support?
 
 ---
 
-## Environment Notes
+## Questions for User
 
-- Frontend running on port 3000 (not 5173 as documented)
-- Backend running on port 8000
-- Test user created: test@test.com / Test1234 (admin role)
-- React form inputs require `form_input` tool (not direct typing) to trigger onChange
+1. **Multi-tab support**: Should workflows support recording across multiple browser tabs (e.g., user opens link in new tab), or just same-tab navigation?
+
+2. **Cross-origin steps**: When user navigates to different domain (google.com → article.com), should we:
+   - a) Keep recording (steps stored centrally in background session)
+   - b) Warn user about domain change but continue
+   - c) Something else?
+
+3. **Copy/paste detection**: The example workflow mentions "copy text" - how should we detect this action? (Ctrl+C doesn't fire a DOM event we can easily capture)
+
+---
+
+## Session Log
+
+### 2026-01-15 Session 1
+- [x] Initial investigation started
+- [x] Read core files: recorder.ts, walkthrough.ts, walkthroughSession.ts, messaging.ts, index.ts
+- [x] Identified root cause: Content script state lost on navigation
+- [x] Identified working pattern: Walkthrough session restoration
+- [x] Subagents launched for architecture and test coverage exploration
+- [ ] Pending: Subagent results
+- [ ] Pending: User answers to design questions
+
+---
+
+## Next Steps (for session recovery)
+
+If session crashes, pick up here:
+1. Review findings above - root cause is clear
+2. Check if subagent outputs are available
+3. Implement solution based on design above
+4. Key files to modify: recorder.ts, messaging.ts, index.ts
+5. Create new file: recordingSession.ts
