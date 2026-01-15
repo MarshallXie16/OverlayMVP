@@ -271,6 +271,10 @@ try {
 
 19. **Notification dropdown positioned off-screen** - Bell icon at bottom of sidebar, dropdown CSS used `mt-2` (position below), causing dropdown to appear below viewport. Fix: Use `bottom-full mb-2` to position above the bell instead.
 
+20. **Vitest fake timers must be enabled BEFORE the action** - When testing code that schedules setTimeout, enable `vi.useFakeTimers()` BEFORE dispatching the action. If enabled after, the timeout is scheduled with real timers and `vi.runAllTimersAsync()` won't advance it. Pattern: `vi.useFakeTimers() → action → vi.advanceTimersByTimeAsync(ms) → vi.useRealTimers()`.
+
+21. **sendMessage mock must return Promise** - Chrome's `chrome.runtime.sendMessage` returns a Promise, but Vitest's `vi.fn()` returns undefined. Code calling `.catch()` on the result will crash. Fix: Add `vi.mocked(chrome.runtime.sendMessage).mockResolvedValue(undefined)` in beforeEach.
+
 ---
 
 ## Key Patterns Summary
@@ -287,3 +291,5 @@ try {
 | IIFE for content scripts | Chrome content scripts must be IIFE bundles, not ES modules |
 | isLoading starts true | Auth stores should start with isLoading: true to prevent race conditions |
 | Position-aware dropdowns | Dropdowns near viewport edges must position away from the edge |
+| Fake timers before action | Enable vi.useFakeTimers() BEFORE dispatching actions that schedule timeouts |
+| sendMessage returns Promise | Mock chrome.runtime.sendMessage to return Promise, not undefined |

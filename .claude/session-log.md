@@ -828,3 +828,83 @@ ebd7529 recording and walkthrough bug fix
 ?? ../sprint.md
 ```
 
+
+---
+
+### Session: 2026-01-14 20:49
+
+**Branch**: `main`
+
+**Changes**:
+```
+ M ../.claude/session-log.md
+ M src/content/walkthrough.ts
+?? ../docs/walkthrough-audit-report.md
+```
+
+
+---
+
+### Session: 2026-01-14 21:21
+
+**Branch**: `main`
+
+**Changes**:
+```
+ M ../.claude/session-log.md
+ M src/content/__tests__/walkthrough.test.ts
+ M src/content/walkthrough.ts
+?? ../docs/walkthrough-audit-report.md
+?? src/content/utils/sanitize.ts
+```
+
+
+---
+
+### Session: 2026-01-14 22:29
+
+**Branch**: `main`
+
+**Changes**:
+```
+ M ../.claude/session-log.md
+ M src/content/__tests__/walkthrough.test.ts
+ M src/content/walkthrough.ts
+?? ../docs/walkthrough-audit-report.md
+?? src/content/utils/sanitize.ts
+```
+
+
+---
+
+### Session: 2026-01-14 22:46
+
+**Branch**: `main`
+
+**Changes**:
+```
+ M ../.claude/session-log.md
+ M src/content/__tests__/walkthrough.test.ts
+ M src/content/walkthrough.ts
+?? ../docs/walkthrough-audit-report.md
+?? src/content/utils/sanitize.ts
+```
+
+
+---
+
+### Session: 2026-01-14 23:05
+
+**Branch**: `main`
+
+**Changes**:
+```
+ M ../.claude/session-log.md
+ M src/content/__tests__/walkthrough.test.ts
+ M src/content/walkthrough.ts
+ M ../lessons.md
+ M ../session-handoff.md
+?? ../docs/walkthrough-audit-report.md
+?? src/content/utils/sanitize.ts
+```
+

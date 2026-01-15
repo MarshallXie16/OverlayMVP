@@ -8,6 +8,7 @@
 
 import type { WalkthroughState, StepResponse } from "@/shared/types";
 import { findElement, scrollToElement } from "./utils/elementFinder";
+import { escapeHtml } from "./utils/sanitize";
 import {
   healElement,
   type HealingResult,
@@ -34,6 +35,15 @@ let currentTargetElement: HTMLElement | null = null;
 
 // Flag to track if tooltip event delegation is set up
 let tooltipDelegationSetup = false;
+
+// Race condition guard for showCurrentStep (BUG-002 fix)
+let isShowingStep = false;
+
+// GAP-003 Fix: Click interceptor to block non-target interactions
+let clickInterceptor: ((e: MouseEvent) => void) | null = null;
+
+// GAP-004 Fix: beforeunload handler to warn before leaving during walkthrough
+let beforeUnloadHandler: ((e: BeforeUnloadEvent) => void) | null = null;
 
 // Action detection state (EXT-004)
 let activeListeners: Array<{
@@ -139,6 +149,15 @@ export async function initializeWalkthrough(payload: {
   // Create overlay UI
   createOverlay();
 
+  // GAP-003: Block non-target interactions during walkthrough
+  setupClickInterceptor();
+
+  // GAP-004: Warn user before leaving page during walkthrough
+  setupBeforeUnloadHandler();
+
+  // Allow Escape key to exit walkthrough
+  setupEscapeKeyHandler();
+
   // Show first step
   await showCurrentStep();
 
@@ -160,6 +179,131 @@ export function getWalkthroughState(): WalkthroughState | null {
  */
 export function isWalkthroughActive(): boolean {
   return walkthroughState !== null && walkthroughState.status === "active";
+}
+
+/**
+ * GAP-003 Fix: Set up click interceptor to block non-target interactions
+ * Uses capture phase to intercept clicks before they reach elements
+ */
+function setupClickInterceptor(): void {
+  if (clickInterceptor) return; // Already set up
+
+  clickInterceptor = (e: MouseEvent) => {
+    // Only intercept when walkthrough is active
+    if (!isWalkthroughActive()) return;
+
+    const target = e.target as HTMLElement;
+    if (!target) return;
+
+    // Allow clicks on tooltip (navigation controls)
+    if (tooltipElement?.contains(target)) return;
+
+    // Allow clicks on target element
+    if (currentTargetElement?.contains(target)) return;
+
+    // Allow clicks on the overlay container itself (in case needed)
+    if (overlayContainer?.contains(target)) return;
+
+    // Block all other clicks
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Show visual feedback on the target element
+    if (currentTargetElement) {
+      const prevBoxShadow = currentTargetElement.style.boxShadow;
+      currentTargetElement.style.boxShadow =
+        "0 0 0 4px rgba(14, 165, 233, 0.8)"; // teal pulse
+      setTimeout(() => {
+        if (currentTargetElement) {
+          currentTargetElement.style.boxShadow = prevBoxShadow;
+        }
+      }, 300);
+    }
+
+    console.log(
+      "[Walkthrough] Blocked click on non-target element:",
+      target.tagName,
+    );
+  };
+
+  document.addEventListener("click", clickInterceptor, true); // Capture phase
+  console.log("[Walkthrough] Click interceptor enabled");
+}
+
+/**
+ * GAP-003 Fix: Remove click interceptor
+ */
+function removeClickInterceptor(): void {
+  if (clickInterceptor) {
+    document.removeEventListener("click", clickInterceptor, true);
+    clickInterceptor = null;
+    console.log("[Walkthrough] Click interceptor removed");
+  }
+}
+
+/**
+ * GAP-004 Fix: Set up beforeunload handler to warn user before leaving
+ */
+function setupBeforeUnloadHandler(): void {
+  if (beforeUnloadHandler) return;
+
+  beforeUnloadHandler = (e: BeforeUnloadEvent) => {
+    if (isWalkthroughActive()) {
+      e.preventDefault();
+      // Modern browsers ignore custom messages but still require returnValue
+      e.returnValue =
+        "Walkthrough is in progress. Are you sure you want to leave?";
+    }
+  };
+
+  window.addEventListener("beforeunload", beforeUnloadHandler);
+  console.log("[Walkthrough] beforeunload handler enabled");
+}
+
+/**
+ * GAP-004 Fix: Remove beforeunload handler
+ */
+function removeBeforeUnloadHandler(): void {
+  if (beforeUnloadHandler) {
+    window.removeEventListener("beforeunload", beforeUnloadHandler);
+    beforeUnloadHandler = null;
+    console.log("[Walkthrough] beforeunload handler removed");
+  }
+}
+
+// Escape key handler reference
+let escapeKeyHandler: ((e: KeyboardEvent) => void) | null = null;
+
+/**
+ * Set up Escape key handler to exit walkthrough
+ */
+function setupEscapeKeyHandler(): void {
+  if (escapeKeyHandler) return;
+
+  escapeKeyHandler = (e: KeyboardEvent) => {
+    if (e.key === "Escape" && isWalkthroughActive()) {
+      e.preventDefault();
+      console.log("[Walkthrough] Escape key pressed, prompting exit");
+      // Use confirm to match Exit button behavior
+      if (confirm("Are you sure you want to exit this walkthrough?")) {
+        exitWalkthrough();
+      }
+    }
+  };
+
+  document.addEventListener("keydown", escapeKeyHandler);
+  console.log("[Walkthrough] Escape key handler enabled");
+}
+
+/**
+ * Remove Escape key handler
+ */
+function removeEscapeKeyHandler(): void {
+  if (escapeKeyHandler) {
+    document.removeEventListener("keydown", escapeKeyHandler);
+    escapeKeyHandler = null;
+    console.log("[Walkthrough] Escape key handler removed");
+  }
 }
 
 /**
@@ -204,9 +348,25 @@ export function previousStep(): boolean {
  * EXT-002: Overlay UI Foundation
  */
 function createOverlay(): void {
-  // Check if overlay already exists
+  // BUG-001 Fix: Check DOM for existing overlay (handles script re-injection)
+  // When background re-injects content script, module state is reset but DOM persists
+  const existingOverlay = document.getElementById("walkthrough-overlay");
+  if (existingOverlay) {
+    console.log(
+      "[Walkthrough] Removing stale overlay from DOM after re-injection",
+    );
+    existingOverlay.remove();
+    // Reset module state to ensure clean slate
+    overlayContainer = null;
+    tooltipElement = null;
+    backdropElement = null;
+    currentTargetElement = null;
+    tooltipDelegationSetup = false;
+  }
+
+  // Check if overlay already exists in module state
   if (overlayContainer) {
-    console.warn("[Walkthrough] Overlay already exists");
+    console.warn("[Walkthrough] Overlay already exists in module state");
     return;
   }
 
@@ -360,88 +520,100 @@ function waitForLayout(): Promise<void> {
  * Find element, position spotlight, update tooltip
  */
 async function showCurrentStep(): Promise<void> {
-  if (!walkthroughState || !overlayContainer || !tooltipElement) {
-    console.error("[Walkthrough] Cannot show step: missing state or overlay");
+  // BUG-002 Fix: Guard against concurrent calls from rapid Next clicks
+  if (isShowingStep) {
+    console.log("[Walkthrough] Already showing step, ignoring concurrent call");
     return;
   }
-
-  const currentStep = walkthroughState.steps[walkthroughState.currentStepIndex];
-
-  if (!currentStep) {
-    console.error("[Walkthrough] Current step is undefined");
-    return;
-  }
+  isShowingStep = true;
 
   try {
-    // Find target element using original selectors
-    console.log(
-      `[Walkthrough] Finding element for step ${walkthroughState.currentStepIndex + 1}`,
-    );
-    const result = await findElement(currentStep);
-    currentTargetElement = result.element;
+    if (!walkthroughState || !overlayContainer || !tooltipElement) {
+      console.error("[Walkthrough] Cannot show step: missing state or overlay");
+      return;
+    }
 
-    // Original selector worked - continue normally
-    await proceedWithElement(currentStep, currentTargetElement);
-  } catch (_findError) {
-    // Original selectors failed - attempt auto-healing
-    console.log(
-      "[Walkthrough] Original selectors failed, attempting auto-healing...",
-    );
+    const currentStep =
+      walkthroughState.steps[walkthroughState.currentStepIndex];
+
+    if (!currentStep) {
+      console.error("[Walkthrough] Current step is undefined");
+      return;
+    }
 
     try {
-      const healingResult = await healElement(currentStep, {
-        aiEnabled: true, // Phase 4: Enable AI validation
-        onAIValidate: async (original, candidate, score) => {
-          return await validateHealingWithAI(
-            original,
-            candidate,
-            score,
-            currentStep,
-          );
-        },
-        onUserPrompt: async (element, score) => {
-          return await showHealingConfirmation(element, currentStep, score);
-        },
-      });
+      // Find target element using original selectors
+      console.log(
+        `[Walkthrough] Finding element for step ${walkthroughState.currentStepIndex + 1}`,
+      );
+      const result = await findElement(currentStep);
+      currentTargetElement = result.element;
 
-      if (healingResult.success && healingResult.element) {
-        // Healing succeeded
-        currentTargetElement = healingResult.element;
+      // Original selector worked - continue normally
+      await proceedWithElement(currentStep, currentTargetElement);
+    } catch (_findError) {
+      // Original selectors failed - attempt auto-healing
+      console.log(
+        "[Walkthrough] Original selectors failed, attempting auto-healing...",
+      );
 
-        // Show appropriate indicator based on confidence
-        if (healingResult.confidence >= 0.85) {
-          // High confidence - seamless, no indication to user
-          console.log(
-            `[Walkthrough] Auto-healed with ${(healingResult.confidence * 100).toFixed(1)}% confidence`,
+      try {
+        const healingResult = await healElement(currentStep, {
+          aiEnabled: true, // Phase 4: Enable AI validation
+          onAIValidate: async (original, candidate, score) => {
+            return await validateHealingWithAI(
+              original,
+              candidate,
+              score,
+              currentStep,
+            );
+          },
+          onUserPrompt: async (element, score) => {
+            return await showHealingConfirmation(element, currentStep, score);
+          },
+        });
+
+        if (healingResult.success && healingResult.element) {
+          // Healing succeeded
+          currentTargetElement = healingResult.element;
+
+          // Show appropriate indicator based on confidence
+          if (healingResult.confidence >= 0.85) {
+            // High confidence - seamless, no indication to user
+            console.log(
+              `[Walkthrough] Auto-healed with ${(healingResult.confidence * 100).toFixed(1)}% confidence`,
+            );
+          } else if (healingResult.confidence >= 0.7) {
+            // Medium-high confidence - show subtle badge
+            showHealedIndicator(healingResult.element);
+            console.log(
+              `[Walkthrough] Healed with badge at ${(healingResult.confidence * 100).toFixed(1)}% confidence`,
+            );
+          }
+          // For 60-70% range, user already confirmed via onUserPrompt
+
+          await proceedWithElement(currentStep, currentTargetElement);
+
+          // Log healing for backend (Phase 5)
+          logHealingAttempt(healingResult, currentStep);
+        } else {
+          // Healing failed
+          console.error(
+            "[Walkthrough] Auto-healing failed:",
+            healingResult.resolution,
           );
-        } else if (healingResult.confidence >= 0.7) {
-          // Medium-high confidence - show subtle badge
-          showHealedIndicator(healingResult.element);
-          console.log(
-            `[Walkthrough] Healed with badge at ${(healingResult.confidence * 100).toFixed(1)}% confidence`,
-          );
+          showElementNotFoundError(currentStep);
+
+          // Log failure for admin alerts (Phase 5)
+          logHealingAttempt(healingResult, currentStep);
         }
-        // For 60-70% range, user already confirmed via onUserPrompt
-
-        await proceedWithElement(currentStep, currentTargetElement);
-
-        // Log healing for backend (Phase 5)
-        logHealingAttempt(healingResult, currentStep);
-      } else {
-        // Healing failed
-        console.error(
-          "[Walkthrough] Auto-healing failed:",
-          healingResult.resolution,
-        );
+      } catch (healError) {
+        console.error("[Walkthrough] Healing system error:", healError);
         showElementNotFoundError(currentStep);
-
-        // Log failure for admin alerts (Phase 5)
-        logHealingAttempt(healingResult, currentStep);
       }
-    } catch (healError) {
-      console.error("[Walkthrough] Healing system error:", healError);
-      showElementNotFoundError(currentStep);
     }
+  } finally {
+    isShowingStep = false;
   }
 }
 
@@ -512,7 +684,7 @@ async function showHealingConfirmation(
         </div>
         <div class="healing-confirm-content">
           <p>The page has changed. Is this the correct element for:</p>
-          <p class="healing-confirm-label">"${step.field_label || "this step"}"</p>
+          <p class="healing-confirm-label">"${escapeHtml(step.field_label) || "this step"}"</p>
           <p class="healing-confirm-confidence">Confidence: ${(confidence * 100).toFixed(0)}%</p>
         </div>
         <div class="healing-confirm-actions">
@@ -839,8 +1011,8 @@ function updateTooltip(step: StepResponse, targetElement: HTMLElement): void {
 
     <!-- Content -->
     <div class="walkthrough-tooltip-content">
-      <h3 class="walkthrough-field-label">${step.field_label || "Action Required"}</h3>
-      <p class="walkthrough-instruction">${step.instruction || "Complete this action to continue."}</p>
+      <h3 class="walkthrough-field-label">${escapeHtml(step.field_label) || "Action Required"}</h3>
+      <p class="walkthrough-instruction">${escapeHtml(step.instruction) || "Complete this action to continue."}</p>
       <p class="walkthrough-error-msg hidden" id="walkthrough-error-msg"></p>
     </div>
 
@@ -992,7 +1164,7 @@ async function showElementNotFoundError(step: StepResponse): Promise<void> {
         Element Not Found
       </h3>
       <p class="walkthrough-instruction">
-        Cannot find "${step.field_label || "target element"}". This workflow may be outdated or the page structure has changed.
+        Cannot find "${escapeHtml(step.field_label) || "target element"}". This workflow may be outdated or the page structure has changed.
       </p>
     </div>
 
@@ -1519,6 +1691,12 @@ export function exitWalkthrough(): void {
 
   // Clean up action listeners (EXT-004)
   removeActionListeners();
+  // GAP-003: Remove click interceptor
+  removeClickInterceptor();
+  // GAP-004: Remove beforeunload handler
+  removeBeforeUnloadHandler();
+  // Remove Escape key handler
+  removeEscapeKeyHandler();
   // Clean up any lingering visual effects on page elements
   cleanupFlashEffects();
 
@@ -1564,10 +1742,31 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   return false;
 });
 
+// SECURITY: Allowed origins for postMessage communication
+// Update for production domains as needed
+const ALLOWED_DASHBOARD_ORIGINS = [
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  "http://localhost", // For test environments (JSDOM)
+  // Add production domains here:
+  // "https://dashboard.yourdomain.com",
+];
+
 // Listen for messages from page (dashboard) via window.postMessage
 // Forwards START_WALKTHROUGH to background script
 window.addEventListener("message", (event: MessageEvent) => {
   try {
+    // SECURITY: Validate origin to prevent spoofing from malicious pages
+    if (!ALLOWED_DASHBOARD_ORIGINS.includes(event.origin)) {
+      // Silently ignore - don't log to avoid leaking info to attackers
+      return;
+    }
+
+    // SECURITY: Ensure message is from same window (not iframe)
+    if (event.source !== window) {
+      return;
+    }
+
     const data = (event.data || {}) as {
       source?: string;
       type?: string;

@@ -7,6 +7,12 @@
  * - Step navigation
  * - Element finding and healing
  * - Visual feedback
+ *
+ * Mock Approach (standardized):
+ * - Module mocks (findElement, healElement): Use vi.mocked()
+ * - Chrome APIs (already vi.fn() in setup.ts): Use vi.mocked(chrome.runtime.sendMessage)
+ * - Globals (window.confirm): Use vi.spyOn() with mockRestore() in the same test
+ * - Timing: Use vi.useFakeTimers() AFTER initialization, then vi.runAllTimersAsync()
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
@@ -66,6 +72,15 @@ describe("Walkthrough Mode", () => {
     await initializeWalkthrough(payload);
     // Small delay to ensure DOM updates are processed
     await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+
+  // Helper to create multi-step workflows (DRY)
+  function createNStepWorkflow(n: number): StepResponse[] {
+    return Array.from({ length: n }, (_, i) => ({
+      ...mockStep,
+      id: i + 1,
+      step_number: i + 1,
+    }));
   }
 
   beforeEach(() => {
@@ -135,6 +150,9 @@ describe("Walkthrough Mode", () => {
       element: mockElement,
       selectorUsed: "primary: #test-button",
     });
+
+    // Ensure chrome.runtime.sendMessage returns a Promise (for .catch() chaining)
+    vi.mocked(chrome.runtime.sendMessage).mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -360,11 +378,13 @@ describe("Walkthrough Mode", () => {
     });
 
     it("should log execution result on exit", () => {
-      const sendMessageSpy = vi.spyOn(chrome.runtime, "sendMessage");
+      // Use vi.mocked() since chrome.runtime.sendMessage is already mocked in setup.ts
+      const sendMessageMock = vi.mocked(chrome.runtime.sendMessage);
+      sendMessageMock.mockClear();
 
       exitWalkthrough();
 
-      expect(sendMessageSpy).toHaveBeenCalledWith(
+      expect(sendMessageMock).toHaveBeenCalledWith(
         expect.objectContaining({
           type: "LOG_EXECUTION",
           payload: expect.objectContaining({
@@ -482,9 +502,10 @@ describe("Walkthrough Mode", () => {
 
   describe("Window Message Handling", () => {
     it("should forward START_WALKTHROUGH from dashboard to background", () => {
-      const sendMessageSpy = vi.spyOn(chrome.runtime, "sendMessage");
+      const sendMessageMock = vi.mocked(chrome.runtime.sendMessage);
+      sendMessageMock.mockClear();
 
-      // Simulate message from dashboard
+      // Simulate message from dashboard (same window)
       const event = new MessageEvent("message", {
         data: {
           source: "overlay-dashboard",
@@ -492,11 +513,12 @@ describe("Walkthrough Mode", () => {
           payload: { workflowId: 100 },
         },
         origin: window.location.origin,
+        source: window, // Required for security validation
       });
 
       window.dispatchEvent(event);
 
-      expect(sendMessageSpy).toHaveBeenCalledWith(
+      expect(sendMessageMock).toHaveBeenCalledWith(
         {
           type: "START_WALKTHROUGH",
           payload: { workflowId: 100 },
@@ -506,8 +528,8 @@ describe("Walkthrough Mode", () => {
     });
 
     it("should ignore messages not from overlay-dashboard", () => {
-      const sendMessageSpy = vi.spyOn(chrome.runtime, "sendMessage");
-      sendMessageSpy.mockClear();
+      const sendMessageMock = vi.mocked(chrome.runtime.sendMessage);
+      sendMessageMock.mockClear();
 
       const event = new MessageEvent("message", {
         data: {
@@ -520,15 +542,15 @@ describe("Walkthrough Mode", () => {
 
       window.dispatchEvent(event);
 
-      expect(sendMessageSpy).not.toHaveBeenCalled();
+      expect(sendMessageMock).not.toHaveBeenCalled();
     });
 
     it("should prevent duplicate START_WALKTHROUGH when already active", async () => {
       // Initialize walkthrough
       await initializeAndWait(createPayload());
 
-      const sendMessageSpy = vi.spyOn(chrome.runtime, "sendMessage");
-      sendMessageSpy.mockClear();
+      const sendMessageMock = vi.mocked(chrome.runtime.sendMessage);
+      sendMessageMock.mockClear();
 
       // Try to start again via window message
       const event = new MessageEvent("message", {
@@ -538,12 +560,13 @@ describe("Walkthrough Mode", () => {
           payload: { workflowId: 200 },
         },
         origin: window.location.origin,
+        source: window, // Required for security validation
       });
 
       window.dispatchEvent(event);
 
       // Should not forward the message (already active)
-      expect(sendMessageSpy).not.toHaveBeenCalledWith(
+      expect(sendMessageMock).not.toHaveBeenCalledWith(
         expect.objectContaining({ type: "START_WALKTHROUGH" }),
         expect.any(Function),
       );
@@ -630,15 +653,28 @@ describe("Walkthrough Mode", () => {
       await initializeAndWait(createPayload(threeSteps, { totalSteps: 3 }));
     });
 
-    it("should exit on Escape key", () => {
+    it("should prompt exit on Escape key", () => {
       expect(isWalkthroughActive()).toBe(true);
 
-      const event = new KeyboardEvent("keydown", { key: "Escape" });
+      // Mock confirm to return true (user confirms exit)
+      const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+      const event = new KeyboardEvent("keydown", {
+        key: "Escape",
+        bubbles: true,
+      });
       document.dispatchEvent(event);
 
-      // After some processing, walkthrough should exit
-      // Note: The actual keydown listener might be on document or window
-      // This test verifies the state management works
+      // Should have prompted user
+      expect(window.confirm).toHaveBeenCalledWith(
+        "Are you sure you want to exit this walkthrough?",
+      );
+
+      // Walkthrough should have exited
+      expect(isWalkthroughActive()).toBe(false);
+
+      // Restore confirm to prevent affecting subsequent tests
+      confirmSpy.mockRestore();
     });
   });
 
@@ -1214,7 +1250,8 @@ describe("Walkthrough Mode", () => {
     });
 
     it("should log success on completion", async () => {
-      const sendMessageSpy = vi.spyOn(chrome.runtime, "sendMessage");
+      const sendMessageMock = vi.mocked(chrome.runtime.sendMessage);
+      sendMessageMock.mockClear();
 
       const singleStep = createPayload([mockStep], { totalSteps: 1 });
 
@@ -1230,7 +1267,7 @@ describe("Walkthrough Mode", () => {
       await new Promise((resolve) => setTimeout(resolve, 200));
 
       // Should have logged success
-      expect(sendMessageSpy).toHaveBeenCalledWith(
+      expect(sendMessageMock).toHaveBeenCalledWith(
         expect.objectContaining({
           type: "LOG_EXECUTION",
           payload: expect.objectContaining({
@@ -1306,7 +1343,7 @@ describe("Walkthrough Mode", () => {
 
     it("should exit walkthrough when Exit button clicked", async () => {
       // Mock confirm to return true
-      vi.spyOn(window, "confirm").mockReturnValue(true);
+      const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
 
       const exitBtn = document.getElementById("walkthrough-btn-exit");
       expect(exitBtn).toBeTruthy();
@@ -1316,17 +1353,21 @@ describe("Walkthrough Mode", () => {
       // Should have exited
       expect(isWalkthroughActive()).toBe(false);
       expect(getWalkthroughState()).toBeNull();
+
+      confirmSpy.mockRestore();
     });
 
     it("should not exit when Exit cancelled", async () => {
       // Mock confirm to return false
-      vi.spyOn(window, "confirm").mockReturnValue(false);
+      const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
 
       const exitBtn = document.getElementById("walkthrough-btn-exit");
       exitBtn?.click();
 
       // Should still be active
       expect(isWalkthroughActive()).toBe(true);
+
+      confirmSpy.mockRestore();
     });
   });
 
@@ -1428,6 +1469,356 @@ describe("Walkthrough Mode", () => {
       // Verify composedPath exists and is used
       expect(typeof event.composedPath).toBe("function");
       expect(isClickOnTarget(event, button)).toBe(true);
+    });
+  });
+
+  // ============================================================================
+  // EDGE CASE TESTS (Added per Codex review)
+  // ============================================================================
+
+  describe("Edge Cases - Race Conditions", () => {
+    it("should handle rapid Next clicks without crashing", async () => {
+      // Setup 5-step workflow using helper
+      const fiveSteps = createNStepWorkflow(5);
+      await initializeAndWait(createPayload(fiveSteps, { totalSteps: 5 }));
+
+      const initialState = getWalkthroughState();
+      expect(initialState?.currentStepIndex).toBe(0);
+
+      // Find Next button
+      const nextBtn = document.getElementById("walkthrough-btn-next");
+      expect(nextBtn).toBeTruthy();
+
+      // Enable fake timers AFTER initialization (to avoid initializeAndWait blocking)
+      vi.useFakeTimers();
+
+      // Rapid clicks increment state synchronously via handleNext -> advanceStep
+      // The isShowingStep guard prevents concurrent showCurrentStep calls
+      // This test verifies the system doesn't crash and state remains consistent
+      nextBtn?.click();
+      nextBtn?.click();
+      nextBtn?.click();
+
+      // Advance all timers to complete async operations
+      await vi.runAllTimersAsync();
+
+      // Restore real timers
+      vi.useRealTimers();
+
+      // Verify state is consistent (not corrupted by rapid clicks)
+      const finalState = getWalkthroughState();
+      expect(finalState).not.toBeNull();
+      expect(finalState?.status).toBe("active");
+      // currentStepIndex should be exactly 3 (0+3 clicks)
+      expect(finalState?.currentStepIndex).toBe(3);
+      // Overlay should still exist and be functional
+      expect(document.getElementById("walkthrough-overlay")).toBeTruthy();
+    });
+
+    it("should not advance past last step with rapid clicks", async () => {
+      // Setup 3-step workflow using helper
+      const threeSteps = createNStepWorkflow(3);
+      await initializeAndWait(createPayload(threeSteps, { totalSteps: 3 }));
+
+      const nextBtn = document.getElementById("walkthrough-btn-next");
+
+      // Enable fake timers AFTER initialization
+      vi.useFakeTimers();
+
+      // Click 10 times rapidly (more than available steps)
+      for (let i = 0; i < 10; i++) {
+        nextBtn?.click();
+      }
+
+      // Advance all timers to complete async operations
+      await vi.runAllTimersAsync();
+
+      // Restore real timers
+      vi.useRealTimers();
+
+      // Should stop at last step (index 2), status may be completed or active
+      const finalState = getWalkthroughState();
+      expect(finalState?.currentStepIndex).toBe(2);
+      // Status should be consistent (completed because we reached end, or active if still showing)
+      expect(["active", "completed"]).toContain(finalState?.status);
+    });
+  });
+
+  describe("Edge Cases - Script Re-injection", () => {
+    it("should remove stale overlay when initializeWalkthrough runs and overlay already exists in DOM", async () => {
+      // First initialization
+      await initializeAndWait(createPayload());
+      expect(document.getElementById("walkthrough-overlay")).toBeTruthy();
+
+      // Simulate script re-injection scenario:
+      // The overlay exists in DOM but module state would be reset
+      // For testing, we exit (clears state) but manually leave overlay in DOM
+      exitWalkthrough();
+
+      // Manually recreate a "stale" overlay to simulate re-injection
+      const staleOverlay = document.createElement("div");
+      staleOverlay.id = "walkthrough-overlay";
+      staleOverlay.className = "walkthrough-overlay stale-marker";
+      document.body.appendChild(staleOverlay);
+
+      // Re-initialize should detect and remove the stale overlay
+      await initializeAndWait(createPayload());
+
+      // Should only have ONE overlay
+      const overlays = document.querySelectorAll("#walkthrough-overlay");
+      expect(overlays.length).toBe(1);
+
+      // The stale one should be gone (no stale-marker class)
+      expect(document.querySelector(".stale-marker")).toBeNull();
+    });
+  });
+
+  describe("Edge Cases - Click Interceptor", () => {
+    // Reset mocks before each test to prevent pollution
+    beforeEach(() => {
+      vi.mocked(findElement).mockResolvedValue({
+        element: mockElement,
+        selectorUsed: "primary: #test-button",
+      });
+      vi.mocked(chrome.runtime.sendMessage).mockResolvedValue(undefined);
+    });
+
+    it("should block clicks on non-target elements when walkthrough is active", async () => {
+      await initializeAndWait(createPayload());
+
+      // Create a non-target element
+      const otherButton = document.createElement("button");
+      otherButton.id = "other-button";
+      otherButton.textContent = "Other";
+      document.body.appendChild(otherButton);
+
+      // Track if click was blocked
+      let clickReached = false;
+      otherButton.addEventListener("click", () => {
+        clickReached = true;
+      });
+
+      // Create a cancelable click event
+      const clickEvent = new MouseEvent("click", {
+        bubbles: true,
+        cancelable: true,
+      });
+
+      // Dispatch the click
+      otherButton.dispatchEvent(clickEvent);
+
+      // The click interceptor should have prevented default and stopped propagation
+      // The click event handler might still be called since we're testing at unit level
+      // But the event should be marked as prevented
+      expect(clickEvent.defaultPrevented).toBe(true);
+
+      // State should not change (still on step 0)
+      expect(getWalkthroughState()?.currentStepIndex).toBe(0);
+
+      otherButton.remove();
+    });
+
+    it("should allow clicks on tooltip navigation controls", async () => {
+      await initializeAndWait(createPayload());
+
+      // Find the next button in the tooltip
+      const nextBtn = document.getElementById("walkthrough-btn-next");
+      expect(nextBtn).toBeTruthy();
+
+      // Create a click event on the tooltip button
+      const clickEvent = new MouseEvent("click", {
+        bubbles: true,
+        cancelable: true,
+      });
+
+      nextBtn?.dispatchEvent(clickEvent);
+
+      // Click should NOT be blocked (defaultPrevented should be false for tooltip clicks)
+      // The button click handler should process the navigation
+      expect(clickEvent.defaultPrevented).toBe(false);
+    });
+
+    it("should allow clicks on target element", async () => {
+      await initializeAndWait(createPayload());
+
+      // The mockElement is our target
+      const clickEvent = new MouseEvent("click", {
+        bubbles: true,
+        cancelable: true,
+      });
+
+      mockElement.dispatchEvent(clickEvent);
+
+      // Click should NOT be blocked
+      expect(clickEvent.defaultPrevented).toBe(false);
+    });
+  });
+
+  describe("Edge Cases - Invalid Step Data", () => {
+    it("should handle step with missing selectors gracefully", async () => {
+      const stepWithNoSelectors: StepResponse = {
+        ...mockStep,
+        selectors: {
+          primary: null,
+          css: null,
+          xpath: null,
+        } as any,
+      };
+
+      // Mock findElement to reject ONCE (no valid selectors)
+      vi.mocked(findElement).mockRejectedValueOnce(
+        new Error("No valid selectors provided"),
+      );
+
+      // Should not throw
+      await expect(
+        initializeAndWait(createPayload([stepWithNoSelectors])),
+      ).resolves.not.toThrow();
+
+      // Walkthrough should still be active (showing error UI)
+      expect(isWalkthroughActive()).toBe(true);
+    });
+
+    it("should handle step with undefined action_type", async () => {
+      const stepWithNoAction: StepResponse = {
+        ...mockStep,
+        action_type: undefined as any,
+      };
+
+      await initializeAndWait(createPayload([stepWithNoAction]));
+
+      // Should still initialize and show the step
+      expect(isWalkthroughActive()).toBe(true);
+    });
+
+    it("should handle empty field_label and instruction", async () => {
+      const stepWithEmptyLabels: StepResponse = {
+        ...mockStep,
+        field_label: null as any,
+        instruction: null as any,
+      };
+
+      await initializeAndWait(createPayload([stepWithEmptyLabels]));
+
+      // Should show default text, not crash
+      const tooltip = document.querySelector(".walkthrough-tooltip");
+      expect(tooltip).toBeTruthy();
+      // Should have fallback text
+      expect(tooltip?.textContent).toContain("Action Required");
+    });
+  });
+
+  // Note: Keyboard Navigation tests are in the original "Keyboard Navigation" describe block
+  // above. Additional Escape key tests were removed to avoid mock pollution issues.
+
+  describe("Edge Cases - Element Not Interactable", () => {
+    it("should handle element found but healing fails", async () => {
+      // First, findElement succeeds
+      vi.mocked(findElement).mockResolvedValue({
+        element: mockElement,
+        selectorUsed: "primary: #test-button",
+      });
+
+      // Then healing is triggered and fails
+      vi.mocked(healElement).mockResolvedValue({
+        success: false,
+        resolution: "no_candidates",
+        confidence: 0,
+        scoringResult: null,
+        candidateAnalysis: null,
+        aiConfidence: null,
+      });
+
+      // Make findElement fail to trigger healing
+      vi.mocked(findElement).mockRejectedValueOnce(
+        new Error("Element not found"),
+      );
+
+      await initializeAndWait(createPayload());
+
+      // Should show error state but not crash
+      expect(isWalkthroughActive()).toBe(true);
+    });
+  });
+
+  describe("Edge Cases - State Transitions", () => {
+    // Reset mocks and ensure clean state before each test
+    beforeEach(async () => {
+      // Allow any pending timeouts from previous tests to complete
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Ensure no walkthrough is active from previous test
+      exitWalkthrough();
+      // Clean up any lingering overlay
+      document.getElementById("walkthrough-overlay")?.remove();
+
+      vi.mocked(findElement).mockResolvedValue({
+        element: mockElement,
+        selectorUsed: "primary: #test-button",
+      });
+      vi.mocked(chrome.runtime.sendMessage).mockResolvedValue(undefined);
+    });
+
+    it("should transition to completed status after last step", async () => {
+      const singleStep = createPayload([mockStep], { totalSteps: 1 });
+      await initializeAndWait(singleStep);
+
+      expect(getWalkthroughState()?.status).toBe("active");
+
+      // Enable fake timers BEFORE the click so the setTimeout is captured
+      vi.useFakeTimers();
+
+      // Complete the step by clicking the target
+      mockElement.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+      // Advance timers to process the auto-advance setTimeout (60ms for click)
+      await vi.advanceTimersByTimeAsync(100);
+
+      vi.useRealTimers();
+
+      // Status should be completed
+      expect(getWalkthroughState()?.status).toBe("completed");
+    });
+
+    it("should clean up all handlers on exit", async () => {
+      await initializeAndWait(createPayload());
+
+      // Verify handlers are set up (indirectly through behavior)
+      expect(isWalkthroughActive()).toBe(true);
+
+      // Exit
+      exitWalkthrough();
+
+      // Verify cleanup
+      expect(isWalkthroughActive()).toBe(false);
+      expect(document.getElementById("walkthrough-overlay")).toBeNull();
+    });
+
+    it("should clean up Escape key handler on exit", async () => {
+      await initializeAndWait(createPayload());
+
+      // Mock confirm to track if Escape handler fires (using vi.stubGlobal for consistency)
+      const confirmMock = vi.fn().mockReturnValue(false);
+      vi.stubGlobal("confirm", confirmMock);
+
+      // Exit walkthrough (should remove Escape handler)
+      exitWalkthrough();
+
+      // Clear the mock to start fresh
+      confirmMock.mockClear();
+
+      // Dispatch Escape key - should NOT trigger confirm since handler was removed
+      const escapeEvent = new KeyboardEvent("keydown", {
+        key: "Escape",
+        bubbles: true,
+      });
+      document.dispatchEvent(escapeEvent);
+
+      // Confirm should NOT have been called (handler was cleaned up)
+      expect(confirmMock).not.toHaveBeenCalled();
+
+      // Restore original
+      vi.unstubAllGlobals();
     });
   });
 });
