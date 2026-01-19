@@ -15,14 +15,10 @@ import { Dashboard } from "@/pages/Dashboard";
 import { WorkflowDetail } from "@/pages/WorkflowDetail";
 import { WorkflowReview } from "@/pages/WorkflowReview";
 import { LibraryView } from "@/pages/LibraryView";
-import { TeamView } from "@/pages/TeamView";
-import { HealthView } from "@/pages/HealthView";
-import { InvitePage } from "@/pages/InvitePage";
 
 // Settings pages with nested routes
 import { SettingsLayout } from "@/pages/settings/SettingsLayout";
 import { ProfileSettings } from "@/pages/settings/ProfileSettings";
-import { CompanySettings } from "@/pages/settings/CompanySettings";
 import { IntegrationSettings } from "@/pages/settings/IntegrationSettings";
 import { PreferencesSettings } from "@/pages/settings/PreferencesSettings";
 
@@ -66,7 +62,6 @@ function App() {
           {/* Public routes */}
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
-          <Route path="/invite/:token" element={<InvitePage />} />
 
           {/* Protected routes */}
           <Route
@@ -109,26 +104,6 @@ function App() {
               </ProtectedRoute>
             }
           />
-          <Route
-            path="/team"
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <TeamView />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/health"
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <HealthView />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
           {/* Settings routes with nested layout */}
           <Route
             path="/settings"
@@ -145,7 +120,6 @@ function App() {
               element={<Navigate to="/settings/profile" replace />}
             />
             <Route path="profile" element={<ProfileSettings />} />
-            <Route path="company" element={<CompanySettings />} />
             <Route path="integrations" element={<IntegrationSettings />} />
             <Route path="preferences" element={<PreferencesSettings />} />
           </Route>

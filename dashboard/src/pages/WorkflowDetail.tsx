@@ -10,16 +10,10 @@ import {
   Play,
   Edit2,
   Trash2,
-  Activity,
-  BarChart3,
-  MousePointerClick,
-  Clock,
-  Globe,
   CheckCircle,
   AlertCircle,
   AlertTriangle,
   Loader2,
-  ExternalLink,
 } from "lucide-react";
 import { apiClient } from "@/api/client";
 import type { WorkflowResponse } from "@/api/types";
@@ -57,11 +51,11 @@ export const WorkflowDetail: React.FC = () => {
 
   useEffect(() => {
     if (id) {
-      loadWorkflow(parseInt(id, 10));
+      loadWorkflow(id);
     }
   }, [id]);
 
-  const loadWorkflow = async (workflowId: number) => {
+  const loadWorkflow = async (workflowId: string) => {
     setIsLoading(true);
     setError(null);
     try {
@@ -147,11 +141,7 @@ export const WorkflowDetail: React.FC = () => {
     );
   }
 
-  const designStatus = mapWorkflowStatus(
-    workflow.status,
-    workflow.success_rate,
-  );
-  const successRatePercent = Math.round(workflow.success_rate * 100);
+  const designStatus = mapWorkflowStatus(workflow.status);
 
   return (
     <div className="max-w-5xl mx-auto pb-20 animate-fade-in">
@@ -232,112 +222,6 @@ export const WorkflowDetail: React.FC = () => {
         </div>
       )}
 
-      {/* Workflow Stats Overview */}
-      <div className="mb-8 grid grid-cols-1 md:grid-cols-4 gap-4">
-        {/* Success Rate Card */}
-        <div className="glass-card p-5 rounded-2xl border border-white/60 shadow-sm flex flex-col justify-between hover:-translate-y-1 transition-transform duration-300">
-          <div className="flex justify-between items-start mb-2">
-            <span className="text-neutral-500 text-xs font-bold uppercase tracking-wider">
-              Success Rate
-            </span>
-            <div
-              className={`p-1.5 rounded-lg ${successRatePercent > 90 ? "bg-green-100 text-green-600" : "bg-amber-100 text-amber-600"}`}
-            >
-              <Activity size={16} />
-            </div>
-          </div>
-          <div>
-            <div className="flex items-end gap-2 mb-1">
-              <span className="text-2xl font-bold text-neutral-900">
-                {successRatePercent}%
-              </span>
-            </div>
-            <div className="w-full bg-neutral-100 h-1.5 rounded-full overflow-hidden">
-              <div
-                className={`h-full rounded-full ${successRatePercent > 90 ? "bg-green-500" : "bg-amber-500"}`}
-                style={{ width: `${successRatePercent}%` }}
-              ></div>
-            </div>
-          </div>
-        </div>
-
-        {/* Total Runs Card */}
-        <div className="glass-card p-5 rounded-2xl border border-white/60 shadow-sm flex flex-col justify-between hover:-translate-y-1 transition-transform duration-300">
-          <div className="flex justify-between items-start mb-2">
-            <span className="text-neutral-500 text-xs font-bold uppercase tracking-wider">
-              Total Runs
-            </span>
-            <div className="p-1.5 rounded-lg bg-blue-100 text-blue-600">
-              <BarChart3 size={16} />
-            </div>
-          </div>
-          <div>
-            <span className="text-2xl font-bold text-neutral-900 block">
-              {workflow.total_uses.toLocaleString()}
-            </span>
-            <span className="text-xs text-neutral-500">
-              {workflow.last_successful_run
-                ? `Last: ${new Date(workflow.last_successful_run).toLocaleDateString()}`
-                : "No runs yet"}
-            </span>
-          </div>
-        </div>
-
-        {/* Complexity Card */}
-        <div className="glass-card p-5 rounded-2xl border border-white/60 shadow-sm flex flex-col justify-between hover:-translate-y-1 transition-transform duration-300">
-          <div className="flex justify-between items-start mb-2">
-            <span className="text-neutral-500 text-xs font-bold uppercase tracking-wider">
-              Complexity
-            </span>
-            <div className="p-1.5 rounded-lg bg-purple-100 text-purple-600">
-              <MousePointerClick size={16} />
-            </div>
-          </div>
-          <div className="flex justify-between items-end">
-            <div>
-              <span className="text-2xl font-bold text-neutral-900 block">
-                {workflow.step_count}
-              </span>
-              <span className="text-xs text-neutral-500">Total Steps</span>
-            </div>
-            <div className="text-right">
-              <div className="flex items-center gap-1 text-neutral-600 text-sm font-medium">
-                <Clock size={14} />~{Math.ceil(workflow.step_count * 0.5)}m
-              </div>
-              <span className="text-xs text-neutral-400">Est. time</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Starting URL Card */}
-        <div className="glass-card p-5 rounded-2xl border border-white/60 shadow-sm flex flex-col justify-between hover:-translate-y-1 transition-transform duration-300">
-          <div className="flex justify-between items-start mb-2">
-            <span className="text-neutral-500 text-xs font-bold uppercase tracking-wider">
-              Starting Point
-            </span>
-            <div className="p-1.5 rounded-lg bg-teal-100 text-teal-600">
-              <Globe size={16} />
-            </div>
-          </div>
-          <div>
-            <div className="bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 mb-1 flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-green-500"></div>
-              <span className="text-xs font-mono text-neutral-600 truncate">
-                {getDomain(workflow.starting_url)}
-              </span>
-            </div>
-            <a
-              href={workflow.starting_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-primary-600 font-medium hover:underline flex items-center justify-end gap-1"
-            >
-              Open URL <ExternalLink size={10} />
-            </a>
-          </div>
-        </div>
-      </div>
-
       {/* Steps Section Title */}
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl font-bold text-neutral-900">Workflow Steps</h2>
@@ -354,7 +238,8 @@ export const WorkflowDetail: React.FC = () => {
       {/* Steps Grid */}
       <div className="grid grid-cols-1 gap-6">
         {workflow.steps.map((step) => {
-          const screenshotUrl = getScreenshotUrl(step.screenshot_id);
+          // Use screenshot_url from Supabase Storage if available, otherwise construct from screenshot_id
+          const screenshotUrl = step.screenshot_url || getScreenshotUrl(step.screenshot_id);
 
           return (
             <div
@@ -402,9 +287,11 @@ export const WorkflowDetail: React.FC = () => {
                         >
                           {formatActionType(step.action_type)}
                         </span>
-                        <h3 className="font-semibold text-lg text-neutral-900">
-                          {step.field_label || "Untitled Step"}
-                        </h3>
+                        {step.field_label && (
+                          <h3 className="font-semibold text-lg text-neutral-900">
+                            {step.field_label}
+                          </h3>
+                        )}
                       </div>
                     </div>
 

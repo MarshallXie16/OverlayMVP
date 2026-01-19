@@ -1,16 +1,26 @@
 /**
  * Authenticated Image Component
  * Fetches images with JWT token and displays them
- * Necessary because <img> tags cannot send Authorization headers
+ * Handles both backend API URLs and Supabase Storage URLs
  */
 
 import { useState, useEffect } from "react";
+import { SUPABASE_URL } from "@/config";
 
 interface AuthenticatedImageProps {
   src: string;
   alt: string;
   className?: string;
   loading?: "lazy" | "eager";
+}
+
+/**
+ * Check if URL is a Supabase Storage URL
+ */
+function isSupabaseStorageUrl(url: string): boolean {
+  if (!SUPABASE_URL) return false;
+  // Supabase Storage URLs typically contain the Supabase project URL
+  return url.includes(SUPABASE_URL) || url.includes("/storage/v1/object/public/");
 }
 
 export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({
@@ -31,7 +41,14 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({
         setIsLoading(true);
         setError(null);
 
-        // Fetch image with authentication
+        // If it's a Supabase Storage URL, use it directly (Supabase handles auth via RLS)
+        if (isSupabaseStorageUrl(src)) {
+          setImageUrl(src);
+          setIsLoading(false);
+          return;
+        }
+
+        // Otherwise, fetch from backend API with authentication
         const response = await fetch(src, {
           headers: {
             // Get token from localStorage (same method as apiClient)

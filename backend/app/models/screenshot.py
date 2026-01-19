@@ -14,7 +14,6 @@ from sqlalchemy.sql import func
 from app.models.base import Base
 
 if TYPE_CHECKING:
-    from app.models.company import Company
     from app.models.workflow import Workflow
     from app.models.step import Step
 
@@ -33,9 +32,6 @@ class Screenshot(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
 
     # Foreign Keys
-    company_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False
-    )
     workflow_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False
     )
@@ -61,7 +57,6 @@ class Screenshot(Base):
     )
 
     # Relationships
-    company: Mapped["Company"] = relationship("Company", back_populates="screenshots")
     workflow: Mapped["Workflow"] = relationship(
         "Workflow", back_populates="screenshots"
     )

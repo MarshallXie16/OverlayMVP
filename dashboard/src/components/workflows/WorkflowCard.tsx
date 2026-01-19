@@ -17,14 +17,10 @@ export const WorkflowCard: React.FC<WorkflowCardProps> = ({
 }) => {
   const getStatusBorderColor = (status: WorkflowStatus): string => {
     switch (status) {
-      case WorkflowStatus.HEALTHY:
-        return "bg-green-500";
-      case WorkflowStatus.BROKEN:
-        return "bg-red-500";
-      case WorkflowStatus.NEEDS_REVIEW:
-        return "bg-amber-500";
       case WorkflowStatus.PROCESSING:
         return "bg-blue-500";
+      case WorkflowStatus.ACTIVE:
+        return "bg-green-500";
       default:
         return "bg-neutral-300";
     }

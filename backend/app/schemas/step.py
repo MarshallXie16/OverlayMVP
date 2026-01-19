@@ -108,6 +108,7 @@ class StepResponse(BaseModel):
 
     # Screenshot reference
     screenshot_id: Optional[int] = None
+    screenshot_url: Optional[str] = None  # Direct URL to Supabase Storage
 
     # AI-generated labels (populated after processing)
     field_label: Optional[str] = None

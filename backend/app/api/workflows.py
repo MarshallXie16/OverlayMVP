@@ -2,18 +2,18 @@
 Workflow CRUD API endpoints.
 
 RESTful API for creating, reading, updating, and deleting workflows with
-multi-tenant isolation and async processing.
+async processing.
 """
 from fastapi import APIRouter, Depends, status, Query, HTTPException
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from typing import List
+from datetime import datetime, timezone
 import json
 import logging
 
 from app.db.session import get_db
-from app.models.user import User
-from app.models.workflow import Workflow
-from app.utils.dependencies import get_current_user
+from app.utils.dependencies import get_current_user, AuthUser
 from app.utils.permissions import Permission, require_permission
 from app.schemas.workflow import (
     CreateWorkflowRequest,
@@ -23,16 +23,12 @@ from app.schemas.workflow import (
     WorkflowListResponse,
 )
 from app.schemas.step import StepResponse, ReorderStepsRequest
-from app.schemas.health import ExecutionLogRequest, ExecutionLogResponse
-from app.models.step import Step
 from app.services.workflow import (
     create_workflow,
-    get_workflows,
     get_workflow_by_id,
     update_workflow,
     delete_workflow,
 )
-from app.services.health import log_workflow_execution
 from app.tasks.ai_labeling import label_workflow_steps
 
 logger = logging.getLogger(__name__)
@@ -55,9 +51,6 @@ router = APIRouter()
     - Frontend can show "Processing..." state
     - User can navigate away or create new workflows
 
-    **Multi-tenant Isolation:**
-    - Workflow automatically assigned to user's company_id from JWT
-    - Users can only create workflows for their own company
 
     **Transaction:**
     - Workflow and all steps created atomically
@@ -75,7 +68,7 @@ router = APIRouter()
 )
 def create_workflow_endpoint(
     workflow_data: CreateWorkflowRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: AuthUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -91,11 +84,10 @@ def create_workflow_endpoint(
     # Check permission (admin, editor only - viewers cannot create)
     require_permission(current_user, Permission.CREATE_WORKFLOW)
 
-    # Create workflow with user's company_id
+    # Create workflow
     workflow = create_workflow(
         db=db,
         workflow_data=workflow_data,
-        company_id=current_user.company_id,
         user_id=current_user.id
     )
 
@@ -141,19 +133,62 @@ def create_workflow_endpoint(
 def list_workflows_endpoint(
     limit: int = Query(10, ge=1, le=100, description="Items per page"),
     offset: int = Query(0, ge=0, description="Number of items to skip"),
-    current_user: User = Depends(get_current_user),
+    current_user: AuthUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """List workflows for current user's company."""
+    """List workflows."""
     # Check permission (all roles can view workflows)
     require_permission(current_user, Permission.VIEW_WORKFLOW)
 
-    workflows, total = get_workflows(
-        db=db,
-        company_id=current_user.company_id,
-        limit=limit,
-        offset=offset
-    )
+    # Query Supabase schema (public.workflow / public.steps) directly.
+    # This intentionally does NOT use the legacy SQLAlchemy ORM models.
+    total = db.execute(text("SELECT COUNT(*) FROM public.workflow")).scalar() or 0
+
+    rows = db.execute(
+        text(
+            """
+            SELECT
+              w.id,
+              w.owner_id,
+              w.title,
+              w.description,
+              w.tags,
+              w.created_at,
+              w.updated_at,
+              (
+                SELECT COUNT(*)
+                FROM public.steps s
+                WHERE s.workflow_id = w.id
+              ) AS step_count
+            FROM public.workflow w
+            ORDER BY w.updated_at DESC
+            LIMIT :limit OFFSET :offset
+            """
+        ),
+        {"limit": limit, "offset": offset},
+    ).mappings().all()
+
+    workflows = []
+    for r in rows:
+        workflows.append(
+            {
+                "id": str(r["id"]),
+                "created_by": str(r["owner_id"]) if r["owner_id"] else None,
+                "name": r["title"],
+                "description": r["description"],
+                "starting_url": "",
+                "tags": list(r["tags"] or []),
+                "status": "active",
+                "success_rate": 1.0,
+                "total_uses": 0,
+                "consecutive_failures": 0,
+                "created_at": r["created_at"],
+                "updated_at": r["updated_at"],
+                "last_successful_run": None,
+                "last_failed_run": None,
+                "step_count": int(r["step_count"] or 0),
+            }
+        )
 
     return WorkflowListResponse(
         total=total,
@@ -170,91 +205,127 @@ def list_workflows_endpoint(
     description="""
     Get a single workflow with all steps.
 
-    **Multi-tenant Isolation:**
-    - Returns 404 if workflow doesn't exist
-    - Returns 404 if workflow belongs to different company (prevents info leakage)
 
     **Includes:**
     - Workflow metadata
-    - All steps (ordered by step_number)
-    - AI-generated labels (if processing complete)
-    - Admin edits (if any)
-
-    **Use Cases:**
-    - Review workflow after recording
-    - View workflow details before starting walkthrough
-    - Admin editing workflow labels
+    - All steps (ordered by order_index)
     """
 )
 def get_workflow_endpoint(
-    workflow_id: int,
-    current_user: User = Depends(get_current_user),
+    workflow_id: str,
+    current_user: AuthUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Get a single workflow with steps."""
     # Check permission (all roles can view workflows)
     require_permission(current_user, Permission.VIEW_WORKFLOW)
 
-    workflow = get_workflow_by_id(
-        db=db,
-        workflow_id=workflow_id,
-        company_id=current_user.company_id
-    )
+    # Query Supabase schema directly
+    workflow_row = db.execute(
+        text("SELECT * FROM public.workflow WHERE id = :workflow_id"),
+        {"workflow_id": workflow_id},
+    ).mappings().first()
 
-    # Convert steps to StepResponse (parse JSON fields)
+    if not workflow_row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "WORKFLOW_NOT_FOUND",
+                "message": f"Workflow with ID {workflow_id} not found"
+            }
+        )
+
+    # Query steps
+    steps_rows = db.execute(
+        text(
+            "SELECT * FROM public.steps WHERE workflow_id = :workflow_id ORDER BY order_index ASC"
+        ),
+        {"workflow_id": workflow_id},
+    ).mappings().all()
+
+    # Map steps to StepResponse (minimal - Supabase schema is simpler)
     steps_data = []
-    for step in workflow.steps:
-        step_dict = {
-            "id": step.id,
-            "workflow_id": step.workflow_id,
-            "step_number": step.step_number,
-            "timestamp": step.timestamp,
-            "action_type": step.action_type,
-            "selectors": json.loads(step.selectors),
-            "element_meta": json.loads(step.element_meta),
-            "page_context": json.loads(step.page_context),
-            "action_data": json.loads(step.action_data) if step.action_data else None,
-            "dom_context": json.loads(step.dom_context) if step.dom_context else None,
-            "screenshot_id": step.screenshot_id,
-            "field_label": step.field_label,
-            "instruction": step.instruction,
-            "ai_confidence": step.ai_confidence,
-            "ai_model": step.ai_model,
-            "ai_generated_at": step.ai_generated_at,
-            "label_edited": step.label_edited,
-            "instruction_edited": step.instruction_edited,
-            "edited_by": step.edited_by,
-            "edited_at": step.edited_at,
-            "healed_selectors": json.loads(step.healed_selectors) if step.healed_selectors else None,
-            "healed_at": step.healed_at,
-            "healing_confidence": step.healing_confidence,
-            "healing_method": step.healing_method,
-            "created_at": step.created_at,
-        }
-        steps_data.append(StepResponse(**step_dict))
+    for step_row in steps_rows:
+        # Convert UUID to numeric ID for frontend compatibility (use first 8 hex chars)
+        step_uuid = step_row["id"]
+        if isinstance(step_uuid, str):
+            step_id_int = int(step_uuid.replace("-", "")[:8], 16)
+        else:
+            step_id_int = hash(str(step_uuid)) % (10**9)  # Fallback hash
+        
+        # Extract screenshot_url from Supabase Storage
+        # Supabase steps table has screenshot_url pointing directly to Supabase Storage
+        screenshot_url = step_row.get("screenshot_url")
+        screenshot_id = None
+        # For backward compatibility, also check screenshot_id
+        if "screenshot_id" in step_row and step_row["screenshot_id"] is not None:
+            try:
+                screenshot_id = int(step_row["screenshot_id"])
+            except (ValueError, TypeError):
+                pass
+        
+        # Parse instruction_text to extract field_label and instruction
+        # Format: "field_label: instruction" or just "instruction"
+        instruction_text_value = step_row.get("instruction_text") or ""
+        field_label = None
+        instruction = instruction_text_value
+        
+        # If instruction_text contains ":", split it into field_label and instruction
+        if ":" in instruction_text_value:
+            parts = instruction_text_value.split(":", 1)
+            field_label = parts[0].strip() or None
+            instruction = parts[1].strip() if len(parts) > 1 and parts[1].strip() else None
+        
+        steps_data.append(
+            StepResponse(
+                id=step_id_int,
+                workflow_id=0,  # Not used by frontend for step display
+                step_number=step_row["order_index"],
+                timestamp=None,
+                action_type="click",  # Default
+                selectors={},
+                element_meta={},
+                page_context={},
+                action_data=None,
+                dom_context=None,
+                screenshot_id=screenshot_id,
+                screenshot_url=screenshot_url,
+                field_label=field_label,
+                instruction=instruction,
+                ai_confidence=None,
+                ai_model=None,
+                ai_generated_at=None,
+                label_edited=False,
+                instruction_edited=False,
+                edited_by=None,
+                edited_at=None,
+                healed_selectors=None,
+                healed_at=None,
+                healing_confidence=None,
+                healing_method=None,
+                created_at=step_row.get("created_at") or datetime.now(timezone.utc),
+            )
+        )
 
     # Build workflow response
-    workflow_dict = {
-        "id": workflow.id,
-        "company_id": workflow.company_id,
-        "created_by": workflow.created_by,
-        "name": workflow.name,
-        "description": workflow.description,
-        "starting_url": workflow.starting_url,
-        "tags": workflow.tags,  # Will be parsed by Pydantic validator
-        "status": workflow.status,
-        "success_rate": workflow.success_rate,
-        "total_uses": workflow.total_uses,
-        "consecutive_failures": workflow.consecutive_failures,
-        "created_at": workflow.created_at,
-        "updated_at": workflow.updated_at,
-        "last_successful_run": workflow.last_successful_run,
-        "last_failed_run": workflow.last_failed_run,
-        "steps": steps_data,
-        "step_count": len(steps_data),
-    }
-
-    return WorkflowResponse(**workflow_dict)
+    return WorkflowResponse(
+        id=str(workflow_row["id"]),
+        created_by=str(workflow_row["owner_id"]) if workflow_row.get("owner_id") else None,
+        name=workflow_row["title"],
+        description=workflow_row.get("description"),
+        starting_url="",
+        tags=list(workflow_row.get("tags") or []),
+        status="active",
+        success_rate=1.0,
+        total_uses=0,
+        consecutive_failures=0,
+        created_at=workflow_row.get("created_at") or datetime.now(timezone.utc),
+        updated_at=workflow_row.get("updated_at") or datetime.now(timezone.utc),
+        last_successful_run=None,
+        last_failed_run=None,
+        steps=steps_data,
+        step_count=len(steps_data),
+    )
 
 
 @router.put(
@@ -264,8 +335,6 @@ def get_workflow_endpoint(
     description="""
     Update workflow metadata (name, description, tags, status).
 
-    **Multi-tenant Isolation:**
-    - Returns 404 if workflow doesn't exist or belongs to different company
 
     **Updatable Fields:**
     - name: Workflow name
@@ -290,7 +359,7 @@ def get_workflow_endpoint(
 def update_workflow_endpoint(
     workflow_id: int,
     workflow_data: UpdateWorkflowRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: AuthUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Update workflow metadata."""
@@ -300,7 +369,6 @@ def update_workflow_endpoint(
     workflow = update_workflow(
         db=db,
         workflow_id=workflow_id,
-        company_id=current_user.company_id,
         workflow_data=workflow_data
     )
 
@@ -338,7 +406,6 @@ def update_workflow_endpoint(
 
     workflow_dict = {
         "id": workflow.id,
-        "company_id": workflow.company_id,
         "created_by": workflow.created_by,
         "name": workflow.name,
         "description": workflow.description,
@@ -371,8 +438,6 @@ def update_workflow_endpoint(
     - All step IDs must belong to this workflow
     - All steps must be included exactly once
 
-    **Multi-tenant Isolation:**
-    - Returns 404 if workflow doesn't exist or belongs to different company
     - Returns 400 if step_order is invalid
 
     **Returns:**
@@ -382,7 +447,7 @@ def update_workflow_endpoint(
 def reorder_steps_endpoint(
     workflow_id: int,
     reorder_request: ReorderStepsRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: AuthUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Reorder workflow steps."""
@@ -393,7 +458,6 @@ def reorder_steps_endpoint(
     workflow = get_workflow_by_id(
         db=db,
         workflow_id=workflow_id,
-        company_id=current_user.company_id
     )
 
     # Get all steps for this workflow
@@ -488,7 +552,6 @@ def reorder_steps_endpoint(
 
     workflow_dict = {
         "id": workflow.id,
-        "company_id": workflow.company_id,
         "created_by": workflow.created_by,
         "name": workflow.name,
         "description": workflow.description,
@@ -524,9 +587,6 @@ def reorder_steps_endpoint(
     
     This prevents race condition where AI processing starts before screenshots are ready.
     
-    **Multi-tenant Security:**
-    - Users can only process their own company's workflows
-    - Returns 403 Forbidden if workflow belongs to another company
     - Returns 404 if workflow doesn't exist
     
     **Returns:**
@@ -537,23 +597,22 @@ def reorder_steps_endpoint(
 )
 def start_workflow_processing(
     workflow_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: AuthUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Start AI processing for workflow after screenshots are uploaded."""
     # Check permission (admin, editor only - viewers cannot trigger processing)
     require_permission(current_user, Permission.EDIT_WORKFLOW)
 
-    # Verify workflow exists and belongs to user's company
+    # Verify workflow exists
     workflow = db.query(Workflow).filter(
-        Workflow.id == workflow_id,
-        Workflow.company_id == current_user.company_id
+        Workflow.id == workflow_id
     ).first()
     
     if not workflow:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Workflow {workflow_id} not found or does not belong to your company"
+            detail=f"Workflow {workflow_id} not found"
         )
     
     # Queue AI labeling job (async - runs in background)
@@ -587,8 +646,6 @@ def start_workflow_processing(
     description="""
     Delete a workflow and all associated data.
 
-    **Multi-tenant Isolation:**
-    - Returns 404 if workflow doesn't exist or belongs to different company
 
     **Cascade Deletion:**
     - Deletes workflow record
@@ -608,7 +665,7 @@ def start_workflow_processing(
 )
 def delete_workflow_endpoint(
     workflow_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: AuthUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Delete a workflow."""
@@ -618,108 +675,10 @@ def delete_workflow_endpoint(
     delete_workflow(
         db=db,
         workflow_id=workflow_id,
-        company_id=current_user.company_id
     )
 
     # Return 204 No Content (no response body)
     return None
 
 
-@router.post(
-    "/{workflow_id}/executions",
-    response_model=ExecutionLogResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="Log workflow execution",
-    description="""
-    Log workflow execution result and update health metrics.
-    
-    **Use Cases:**
-    - Extension logs walkthrough completion (success/failure)
-    - Track element finding failures
-    - Record auto-healing events
-    - Monitor workflow health over time
-    
-    **Health Metrics Updated:**
-    - total_uses: Incremented by 1
-    - success_rate: Updated with exponential moving average
-    - consecutive_failures: Reset to 0 on success, incremented on failure
-    - last_successful_run / last_failed_run: Updated timestamps
-    - status: Changed to 'broken' if consecutive_failures >= 3
-    
-    **Multi-tenant Isolation:**
-    - Returns 404 if workflow doesn't exist or belongs to different company
-    
-    **Status Values:**
-    - success: Workflow completed without issues
-    - healed_deterministic: Element found with fallback selector
-    - healed_ai: Element found with AI-assisted healing (Epic 5)
-    - failed: Workflow failed (element not found, timeout, etc.)
-    
-    **Returns:**
-    - execution_id: ID of created health log entry
-    - workflow_status: Updated workflow status
-    - consecutive_failures: Updated count
-    - success_rate: Updated rate (0.0-1.0)
-    """
-)
-def log_execution_endpoint(
-    workflow_id: int,
-    execution_data: ExecutionLogRequest,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """
-    Log workflow execution and update health metrics.
-
-    Creates health log entry and updates workflow success rate,
-    consecutive failures counter, and status.
-    """
-    # Check permission (all roles can run/log executions)
-    require_permission(current_user, Permission.RUN_WORKFLOW)
-
-    # Verify workflow exists and belongs to user's company
-    workflow = db.query(Workflow).filter(
-        Workflow.id == workflow_id,
-        Workflow.company_id == current_user.company_id
-    ).first()
-    
-    if not workflow:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Workflow {workflow_id} not found"
-        )
-    
-    # Log execution and update metrics
-    try:
-        health_log, updated_workflow = log_workflow_execution(
-            db=db,
-            workflow_id=workflow_id,
-            user_id=current_user.id,
-            execution_data=execution_data
-        )
-        
-        logger.info(
-            f"Logged execution for workflow {workflow_id}: "
-            f"status={execution_data.status}, "
-            f"success_rate={updated_workflow.success_rate:.2f}, "
-            f"consecutive_failures={updated_workflow.consecutive_failures}"
-        )
-        
-        return ExecutionLogResponse(
-            execution_id=health_log.id,
-            workflow_status=updated_workflow.status,
-            consecutive_failures=updated_workflow.consecutive_failures,
-            success_rate=updated_workflow.success_rate
-        )
-    
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
-        )
-    except Exception as e:
-        logger.error(f"Failed to log execution for workflow {workflow_id}: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to log execution: {str(e)}"
-        )
+# Execution logging endpoint removed - health_log model was deleted

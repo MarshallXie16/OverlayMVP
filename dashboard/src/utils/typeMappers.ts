@@ -21,26 +21,17 @@ import {
  */
 export function mapWorkflowStatus(
   backendStatus: WorkflowListItem["status"],
-  successRate: number = 1,
 ): WorkflowStatus {
   switch (backendStatus) {
     case "active":
-      // Active workflows are healthy if success rate > 90%, otherwise needs review
-      if (successRate > 0.9) {
-        return WorkflowStatus.HEALTHY;
-      } else if (successRate >= 0.6) {
-        return WorkflowStatus.NEEDS_REVIEW;
-      } else {
-        return WorkflowStatus.BROKEN;
-      }
     case "needs_review":
-      return WorkflowStatus.NEEDS_REVIEW;
     case "broken":
-      return WorkflowStatus.BROKEN;
+      return WorkflowStatus.ACTIVE;
     case "processing":
       return WorkflowStatus.PROCESSING;
-    case "draft":
     case "archived":
+      return WorkflowStatus.ARCHIVED;
+    case "draft":
     default:
       return WorkflowStatus.DRAFT;
   }
@@ -128,7 +119,7 @@ export function mapWorkflowListItemToDesign(
     },
     updatedAt: workflow.updated_at,
     stepCount: workflow.step_count,
-    status: mapWorkflowStatus(workflow.status, workflow.success_rate),
+    status: mapWorkflowStatus(workflow.status),
     steps: [],
     successRate: workflow.success_rate,
     totalRuns: workflow.total_uses,
@@ -154,7 +145,7 @@ export function mapWorkflowResponseToDesign(
     },
     updatedAt: workflow.updated_at,
     stepCount: workflow.step_count,
-    status: mapWorkflowStatus(workflow.status, workflow.success_rate),
+    status: mapWorkflowStatus(workflow.status),
     steps: workflow.steps.map((step) =>
       mapStepToDesign(step, screenshotBaseUrl),
     ),

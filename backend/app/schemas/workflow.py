@@ -111,12 +111,11 @@ class WorkflowResponse(BaseModel):
     Used for GET /api/workflows/:id endpoint.
     """
 
-    id: int
-    company_id: int
-    created_by: Optional[int] = None
+    id: str
+    created_by: Optional[str] = None
     name: str
     description: Optional[str] = None
-    starting_url: str
+    starting_url: str = ""
     tags: List[str]
     status: str
     success_rate: float
@@ -146,7 +145,6 @@ class WorkflowResponse(BaseModel):
         json_schema_extra = {
             "example": {
                 "id": 10,
-                "company_id": 1,
                 "created_by": 5,
                 "name": "Submit Expense Report",
                 "description": "Monthly expense submission process",
@@ -171,12 +169,11 @@ class WorkflowListItem(BaseModel):
     Used for GET /api/workflows endpoint. Excludes steps for performance.
     """
 
-    id: int
-    company_id: int
-    created_by: Optional[int] = None
+    id: str
+    created_by: Optional[str] = None
     name: str
     description: Optional[str] = None
-    starting_url: str
+    starting_url: str = ""
     tags: List[str]
     status: str
     success_rate: float
@@ -223,7 +220,6 @@ class WorkflowListResponse(BaseModel):
                 "workflows": [
                     {
                         "id": 10,
-                        "company_id": 1,
                         "name": "Submit Expense Report",
                         "status": "active",
                         "success_rate": 0.95,
@@ -245,7 +241,7 @@ class CreateWorkflowResponse(BaseModel):
     happens asynchronously in background.
     """
 
-    workflow_id: int = Field(..., description="ID of created workflow")
+    workflow_id: str = Field(..., description="ID of created workflow")
     status: str = Field(default="processing", description="Initial status is 'processing'")
 
     class Config:

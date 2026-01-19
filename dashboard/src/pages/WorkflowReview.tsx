@@ -115,11 +115,11 @@ export const WorkflowReview: React.FC = () => {
 
   useEffect(() => {
     if (id) {
-      loadWorkflow(parseInt(id, 10));
+      loadWorkflow(id);
     }
   }, [id]);
 
-  const loadWorkflow = async (workflowId: number) => {
+  const loadWorkflow = async (workflowId: string) => {
     setIsLoading(true);
     setError(null);
     try {
@@ -275,10 +275,7 @@ export const WorkflowReview: React.FC = () => {
     );
   }
 
-  const designStatus = mapWorkflowStatus(
-    workflow.status,
-    workflow.success_rate,
-  );
+  const designStatus = mapWorkflowStatus(workflow.status);
 
   return (
     <div className="max-w-6xl mx-auto pb-32 animate-fade-in">

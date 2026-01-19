@@ -22,12 +22,9 @@ from sqlalchemy.sql import func
 from app.models.base import Base
 
 if TYPE_CHECKING:
-    from app.models.company import Company
     from app.models.user import User
     from app.models.step import Step
     from app.models.screenshot import Screenshot
-    from app.models.health_log import HealthLog
-    from app.models.notification import Notification
 
 
 class Workflow(Base):
@@ -44,9 +41,6 @@ class Workflow(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
 
     # Foreign Keys
-    company_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False
-    )
     created_by: Mapped[Optional[int]] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
@@ -108,7 +102,6 @@ class Workflow(Base):
     )
 
     # Relationships
-    company: Mapped["Company"] = relationship("Company", back_populates="workflows")
     creator: Mapped[Optional["User"]] = relationship(
         "User", back_populates="workflows_created", foreign_keys=[created_by]
     )
@@ -119,16 +112,9 @@ class Workflow(Base):
     screenshots: Mapped[list["Screenshot"]] = relationship(
         "Screenshot", back_populates="workflow", cascade="all, delete-orphan"
     )
-    health_logs: Mapped[list["HealthLog"]] = relationship(
-        "HealthLog", back_populates="workflow", cascade="all, delete-orphan"
-    )
-    notifications: Mapped[list["Notification"]] = relationship(
-        "Notification", back_populates="workflow", cascade="all, delete-orphan"
-    )
 
     # Indexes
     __table_args__ = (
-        Index("idx_workflows_company", "company_id"),
         Index("idx_workflows_status", "status"),
         Index("idx_workflows_created_by", "created_by"),
     )

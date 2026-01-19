@@ -2,9 +2,7 @@ import React, { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   Home,
-  Users,
   PlayCircle,
-  Activity,
   Settings,
   Plus,
   LogOut,
@@ -13,7 +11,6 @@ import { useAuthStore } from "@/store/auth";
 import { generateAvatarUrl } from "@/utils/typeMappers";
 import type { UserRole } from "@/api/types";
 import { canCreateWorkflow, getRoleDisplayName } from "@/utils/permissions";
-import { NotificationBell } from "@/components/NotificationBell";
 import { InstallExtensionModal } from "@/components/InstallExtensionModal";
 
 export const Sidebar: React.FC = () => {
@@ -28,9 +25,7 @@ export const Sidebar: React.FC = () => {
 
   const navItems = [
     { icon: <Home size={20} />, label: "Dashboard", path: "/dashboard" },
-    { icon: <Users size={20} />, label: "Team", path: "/team" },
     { icon: <PlayCircle size={20} />, label: "Library", path: "/library" },
-    { icon: <Activity size={20} />, label: "Health", path: "/health" },
     { icon: <Settings size={20} />, label: "Settings", path: "/settings" },
   ];
 
@@ -124,13 +119,11 @@ export const Sidebar: React.FC = () => {
                 {user?.name || "User"}
               </span>
               <span className="text-xs text-neutral-500 truncate">
-                {getRoleDisplayName(userRole)} •{" "}
-                {user?.company_name || "Company"}
+                {getRoleDisplayName(userRole)}
               </span>
             </div>
           </button>
           <div className="flex items-center gap-1">
-            <NotificationBell />
             <button
               onClick={handleLogout}
               className="p-2 rounded-lg text-neutral-500 hover:text-red-600 hover:bg-red-50 transition-colors"

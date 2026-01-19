@@ -68,7 +68,7 @@ export const LibraryView: React.FC = () => {
     if (!workflowToDelete) return;
 
     try {
-      await apiClient.deleteWorkflow(Number(workflowToDelete));
+      await apiClient.deleteWorkflow(workflowToDelete);
       setWorkflows(workflows.filter((w) => String(w.id) !== workflowToDelete));
       setWorkflowToDelete(null);
     } catch (err) {
@@ -83,11 +83,10 @@ export const LibraryView: React.FC = () => {
 
   const filters = [
     { label: "All", value: "ALL" },
-    { label: "Healthy", value: WorkflowStatus.HEALTHY },
-    { label: "Review", value: WorkflowStatus.NEEDS_REVIEW },
-    { label: "Broken", value: WorkflowStatus.BROKEN },
     { label: "Drafts", value: WorkflowStatus.DRAFT },
     { label: "Processing", value: WorkflowStatus.PROCESSING },
+    { label: "Active", value: WorkflowStatus.ACTIVE },
+    { label: "Archived", value: WorkflowStatus.ARCHIVED },
   ];
 
   if (isLoading) {

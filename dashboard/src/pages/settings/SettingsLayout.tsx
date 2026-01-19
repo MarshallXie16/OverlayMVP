@@ -4,11 +4,10 @@
  */
 import React from "react";
 import { NavLink, Outlet } from "react-router-dom";
-import { User, Building, Webhook, Bell } from "lucide-react";
+import { User, Webhook, Bell } from "lucide-react";
 
 const navItems = [
   { icon: <User size={18} />, label: "Profile", path: "/settings/profile" },
-  { icon: <Building size={18} />, label: "Company", path: "/settings/company" },
   {
     icon: <Webhook size={18} />,
     label: "Integrations",

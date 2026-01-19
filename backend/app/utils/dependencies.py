@@ -1,27 +1,46 @@
 """
-FastAPI dependencies for JWT authentication and authorization.
+FastAPI authentication dependencies.
 
-Provides user context extraction from JWT tokens and role-based access control.
+This project uses Supabase Auth as the source of truth for users.
+We validate the Supabase JWT and derive an auth user object from token claims
+without querying a local `users` table.
 """
-from typing import Optional
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any, Optional
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy.orm import Session
 from jose import JWTError
 
-from app.db.session import get_db
-from app.models.user import User
 from app.utils.jwt import decode_token
+from app.utils.supabase_auth import verify_supabase_token
 
 
 # HTTP Bearer token extractor
 security = HTTPBearer(auto_error=False)
 
 
+@dataclass(frozen=True)
+class AuthUser:
+    """
+    Lightweight authenticated user derived from JWT claims.
+
+    NOTE: `id` is a Supabase user id (UUID string) when using Supabase tokens.
+    """
+
+    id: str
+    email: str
+    role: str = "editor"
+    name: str = ""
+    timezone: Optional[str] = None
+
+
 def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
-    db: Session = Depends(get_db),
-) -> User:
+) -> AuthUser:
     """
     Extract and validate JWT token, return authenticated User object.
 
@@ -67,9 +86,63 @@ def get_current_user(
 
     token = credentials.credentials
 
-    # Decode and validate token
+    # Prefer Supabase tokens (current auth system)
+    payload: Optional[dict[str, Any]] = None
     try:
-        payload = decode_token(token)
+        payload = verify_supabase_token(token)
+    except HTTPException:
+        payload = None
+
+    if payload:
+        user_metadata = payload.get("user_metadata") or {}
+        app_metadata = payload.get("app_metadata") or {}
+
+        user_id = payload.get("sub")
+        email = payload.get("email")
+        if not user_id or not email:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail={
+                    "code": "INVALID_TOKEN_PAYLOAD",
+                    "message": "Supabase token missing required claims (sub/email)",
+                },
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        role = (
+            app_metadata.get("role")
+            or payload.get("role")
+            or "authenticated"
+        )
+        # Map Supabase default role to app default role
+        if role == "authenticated":
+            role = "editor"
+
+        name = (
+            user_metadata.get("full_name")
+            or user_metadata.get("name")
+            or user_metadata.get("display_name")
+            or ""
+        )
+        timezone = user_metadata.get("timezone")
+
+        return AuthUser(
+            id=str(user_id),
+            email=str(email),
+            role=str(role),
+            name=str(name),
+            timezone=timezone if isinstance(timezone, str) else None,
+        )
+
+    # Fallback: legacy API JWTs (if still used anywhere)
+    try:
+        legacy = decode_token(token)
+        user_id = legacy.get("user_id")
+        email = legacy.get("email") or ""
+        role = legacy.get("role") or "editor"
+        if user_id is None:
+            raise JWTError("missing user_id")
+        return AuthUser(id=str(user_id), email=str(email), role=str(role))
     except JWTError as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -80,45 +153,8 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Extract user_id from token
-    user_id: Optional[int] = payload.get("user_id")
-    if user_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={
-                "code": "INVALID_TOKEN_PAYLOAD",
-                "message": "Token payload missing user_id claim",
-            },
-            headers={"WWW-Authenticate": "Bearer"},
-        )
 
-    # Query user from database
-    user = db.query(User).filter(User.id == user_id).first()
-
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={
-                "code": "USER_NOT_FOUND",
-                "message": "User account no longer exists",
-            },
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    # Check if user is suspended
-    if user.status == "suspended":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "code": "ACCOUNT_SUSPENDED",
-                "message": "Your account has been suspended. Please contact your administrator.",
-            },
-        )
-
-    return user
-
-
-def get_current_admin(current_user: User = Depends(get_current_user)) -> User:
+def get_current_admin(current_user: AuthUser = Depends(get_current_user)) -> AuthUser:
     """
     Validate JWT token and ensure user has admin role.
 

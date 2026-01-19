@@ -13,8 +13,6 @@ class SignupRequest(BaseModel):
     email: EmailStr = Field(..., description="User email address")
     password: str = Field(..., min_length=8, description="User password (min 8 characters)")
     name: str = Field(..., min_length=1, max_length=255, description="User full name")
-    company_name: Optional[str] = Field(None, max_length=255, description="Company name (for first user)")
-    invite_token: Optional[str] = Field(None, description="Company invite token (for joining existing company)")
 
     @field_validator("password")
     @classmethod
@@ -32,7 +30,6 @@ class SignupRequest(BaseModel):
                 "email": "sarah@company.com",
                 "password": "SecurePass123",
                 "name": "Sarah Johnson",
-                "company_name": "Acme Corp",
             }
         }
 
@@ -55,14 +52,14 @@ class LoginRequest(BaseModel):
 class UserResponse(BaseModel):
     """Response schema for user data."""
 
-    id: int
+    # Supabase user id (UUID string) when using Supabase Auth
+    id: str
     email: str
     name: str
     role: str
-    company_id: int
-    company_name: str
     timezone: Optional[str] = None  # IANA timezone identifier
-    created_at: datetime
+    # When using Supabase Auth without a local users table, these may be unknown
+    created_at: Optional[datetime] = None
     last_login_at: Optional[datetime] = None
 
     class Config:
@@ -86,8 +83,6 @@ class TokenResponse(BaseModel):
                     "email": "sarah@company.com",
                     "name": "Sarah Johnson",
                     "role": "admin",
-                    "company_id": 1,
-                    "company_name": "Acme Corp",
                     "created_at": "2025-11-19T10:30:00Z",
                 },
             }
