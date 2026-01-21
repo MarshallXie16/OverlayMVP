@@ -1,7 +1,7 @@
 """
 Workflow service layer for business logic.
 
-Handles CRUD operations with multi-tenant isolation and transaction management.
+Handles CRUD operations with transaction management.
 """
 from sqlalchemy.orm import Session
 from sqlalchemy import func, select
@@ -23,15 +23,10 @@ logger = logging.getLogger(__name__)
 def create_workflow(
     db: Session,
     workflow_data: CreateWorkflowRequest,
-    company_id: int,
     user_id: int
 ) -> Workflow:
     """
     Create a new workflow with steps in a single transaction.
-
-    **Multi-tenant Isolation:**
-    - Workflow automatically assigned to user's company_id
-    - Steps are child records, automatically isolated via workflow
 
     **Transaction:**
     - Creates workflow record
@@ -46,7 +41,6 @@ def create_workflow(
     Args:
         db: Database session
         workflow_data: Workflow creation data with steps
-        company_id: ID of user's company (from JWT)
         user_id: ID of creating user (from JWT)
 
     Returns:
@@ -58,7 +52,6 @@ def create_workflow(
     try:
         # Create workflow record
         workflow = Workflow(
-            company_id=company_id,
             created_by=user_id,
             name=workflow_data.name,
             description=workflow_data.description,
@@ -105,16 +98,11 @@ def create_workflow(
 
 def get_workflows(
     db: Session,
-    company_id: int,
     limit: int = 10,
     offset: int = 0
 ) -> Tuple[List[WorkflowListItem], int]:
     """
-    Get paginated list of workflows for a company.
-
-    **Multi-tenant Isolation:**
-    - ALWAYS filters by company_id from JWT token
-    - Users can ONLY see workflows from their own company
+    Get paginated list of workflows.
 
     **Pagination:**
     - Default: 10 items per page
@@ -126,7 +114,6 @@ def get_workflows(
 
     Args:
         db: Database session
-        company_id: ID of user's company (from JWT)
         limit: Number of items per page (max 100)
         offset: Number of items to skip
 
@@ -147,19 +134,18 @@ def get_workflows(
         .subquery()
     )
 
-    # Main query with multi-tenant filtering
+    # Main query
     query = (
         db.query(
             Workflow,
             func.coalesce(step_count_subquery.c.step_count, 0).label("step_count")
         )
         .outerjoin(step_count_subquery, Workflow.id == step_count_subquery.c.workflow_id)
-        .filter(Workflow.company_id == company_id)
         .order_by(Workflow.updated_at.desc())
     )
 
     # Get total count
-    total = db.query(Workflow).filter(Workflow.company_id == company_id).count()
+    total = db.query(Workflow).count()
 
     # Get paginated results
     results = query.limit(limit).offset(offset).all()
@@ -169,7 +155,6 @@ def get_workflows(
     for workflow, step_count in results:
         workflow_dict = {
             "id": workflow.id,
-            "company_id": workflow.company_id,
             "created_by": workflow.created_by,
             "name": workflow.name,
             "description": workflow.description,
@@ -192,16 +177,10 @@ def get_workflows(
 
 def get_workflow_by_id(
     db: Session,
-    workflow_id: int,
-    company_id: int
+    workflow_id: int
 ) -> Workflow:
     """
     Get a single workflow by ID with all steps.
-
-    **Multi-tenant Isolation:**
-    - ALWAYS filters by company_id from JWT token
-    - Returns 404 if workflow doesn't exist OR belongs to different company
-    - This prevents information leakage across companies
 
     **Included Data:**
     - Workflow metadata
@@ -211,17 +190,16 @@ def get_workflow_by_id(
     Args:
         db: Database session
         workflow_id: ID of workflow to retrieve
-        company_id: ID of user's company (from JWT)
 
     Returns:
         Workflow object with steps
 
     Raises:
-        HTTPException: 404 if workflow not found or access denied
+        HTTPException: 404 if workflow not found
     """
     workflow = (
         db.query(Workflow)
-        .filter(Workflow.id == workflow_id, Workflow.company_id == company_id)
+        .filter(Workflow.id == workflow_id)
         .first()
     )
 
@@ -240,15 +218,10 @@ def get_workflow_by_id(
 def update_workflow(
     db: Session,
     workflow_id: int,
-    company_id: int,
     workflow_data: UpdateWorkflowRequest
 ) -> Workflow:
     """
     Update workflow metadata.
-
-    **Multi-tenant Isolation:**
-    - ALWAYS filters by company_id from JWT token
-    - Returns 404 if workflow doesn't exist OR belongs to different company
 
     **Updatable Fields:**
     - name, description, tags, status
@@ -262,18 +235,17 @@ def update_workflow(
     Args:
         db: Database session
         workflow_id: ID of workflow to update
-        company_id: ID of user's company (from JWT)
         workflow_data: Update data (partial)
 
     Returns:
         Updated Workflow object
 
     Raises:
-        HTTPException: 404 if workflow not found or access denied
+        HTTPException: 404 if workflow not found
         HTTPException: 400 if activating incomplete workflow
     """
-    # Get workflow with multi-tenant check
-    workflow = get_workflow_by_id(db, workflow_id, company_id)
+    # Get workflow
+    workflow = get_workflow_by_id(db, workflow_id)
 
     # Update fields (only if provided)
     if workflow_data.name is not None:
@@ -352,38 +324,30 @@ def validate_workflow_complete(db: Session, workflow: Workflow) -> None:
 
 def delete_workflow(
     db: Session,
-    workflow_id: int,
-    company_id: int
+    workflow_id: int
 ) -> None:
     """
     Delete a workflow and all associated steps (cascade), including screenshot files.
-
-    **Multi-tenant Isolation:**
-    - ALWAYS filters by company_id from JWT token
-    - Returns 404 if workflow doesn't exist OR belongs to different company
 
     **Cascade Deletion:**
     - Deletes workflow record
     - Deletes all step records (CASCADE)
     - Deletes all screenshots (CASCADE)
-    - Deletes all health logs (CASCADE)
-    - Deletes all notifications (CASCADE)
     - Deletes screenshot files from storage (after DB commit)
 
     Args:
         db: Database session
         workflow_id: ID of workflow to delete
-        company_id: ID of user's company (from JWT)
 
     Raises:
-        HTTPException: 404 if workflow not found or access denied
+        HTTPException: 404 if workflow not found
     """
-    # Get workflow with multi-tenant check
-    workflow = get_workflow_by_id(db, workflow_id, company_id)
+    # Get workflow
+    workflow = get_workflow_by_id(db, workflow_id)
 
     # Build the storage path for this workflow's screenshots BEFORE deleting DB records
-    # Path: companies/{company_id}/workflows/{workflow_id}/
-    storage_path = f"companies/{company_id}/workflows/{workflow_id}"
+    # Path: workflows/{workflow_id}/
+    storage_path = f"workflows/{workflow_id}"
 
     # Delete workflow (cascades to steps, screenshots, etc.)
     db.delete(workflow)

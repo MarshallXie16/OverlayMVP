@@ -7,19 +7,15 @@ import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, AlertTriangle, Loader2 } from "lucide-react";
 import { apiClient } from "@/api/client";
-import type { WorkflowListItem, HealthStatsResponse } from "@/api/types";
+import type { WorkflowListItem } from "@/api/types";
 import { useAuthStore } from "@/store/auth";
 import { Button } from "@/components/ui/Button";
 import { WorkflowCard } from "@/components/workflows/WorkflowCard";
 import { mapWorkflowListItemToDesign } from "@/utils/typeMappers";
-import { compareByHealth } from "@/utils/workflowHealth";
-import { DesignWorkflow, WorkflowStatus } from "@/types/design";
+import { DesignWorkflow } from "@/types/design";
 
 export const Dashboard: React.FC = () => {
   const [workflows, setWorkflows] = useState<WorkflowListItem[]>([]);
-  const [healthStats, setHealthStats] = useState<HealthStatsResponse | null>(
-    null,
-  );
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -36,16 +32,9 @@ export const Dashboard: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      // Fetch workflows and health stats in parallel
-      const [workflowsResponse, healthStatsResponse] = await Promise.all([
-        apiClient.getWorkflows(50, 0),
-        apiClient.getHealthStats(30), // Last 30 days to match HealthView
-      ]);
-      const sortedWorkflows = [...workflowsResponse.workflows].sort(
-        compareByHealth,
-      );
-      setWorkflows(sortedWorkflows);
-      setHealthStats(healthStatsResponse);
+      // Fetch workflows
+      const workflowsResponse = await apiClient.getWorkflows(50, 0);
+      setWorkflows(workflowsResponse.workflows);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load workflows");
     } finally {
@@ -71,23 +60,6 @@ export const Dashboard: React.FC = () => {
     );
   }, [designWorkflows, searchQuery]);
 
-  // Derive display stats from API health stats and workflow data
-  const dashboardStats = useMemo(() => {
-    const brokenCount = designWorkflows.filter(
-      (wf) => wf.status === WorkflowStatus.BROKEN,
-    ).length;
-
-    return {
-      // Use API health stats for accuracy (matches HealthView)
-      successRate: healthStats
-        ? Math.round(healthStats.success_rate * 100)
-        : 100,
-      totalWorkflows: workflows.length,
-      totalRuns: healthStats?.total_executions ?? 0,
-      brokenWorkflows: brokenCount,
-    };
-  }, [healthStats, workflows, designWorkflows]);
-
   const handleSelectWorkflow = (wf: DesignWorkflow) => {
     navigate(`/workflows/${wf.id}`);
   };
@@ -96,7 +68,7 @@ export const Dashboard: React.FC = () => {
     if (!workflowToDelete) return;
 
     try {
-      await apiClient.deleteWorkflow(Number(workflowToDelete));
+      await apiClient.deleteWorkflow(workflowToDelete);
       setWorkflows(workflows.filter((w) => String(w.id) !== workflowToDelete));
       setWorkflowToDelete(null);
     } catch (err) {
@@ -134,78 +106,6 @@ export const Dashboard: React.FC = () => {
         <p className="text-neutral-500">
           Real-time overview of your team's automation health and activity.
         </p>
-      </div>
-
-      {/* Stats Panel */}
-      <div className="relative bg-white/60 backdrop-blur-xl rounded-2xl border border-white/60 shadow-sm mb-12 p-6">
-        {/* Floating Status Badge */}
-        <div className="absolute top-4 right-4 flex items-center gap-2 px-3 py-1.5 bg-white/40 backdrop-blur-md text-green-700 rounded-full border border-green-200/50 shadow-sm z-10">
-          <span className="relative flex h-2.5 w-2.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span>
-          </span>
-          <span className="font-bold text-sm">Operational</span>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-2">
-          {/* Success Rate */}
-          <div className="bg-white/50 rounded-xl p-5 border border-white/60 shadow-sm flex flex-col justify-center h-32 hover:shadow-md transition-shadow">
-            <span className="text-xs font-bold text-neutral-400 uppercase tracking-wider mb-2">
-              Success Rate
-            </span>
-            <span className="text-3xl font-bold text-neutral-900">
-              {dashboardStats.successRate}%
-            </span>
-            <span className="text-xs text-green-600 font-medium mt-1">
-              Last 30 days
-            </span>
-          </div>
-
-          {/* Total Workflows */}
-          <div className="bg-white/50 rounded-xl p-5 border border-white/60 shadow-sm flex flex-col justify-center h-32 hover:shadow-md transition-shadow">
-            <span className="text-xs font-bold text-neutral-400 uppercase tracking-wider mb-2">
-              Total Workflows
-            </span>
-            <span className="text-3xl font-bold text-neutral-900">
-              {dashboardStats.totalWorkflows}
-            </span>
-            <span className="text-xs text-neutral-500 mt-1">
-              Active workflows
-            </span>
-          </div>
-
-          {/* Total Runs */}
-          <div className="bg-white/50 rounded-xl p-5 border border-white/60 shadow-sm flex flex-col justify-center h-32 hover:shadow-md transition-shadow">
-            <span className="text-xs font-bold text-neutral-400 uppercase tracking-wider mb-2">
-              Total Runs
-            </span>
-            <span className="text-3xl font-bold text-neutral-900">
-              {dashboardStats.totalRuns.toLocaleString()}
-            </span>
-            <span className="text-xs text-neutral-500 mt-1">Last 30 days</span>
-          </div>
-
-          {/* Failing Workflows */}
-          <div className="bg-white/50 rounded-xl p-5 border border-white/60 shadow-sm flex flex-col justify-center h-32 hover:shadow-md transition-shadow">
-            <span className="text-xs font-bold text-neutral-400 uppercase tracking-wider mb-2">
-              Failing Workflows
-            </span>
-            <span
-              className={`text-3xl font-bold ${dashboardStats.brokenWorkflows > 0 ? "text-red-600" : "text-neutral-900"}`}
-            >
-              {dashboardStats.brokenWorkflows}
-            </span>
-            {dashboardStats.brokenWorkflows > 0 ? (
-              <span className="text-xs text-red-600 font-medium mt-1">
-                Needs attention
-              </span>
-            ) : (
-              <span className="text-xs text-neutral-500 mt-1">
-                All systems go
-              </span>
-            )}
-          </div>
-        </div>
       </div>
 
       {/* Search & Title */}

@@ -27,7 +27,6 @@ if TYPE_CHECKING:
     from app.models.workflow import Workflow
     from app.models.screenshot import Screenshot
     from app.models.user import User
-    from app.models.health_log import HealthLog
 
 
 class Step(Base):
@@ -118,9 +117,6 @@ class Step(Base):
     )
     editor: Mapped[Optional["User"]] = relationship(
         "User", back_populates="steps_edited", foreign_keys=[edited_by]
-    )
-    health_logs: Mapped[list["HealthLog"]] = relationship(
-        "HealthLog", back_populates="step", cascade="all, delete-orphan"
     )
 
     # Indexes and Constraints

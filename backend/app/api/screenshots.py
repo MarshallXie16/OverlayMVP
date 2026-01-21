@@ -6,9 +6,8 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from pathlib import Path
 from app.db.session import get_db
-from app.models.user import User
 from app.models.screenshot import Screenshot
-from app.utils.dependencies import get_current_user
+from app.utils.dependencies import get_current_user, AuthUser
 from app.services.screenshot import upload_screenshot, get_screenshot_url
 from app.schemas.screenshot import ScreenshotResponse
 from app.utils.s3 import generate_presigned_url
@@ -25,7 +24,7 @@ async def upload_screenshot_endpoint(
     step_id: Optional[str] = Form(None, description="Temporary client-side step ID"),
     image: UploadFile = File(..., description="Screenshot image file (JPEG or PNG, max 5MB)"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: AuthUser = Depends(get_current_user),
 ):
     """
     Upload a screenshot with automatic deduplication.
@@ -49,7 +48,7 @@ async def upload_screenshot_endpoint(
 
     **S3 Storage Structure:**
     ```
-    companies/{company_id}/workflows/{workflow_id}/screenshots/{screenshot_id}.jpg
+    workflows/{workflow_id}/screenshots/{screenshot_id}.jpg
     ```
 
     **Returns:**
@@ -67,20 +66,16 @@ async def upload_screenshot_endpoint(
     # Read file content
     file_content = await image.read()
 
-    # Get company_id from User object
-    company_id = current_user.company_id
-
     # Upload screenshot (with deduplication)
     screenshot, deduplicated = upload_screenshot(
         db=db,
-        company_id=company_id,
         workflow_id=workflow_id,
         file_content=file_content,
         filename=image.filename or "upload.jpg",
     )
 
     # Generate pre-signed URL for response
-    presigned_url = get_screenshot_url(db, screenshot.id, company_id)
+    presigned_url = get_screenshot_url(db, screenshot.id)
 
     # Return response
     return ScreenshotResponse(
@@ -101,7 +96,7 @@ async def upload_screenshot_endpoint(
 async def get_screenshot_url_endpoint(
     screenshot_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: AuthUser = Depends(get_current_user),
 ):
     """
     Get a fresh pre-signed URL for an existing screenshot.
@@ -116,12 +111,9 @@ async def get_screenshot_url_endpoint(
     - 404: Screenshot not found or does not belong to your company
     - 401: Invalid or missing authentication token
     """
-    company_id = current_user.company_id
-    
-    # Query screenshot with authorization check (avoiding redundant service call)
+    # Query screenshot
     screenshot = db.query(Screenshot).filter(
-        Screenshot.id == screenshot_id,
-        Screenshot.company_id == company_id
+        Screenshot.id == screenshot_id
     ).first()
     
     if not screenshot:
@@ -129,7 +121,7 @@ async def get_screenshot_url_endpoint(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={
                 "code": "SCREENSHOT_NOT_FOUND",
-                "message": f"Screenshot {screenshot_id} not found or does not belong to your company",
+                "message": f"Screenshot {screenshot_id} not found",
             },
         )
     
@@ -147,17 +139,13 @@ async def get_screenshot_url_endpoint(
 async def get_screenshot_image(
     screenshot_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: AuthUser = Depends(get_current_user),
 ):
     """
     Get the actual screenshot image file.
     
     Returns the image file directly for display in the browser.
     
-    **Multi-tenant Security:**
-    - Users can only access screenshots from their own company
-    - Returns 403 Forbidden if screenshot belongs to another company
-    - Returns 404 if screenshot doesn't exist
     
     **Returns:**
     - Image file (JPEG/PNG) with appropriate Content-Type
@@ -166,18 +154,15 @@ async def get_screenshot_image(
     - 404: Screenshot not found or does not belong to your company
     - 401: Invalid or missing authentication token
     """
-    company_id = current_user.company_id
-    
-    # Fetch screenshot with multi-tenant check
+    # Fetch screenshot
     screenshot = db.query(Screenshot).filter(
-        Screenshot.id == screenshot_id,
-        Screenshot.company_id == company_id
+        Screenshot.id == screenshot_id
     ).first()
     
     if not screenshot:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Screenshot {screenshot_id} not found or does not belong to your company"
+            detail=f"Screenshot {screenshot_id} not found"
         )
     
     # Build file path from storage_url

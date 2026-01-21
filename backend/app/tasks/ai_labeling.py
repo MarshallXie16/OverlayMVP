@@ -17,45 +17,9 @@ from app.celery_app import celery_app, BaseTask
 from app.tasks.utils import get_task_db, log_task_progress
 from app.models.workflow import Workflow
 from app.models.step import Step
-from app.models.notification import Notification
 from app.services.ai import AIService, AIServiceError
 
 logger = logging.getLogger(__name__)
-
-
-def create_workflow_ready_notification(db, workflow: Workflow, steps_labeled: int, steps_failed: int) -> None:
-    """
-    Create notification when AI labeling completes.
-
-    Notifies company admins that a workflow is ready for review.
-
-    Args:
-        db: Database session
-        workflow: The workflow that was labeled
-        steps_labeled: Number of steps successfully labeled
-        steps_failed: Number of steps that failed labeling
-    """
-    # Determine severity and message based on labeling results
-    if steps_failed == 0:
-        severity = "info"
-        title = "Workflow Ready for Review"
-        message = f"'{workflow.name}' has been processed with {steps_labeled} steps labeled and is ready for review."
-    else:
-        severity = "warning"
-        title = "Workflow Ready (Partial)"
-        message = f"'{workflow.name}' has been processed with {steps_labeled} steps labeled and {steps_failed} failed. Please review manually."
-
-    notification = Notification(
-        company_id=workflow.company_id,
-        workflow_id=workflow.id,
-        type="workflow_ready",
-        severity=severity,
-        title=title,
-        message=message,
-        action_url=f"/workflows/{workflow.id}",
-    )
-    db.add(notification)
-    logger.info(f"[Workflow {workflow.id}] Created workflow_ready notification")
 
 
 @celery_app.task(
@@ -194,10 +158,6 @@ def label_workflow_steps(self, workflow_id: int) -> dict:
             else:
                 workflow.status = "needs_review"  # All failed
                 status_result = "failed"
-
-            # Create notification for workflow ready (success or partial success)
-            if status_result in ("success", "partial_success"):
-                create_workflow_ready_notification(db, workflow, steps_labeled, steps_failed)
 
             # Commit all changes
             db.commit()

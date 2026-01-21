@@ -22,7 +22,6 @@ MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB in bytes
 
 def upload_screenshot(
     db: Session,
-    company_id: int,
     workflow_id: int,
     file_content: bytes,
     filename: str,
@@ -39,7 +38,6 @@ def upload_screenshot(
 
     Args:
         db: Database session
-        company_id: Company ID (from JWT token)
         workflow_id: Workflow ID this screenshot belongs to
         file_content: Raw bytes of the image file
         filename: Original filename (for validation)
@@ -50,10 +48,9 @@ def upload_screenshot(
     Raises:
         HTTPException: If validation fails or workflow not found
     """
-    # Validate workflow exists and belongs to company
+    # Validate workflow exists
     workflow = db.query(Workflow).filter(
-        Workflow.id == workflow_id,
-        Workflow.company_id == company_id
+        Workflow.id == workflow_id
     ).first()
 
     if not workflow:
@@ -61,7 +58,7 @@ def upload_screenshot(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={
                 "code": "WORKFLOW_NOT_FOUND",
-                "message": f"Workflow {workflow_id} not found or does not belong to your company",
+                "message": f"Workflow {workflow_id} not found",
             },
         )
 
@@ -114,8 +111,7 @@ def upload_screenshot(
 
     # Check if hash already exists (deduplication)
     existing_screenshot = db.query(Screenshot).filter(
-        Screenshot.hash == image_hash,
-        Screenshot.company_id == company_id
+        Screenshot.hash == image_hash
     ).first()
 
     if existing_screenshot:
@@ -124,7 +120,6 @@ def upload_screenshot(
 
     # Create new screenshot record (need ID for S3 key)
     screenshot = Screenshot(
-        company_id=company_id,
         workflow_id=workflow_id,
         hash=image_hash,
         storage_key="",  # Will update after we have the ID
@@ -140,7 +135,6 @@ def upload_screenshot(
 
     # Build S3 key and upload
     storage_key = build_storage_key(
-        company_id=company_id,
         workflow_id=workflow_id,
         screenshot_id=screenshot.id,
         format="jpg" if image_format == "jpeg" else image_format,
@@ -158,24 +152,22 @@ def upload_screenshot(
     return screenshot, False
 
 
-def get_screenshot_url(db: Session, screenshot_id: int, company_id: int) -> str:
+def get_screenshot_url(db: Session, screenshot_id: int) -> str:
     """
     Get pre-signed URL for screenshot access.
 
     Args:
         db: Database session
         screenshot_id: Screenshot ID
-        company_id: Company ID (for authorization)
 
     Returns:
         Pre-signed URL (15-minute expiration)
 
     Raises:
-        HTTPException: If screenshot not found or unauthorized
+        HTTPException: If screenshot not found
     """
     screenshot = db.query(Screenshot).filter(
-        Screenshot.id == screenshot_id,
-        Screenshot.company_id == company_id
+        Screenshot.id == screenshot_id
     ).first()
 
     if not screenshot:
@@ -183,7 +175,7 @@ def get_screenshot_url(db: Session, screenshot_id: int, company_id: int) -> str:
             status_code=status.HTTP_404_NOT_FOUND,
             detail={
                 "code": "SCREENSHOT_NOT_FOUND",
-                "message": f"Screenshot {screenshot_id} not found or does not belong to your company",
+                "message": f"Screenshot {screenshot_id} not found",
             },
         )
 

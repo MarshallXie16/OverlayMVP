@@ -1,7 +1,7 @@
 """
 JWT token utilities for authentication.
 
-Tokens have 7-day expiration and include user_id, company_id, role, and email.
+Tokens have 7-day expiration and include user_id, role, and email.
 
 NOTE: For the get_current_user dependency, use app.utils.dependencies instead.
 """
@@ -12,7 +12,7 @@ import os
 import warnings
 
 
-# JWT Configuration
+# JWT Configuration (legacy API JWTs only)
 SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 
 if not SECRET_KEY:
@@ -46,7 +46,6 @@ def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta]
     Example:
         >>> token = create_access_token({
         ...     "user_id": 1,
-        ...     "company_id": 1,
         ...     "role": "admin",
         ...     "email": "sarah@company.com"
         ... })

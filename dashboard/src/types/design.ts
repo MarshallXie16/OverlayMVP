@@ -4,11 +4,10 @@
  */
 
 export enum WorkflowStatus {
-  HEALTHY = "HEALTHY",
-  NEEDS_REVIEW = "NEEDS_REVIEW",
-  BROKEN = "BROKEN",
   DRAFT = "DRAFT",
   PROCESSING = "PROCESSING",
+  ACTIVE = "ACTIVE",
+  ARCHIVED = "ARCHIVED",
 }
 
 export enum UserRole {
@@ -38,13 +37,6 @@ export interface DesignUser {
   id: string;
   name: string;
   avatarUrl: string;
-}
-
-export interface TeamMember extends DesignUser {
-  email: string;
-  role: UserRole;
-  status: UserStatus;
-  joinedAt: string;
 }
 
 export interface DesignWorkflow {

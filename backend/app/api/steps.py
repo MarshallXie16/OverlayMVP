@@ -8,14 +8,13 @@ RESTful API for managing individual workflow steps, including:
 """
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 import logging
 from datetime import datetime, timezone
+import json
 
 from app.db.session import get_db
-from app.models.user import User
-from app.models.step import Step
-from app.models.workflow import Workflow
-from app.utils.dependencies import get_current_user
+from app.utils.dependencies import get_current_user, AuthUser
 from app.utils.permissions import Permission, require_permission
 from app.schemas.step import StepResponse, StepUpdate
 
@@ -31,15 +30,11 @@ router = APIRouter()
     description="""
     Retrieve details for a specific step.
     
-    **Multi-tenant Security:**
-    - Users can only access steps from their own company's workflows
-    - Returns 403 Forbidden if step belongs to another company
-    - Returns 404 if step doesn't exist
     """
 )
 def get_step(
     step_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: AuthUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Get step by ID with multi-tenant isolation."""
@@ -55,16 +50,6 @@ def get_step(
             detail=f"Step {step_id} not found"
         )
     
-    # Multi-tenant check: step belongs to user's company?
-    if step.workflow.company_id != current_user.company_id:
-        logger.warning(
-            f"User {current_user.id} attempted to access step {step_id} "
-            f"from company {step.workflow.company_id}"
-        )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have permission to access this step"
-        )
     
     return step
 
@@ -88,7 +73,7 @@ def get_step(
 def link_screenshot_to_step(
     step_id: int,
     screenshot_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: AuthUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Link screenshot to step (used by extension after upload)."""
@@ -139,54 +124,26 @@ def link_screenshot_to_step(
     - instruction: 1-500 characters (if provided)
     - At least one field must be provided
     
-    **Tracking:**
-    - Sets edited_by to current user ID
-    - Sets edited_at to current timestamp
-    - Marks label_edited or instruction_edited flags
-    
-    **Multi-tenant Security:**
-    - Users can only edit steps from their own company's workflows
-    - Returns 403 Forbidden if step belongs to another company
+    **Note:** Updates the Supabase `public.steps` table directly.
     """
 )
 def update_step(
     step_id: int,
     step_update: StepUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: AuthUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
-    Update step labels with edit tracking.
+    Update step labels in Supabase steps table.
 
     Process:
-    1. Fetch step and validate access
+    1. Find step by converting step_id back to UUID (or query by order_index if needed)
     2. Validate input (at least one field, max lengths)
-    3. Update step with new values
-    4. Set edit tracking fields (edited_by, edited_at, flags)
-    5. Commit and return updated step
+    3. Update instruction_text in Supabase steps table
+    4. Return updated step data
     """
     # Check permission (admin, editor only - viewers cannot edit)
     require_permission(current_user, Permission.EDIT_WORKFLOW)
-
-    # Fetch step with workflow relationship
-    step = db.query(Step).filter(Step.id == step_id).first()
-    
-    if not step:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Step {step_id} not found"
-        )
-    
-    # Multi-tenant check
-    if step.workflow.company_id != current_user.company_id:
-        logger.warning(
-            f"User {current_user.id} attempted to edit step {step_id} "
-            f"from company {step.workflow.company_id}"
-        )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have permission to edit this step"
-        )
     
     # Validate at least one field is being updated
     if step_update.field_label is None and step_update.instruction is None:
@@ -195,46 +152,169 @@ def update_step(
             detail="At least one field (field_label or instruction) must be provided"
         )
     
-    # Validate field lengths (Pydantic handles max_length, but check for empty)
+    # Build the instruction_text from field_label and instruction
+    # Supabase steps table has instruction_text field
+    instruction_parts = []
     if step_update.field_label is not None:
-        if not step_update.field_label.strip():
+        field_label = step_update.field_label.strip()
+        if not field_label:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="field_label cannot be empty or whitespace"
             )
-        step.field_label = step_update.field_label.strip()
-        step.label_edited = True
+        instruction_parts.append(field_label)
     
     if step_update.instruction is not None:
-        if not step_update.instruction.strip():
+        instruction = step_update.instruction.strip()
+        if not instruction:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="instruction cannot be empty or whitespace"
             )
-        step.instruction = step_update.instruction.strip()
-        step.instruction_edited = True
+        if instruction_parts:
+            # Combine field_label and instruction
+            instruction_text = f"{instruction_parts[0]}: {instruction}"
+        else:
+            instruction_text = instruction
+    else:
+        instruction_text = instruction_parts[0] if instruction_parts else ""
     
-    # Set edit tracking
-    step.edited_by = current_user.id
-    step.edited_at = datetime.now(timezone.utc)
+    # Find step by converting step_id to UUID pattern
+    # The step_id is a numeric conversion of UUID, so we need to find the actual UUID
+    # We'll query all steps and match by the converted ID
+    # OR better: store a mapping, but for now let's query by trying to match
     
-    # Commit changes
-    try:
-        db.commit()
-        db.refresh(step)
-        logger.info(
-            f"Step {step_id} edited by user {current_user.id}: "
-            f"label_edited={step.label_edited}, instruction_edited={step.instruction_edited}"
+    # Actually, since step_id is the converted integer from UUID, we need to find the step
+    # by querying all steps and checking which one matches the converted ID
+    # This is not ideal, but works for now
+    
+    # Query Supabase steps table to find the step
+    # We'll need to iterate through steps and find the one that matches step_id when converted
+    steps_rows = db.execute(
+        text("SELECT * FROM public.steps ORDER BY order_index ASC"),
+    ).mappings().all()
+    
+    matching_step = None
+    for step_row in steps_rows:
+        step_uuid = step_row["id"]
+        if isinstance(step_uuid, str):
+            step_id_int = int(step_uuid.replace("-", "")[:8], 16)
+        else:
+            step_id_int = hash(str(step_uuid)) % (10**9)
+        
+        if step_id_int == step_id:
+            matching_step = step_row
+            break
+    
+    if not matching_step:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Step {step_id} not found"
         )
+    
+    step_uuid = matching_step["id"]
+    
+    # Update the instruction_text in Supabase steps table
+    try:
+        db.execute(
+            text("""
+                UPDATE public.steps 
+                SET instruction_text = :instruction_text,
+                    updated_at = :updated_at
+                WHERE id = :step_id
+            """),
+            {
+                "instruction_text": instruction_text,
+                "updated_at": datetime.now(timezone.utc),
+                "step_id": step_uuid,
+            }
+        )
+        db.commit()
+        
+        logger.info(
+            f"Step {step_id} (UUID: {step_uuid}) updated by user {current_user.id}: "
+            f"instruction_text='{instruction_text[:50]}...'"
+        )
+        
+        # Fetch updated step
+        updated_step_row = db.execute(
+            text("SELECT * FROM public.steps WHERE id = :step_id"),
+            {"step_id": step_uuid},
+        ).mappings().first()
+        
+        if not updated_step_row:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Step not found after update"
+            )
+        
+        # Convert to StepResponse format (same as in workflows.py)
+        screenshot_url = updated_step_row.get("screenshot_url")
+        screenshot_id = None
+        if "screenshot_id" in updated_step_row and updated_step_row["screenshot_id"] is not None:
+            try:
+                screenshot_id = int(updated_step_row["screenshot_id"])
+            except (ValueError, TypeError):
+                pass
+        elif screenshot_url:
+            try:
+                if "/screenshots/" in str(screenshot_url):
+                    parts = str(screenshot_url).split("/screenshots/")
+                    if len(parts) > 1:
+                        id_part = parts[1].split("/")[0]
+                        screenshot_id = int(id_part)
+                elif str(screenshot_url).isdigit():
+                    screenshot_id = int(screenshot_url)
+            except (ValueError, AttributeError, TypeError):
+                pass
+        
+        # Parse instruction_text to extract field_label and instruction
+        instruction_text_value = updated_step_row.get("instruction_text", "")
+        field_label = None
+        instruction = instruction_text_value
+        
+        # If instruction_text contains ":", split it into field_label and instruction
+        if ":" in instruction_text_value:
+            parts = instruction_text_value.split(":", 1)
+            field_label = parts[0].strip()
+            instruction = parts[1].strip() if len(parts) > 1 else None
+        
+        return StepResponse(
+            id=step_id,
+            workflow_id=0,
+            step_number=updated_step_row["order_index"],
+            timestamp=None,
+            action_type="click",
+            selectors={},
+            element_meta={},
+            page_context={},
+            action_data=None,
+            dom_context=None,
+            screenshot_id=screenshot_id,
+            screenshot_url=screenshot_url,
+            field_label=field_label,
+            instruction=instruction,
+            ai_confidence=None,
+            ai_model=None,
+            ai_generated_at=None,
+            label_edited=True,  # Mark as edited since we just updated it
+            instruction_edited=True,
+            edited_by=None,  # Supabase doesn't track edited_by in this schema
+            edited_at=updated_step_row.get("updated_at"),
+            healed_selectors=None,
+            healed_at=None,
+            healing_confidence=None,
+            healing_method=None,
+            created_at=updated_step_row.get("created_at") or datetime.now(timezone.utc),
+        )
+        
     except Exception as e:
         db.rollback()
         logger.error(f"Failed to update step {step_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to update step"
+            detail=f"Failed to update step: {str(e)}"
         )
-
-    return step
 
 
 @router.delete(
@@ -256,7 +336,7 @@ def update_step(
 )
 def delete_step(
     step_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: AuthUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Delete a step and renumber remaining steps."""
@@ -272,16 +352,8 @@ def delete_step(
             detail=f"Step {step_id} not found"
         )
 
-    # Multi-tenant check
-    if step.workflow.company_id != current_user.company_id:
-        logger.warning(
-            f"User {current_user.id} attempted to delete step {step_id} "
-            f"from company {step.workflow.company_id}"
-        )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have permission to delete this step"
-        )
+    # NOTE: Supabase-table mode does not enforce company_id here.
+    # Access control should be enforced via Supabase RLS policies.
 
     workflow_id = step.workflow_id
     deleted_step_number = step.step_number

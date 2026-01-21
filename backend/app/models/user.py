@@ -1,13 +1,13 @@
 """
 User model for authentication and authorization.
 
-Users belong to a company and have role-based permissions.
+Users have role-based permissions.
 Password is stored as bcrypt hash.
 
 Roles:
-- admin: Full control (manage users, all workflow ops, company settings)
+- admin: Full control (manage users, all workflow ops)
 - editor: Create/edit/delete workflows, run workflows (no user management)
-- viewer: Run workflows only, view team (no create/edit)
+- viewer: Run workflows only (no create/edit)
 
 Status:
 - active: Normal account
@@ -16,18 +16,15 @@ Status:
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional, Literal
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String
+from sqlalchemy import DateTime, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from app.models.base import Base
 
 if TYPE_CHECKING:
-    from app.models.company import Company
     from app.models.workflow import Workflow
     from app.models.step import Step
-    from app.models.health_log import HealthLog
-    from app.models.notification import Notification
 
 
 # Valid role values (validated at application level, not database level for SQLite compatibility)
@@ -48,11 +45,6 @@ class User(Base):
 
     # Primary Key
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-
-    # Foreign Keys
-    company_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False
-    )
 
     # Authentication Fields
     email: Mapped[str] = mapped_column(String, unique=True, nullable=False, index=True)
@@ -83,8 +75,6 @@ class User(Base):
     )
 
     # Relationships
-    company: Mapped["Company"] = relationship("Company", back_populates="users")
-
     # Workflows created by this user
     workflows_created: Mapped[list["Workflow"]] = relationship(
         "Workflow", back_populates="creator", foreign_keys="Workflow.created_by"
@@ -95,19 +85,8 @@ class User(Base):
         "Step", back_populates="editor", foreign_keys="Step.edited_by"
     )
 
-    # Health logs recorded by this user
-    health_logs: Mapped[list["HealthLog"]] = relationship(
-        "HealthLog", back_populates="user"
-    )
-
-    # Notifications read by this user
-    notifications_read: Mapped[list["Notification"]] = relationship(
-        "Notification", back_populates="reader", foreign_keys="Notification.read_by"
-    )
-
     # Indexes
     __table_args__ = (
-        Index("idx_users_company", "company_id"),
         Index("idx_users_email", "email"),
     )
 

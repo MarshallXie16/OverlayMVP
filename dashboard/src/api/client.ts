@@ -3,6 +3,7 @@
  * Handles authentication, requests, and error handling
  */
 
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import type {
   LoginRequest,
   SignupRequest,
@@ -13,28 +14,26 @@ import type {
   ChangePasswordResponse,
   WorkflowListResponse,
   WorkflowResponse,
-  TeamMemberResponse,
-  UpdateMemberRoleRequest,
-  UpdateMemberStatusRequest,
-  InviteCreateRequest,
-  InviteResponse,
-  InviteListResponse,
-  InviteVerifyResponse,
-  NotificationListResponse,
-  NotificationResponse,
-  HealthLogListResponse,
-  HealthStatsResponse,
   SlackSettingsRequest,
   SlackSettingsResponse,
   SlackTestResponse,
 } from "./types";
-import { API_URL } from "@/config";
+import { API_URL, SUPABASE_URL, SUPABASE_ANON_KEY } from "@/config";
 
 class ApiClient {
   private baseUrl: string;
+  private supabase: SupabaseClient;
 
   constructor(baseUrl: string = API_URL) {
     this.baseUrl = baseUrl;
+    
+    // Initialize Supabase client
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+      throw new Error(
+        "Supabase configuration missing. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY environment variables."
+      );
+    }
+    this.supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   }
 
   /**
@@ -87,7 +86,7 @@ class ApiClient {
       "Content-Type": "application/json",
     };
 
-    // Merge existing headers
+    // Merge existing headers first (so they take precedence)
     if (options.headers) {
       const existingHeaders = new Headers(options.headers);
       existingHeaders.forEach((value, key) => {
@@ -95,10 +94,12 @@ class ApiClient {
       });
     }
 
-    // Add auth token if available
-    const token = this.getToken();
-    if (token) {
-      headers["Authorization"] = `Bearer ${token}`;
+    // Add auth token if available (only if Authorization not already set)
+    if (!headers["Authorization"]) {
+      const token = this.getToken();
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
     }
 
     const config: RequestInit = {
@@ -203,36 +204,109 @@ class ApiClient {
   // ============================================================================
 
   async signup(data: SignupRequest): Promise<TokenResponse> {
-    const response = await this.request<TokenResponse>("/api/auth/signup", {
-      method: "POST",
-      body: JSON.stringify(data),
+    // Use Supabase Auth for signup
+    const { data: authData, error } = await this.supabase.auth.signUp({
+      email: data.email,
+      password: data.password,
+      options: {
+        data: {
+          full_name: data.name,
+        },
+      },
     });
 
-    this.setToken(response.access_token);
-    localStorage.setItem("user_data", JSON.stringify(response.user));
+    if (error) {
+      throw new Error(error.message || "Signup failed");
+    }
 
-    return response;
+    if (!authData.session || !authData.user) {
+      throw new Error("Signup failed: No session returned");
+    }
+
+    // Get user profile from backend using Supabase token
+    // The backend will sync the user to your database and return user data
+    const userResponse = await this.request<UserResponse>("/api/auth/me", {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${authData.session.access_token}`,
+      },
+    });
+
+    // Store Supabase token
+    this.setToken(authData.session.access_token);
+    localStorage.setItem("user_data", JSON.stringify(userResponse));
+
+    return {
+      access_token: authData.session.access_token,
+      token_type: "bearer",
+      user: userResponse,
+    };
   }
 
   async login(data: LoginRequest): Promise<TokenResponse> {
-    const response = await this.request<TokenResponse>("/api/auth/login", {
-      method: "POST",
-      body: JSON.stringify(data),
+    // Use Supabase Auth for login
+    const { data: authData, error } = await this.supabase.auth.signInWithPassword({
+      email: data.email,
+      password: data.password,
     });
 
-    this.setToken(response.access_token);
-    localStorage.setItem("user_data", JSON.stringify(response.user));
+    if (error) {
+      throw new Error(error.message || "Login failed");
+    }
 
-    return response;
+    if (!authData.session || !authData.user) {
+      throw new Error("Login failed: No session returned");
+    }
+
+    // Get user profile from backend using Supabase token
+    // The backend will validate the Supabase token and return user data
+    const userResponse = await this.request<UserResponse>("/api/auth/me", {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${authData.session.access_token}`,
+      },
+    });
+
+    // Store Supabase token
+    this.setToken(authData.session.access_token);
+    localStorage.setItem("user_data", JSON.stringify(userResponse));
+
+    return {
+      access_token: authData.session.access_token,
+      token_type: "bearer",
+      user: userResponse,
+    };
   }
 
   logout(): void {
+    // Fire-and-forget sign out from Supabase (avoid making callers async)
+    void this.supabase.auth.signOut();
     this.clearToken();
   }
 
   async getCurrentUser(): Promise<TokenResponse["user"] | null> {
-    const token = this.getToken();
-    if (!token) return null;
+    // Check Supabase session first (Supabase persists sessions in storage).
+    // We only call the backend if Supabase confirms the session is valid.
+    const {
+      data: { session },
+    } = await this.supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      this.clearToken();
+      return null;
+    }
+
+    const { data: userData, error: userError } = await this.supabase.auth.getUser(
+      session.access_token,
+    );
+
+    if (userError || !userData?.user) {
+      this.clearToken();
+      return null;
+    }
+
+    // Update stored token if session exists
+    this.setToken(session.access_token);
 
     // Try to get cached user data first
     const cachedUser = localStorage.getItem("user_data");
@@ -244,13 +318,19 @@ class ApiClient {
       }
     }
 
-    // Fetch from server
+    // Fetch from backend using Supabase token
     try {
-      const response = await this.request<{ user: TokenResponse["user"] }>(
+      const userResponse = await this.request<UserResponse>(
         "/api/auth/me",
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+        }
       );
-      localStorage.setItem("user_data", JSON.stringify(response.user));
-      return response.user;
+      localStorage.setItem("user_data", JSON.stringify(userResponse));
+      return userResponse;
     } catch {
       this.clearToken();
       return null;
@@ -265,15 +345,19 @@ class ApiClient {
    * Update current user's profile (display name)
    */
   async updateProfile(data: UpdateProfileRequest): Promise<UserResponse> {
-    const response = await this.request<UserResponse>("/api/users/me", {
-      method: "PATCH",
-      body: JSON.stringify(data),
+    const { error } = await this.supabase.auth.updateUser({
+      data: {
+        ...(data.name !== undefined ? { full_name: data.name } : {}),
+        ...(data.timezone !== undefined ? { timezone: data.timezone } : {}),
+      },
     });
 
-    // Update cached user data
-    localStorage.setItem("user_data", JSON.stringify(response));
+    if (error) throw new Error(error.message || "Profile update failed");
 
-    return response;
+    // Refresh from backend to keep a single canonical shape for the app
+    const user = await this.getCurrentUser();
+    if (!user) throw new Error("Profile update failed: no session");
+    return user;
   }
 
   /**
@@ -283,13 +367,30 @@ class ApiClient {
   async changePassword(
     data: ChangePasswordRequest,
   ): Promise<ChangePasswordResponse> {
-    return this.request<ChangePasswordResponse>(
-      "/api/users/me/change-password",
-      {
-        method: "POST",
-        body: JSON.stringify(data),
-      },
-    );
+    // Verify current password by re-authing (Supabase doesn't require this, but UI does)
+    const {
+      data: { user },
+      error: userErr,
+    } = await this.supabase.auth.getUser();
+
+    if (userErr || !user?.email) {
+      throw new Error("Not authenticated");
+    }
+
+    const { error: reauthErr } = await this.supabase.auth.signInWithPassword({
+      email: user.email,
+      password: data.current_password,
+    });
+    if (reauthErr) {
+      throw new Error("Current password is incorrect");
+    }
+
+    const { error } = await this.supabase.auth.updateUser({
+      password: data.new_password,
+    });
+    if (error) throw new Error(error.message || "Failed to change password");
+
+    return { success: true, message: "Password changed successfully." };
   }
 
   // ============================================================================
@@ -305,18 +406,18 @@ class ApiClient {
     );
   }
 
-  async getWorkflow(id: number): Promise<WorkflowResponse> {
+  async getWorkflow(id: string): Promise<WorkflowResponse> {
     return this.request<WorkflowResponse>(`/api/workflows/${id}`);
   }
 
-  async deleteWorkflow(id: number): Promise<void> {
+  async deleteWorkflow(id: string): Promise<void> {
     await this.request(`/api/workflows/${id}`, {
       method: "DELETE",
     });
   }
 
   async updateWorkflow(
-    id: number,
+    id: string,
     data: import("./types").UpdateWorkflowRequest,
   ): Promise<import("./types").WorkflowResponse> {
     return this.request<import("./types").WorkflowResponse>(
@@ -363,173 +464,6 @@ class ApiClient {
         body: JSON.stringify({ step_order: stepOrder }),
       },
     );
-  }
-
-  // ============================================================================
-  // COMPANY ENDPOINTS
-  // ============================================================================
-
-  async getCompany(): Promise<import("./types").CompanyResponse> {
-    return this.request<import("./types").CompanyResponse>("/api/companies/me");
-  }
-
-  async updateCompany(
-    data: import("./types").UpdateCompanyRequest,
-  ): Promise<import("./types").CompanyResponse> {
-    return this.request<import("./types").CompanyResponse>(
-      "/api/companies/me",
-      {
-        method: "PUT",
-        body: JSON.stringify(data),
-      },
-    );
-  }
-
-  async getTeamMembers(): Promise<TeamMemberResponse[]> {
-    return this.request<TeamMemberResponse[]>("/api/companies/me/members");
-  }
-
-  async removeTeamMember(userId: number): Promise<void> {
-    await this.request<void>(`/api/companies/me/members/${userId}`, {
-      method: "DELETE",
-    });
-  }
-
-  async updateMemberRole(
-    userId: number,
-    data: UpdateMemberRoleRequest,
-  ): Promise<TeamMemberResponse> {
-    return this.request<TeamMemberResponse>(
-      `/api/companies/me/members/${userId}/role`,
-      {
-        method: "PATCH",
-        body: JSON.stringify(data),
-      },
-    );
-  }
-
-  async updateMemberStatus(
-    userId: number,
-    data: UpdateMemberStatusRequest,
-  ): Promise<TeamMemberResponse> {
-    return this.request<TeamMemberResponse>(
-      `/api/companies/me/members/${userId}/status`,
-      {
-        method: "PATCH",
-        body: JSON.stringify(data),
-      },
-    );
-  }
-
-  /**
-   * Get company name from invite token (public endpoint - no auth required)
-   */
-  async getInviteInfo(
-    token: string,
-  ): Promise<import("./types").InviteInfoResponse> {
-    return this.request<import("./types").InviteInfoResponse>(
-      `/api/companies/invite/${token}`,
-    );
-  }
-
-  // ============================================================================
-  // INVITE ENDPOINTS
-  // ============================================================================
-
-  async listInvites(): Promise<InviteListResponse> {
-    return this.request<InviteListResponse>("/api/invites/me/invites");
-  }
-
-  async createInvite(data: InviteCreateRequest): Promise<InviteResponse> {
-    return this.request<InviteResponse>("/api/invites/me/invites", {
-      method: "POST",
-      body: JSON.stringify(data),
-    });
-  }
-
-  async revokeInvite(inviteId: number): Promise<void> {
-    await this.request<void>(`/api/invites/me/invites/${inviteId}`, {
-      method: "DELETE",
-    });
-  }
-
-  async verifyInvite(token: string): Promise<InviteVerifyResponse> {
-    return this.request<InviteVerifyResponse>(`/api/invites/verify/${token}`);
-  }
-
-  // ============================================================================
-  // NOTIFICATION ENDPOINTS
-  // ============================================================================
-
-  async getNotifications(params?: {
-    read?: boolean;
-    type?: string;
-    limit?: number;
-    offset?: number;
-  }): Promise<NotificationListResponse> {
-    const searchParams = new URLSearchParams();
-    if (params?.read !== undefined)
-      searchParams.set("read", String(params.read));
-    if (params?.type) searchParams.set("type", params.type);
-    if (params?.limit) searchParams.set("limit", String(params.limit));
-    if (params?.offset) searchParams.set("offset", String(params.offset));
-
-    const queryString = searchParams.toString();
-    return this.request<NotificationListResponse>(
-      `/api/notifications${queryString ? `?${queryString}` : ""}`,
-    );
-  }
-
-  async markNotificationRead(id: number): Promise<NotificationResponse> {
-    return this.request<NotificationResponse>(`/api/notifications/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ read: true }),
-    });
-  }
-
-  async markAllNotificationsRead(
-    notificationIds?: number[],
-  ): Promise<{ marked_count: number }> {
-    return this.request<{ marked_count: number }>(
-      "/api/notifications/mark-all-read",
-      {
-        method: "POST",
-        body: JSON.stringify({ notification_ids: notificationIds }),
-      },
-    );
-  }
-
-  async deleteNotification(id: number): Promise<void> {
-    await this.request<void>(`/api/notifications/${id}`, {
-      method: "DELETE",
-    });
-  }
-
-  // ============================================================================
-  // HEALTH DASHBOARD ENDPOINTS
-  // ============================================================================
-
-  async getHealthLogs(params?: {
-    workflow_id?: number;
-    status?: string;
-    limit?: number;
-    offset?: number;
-  }): Promise<HealthLogListResponse> {
-    const searchParams = new URLSearchParams();
-    if (params?.workflow_id)
-      searchParams.set("workflow_id", String(params.workflow_id));
-    if (params?.status) searchParams.set("status", params.status);
-    if (params?.limit) searchParams.set("limit", String(params.limit));
-    if (params?.offset) searchParams.set("offset", String(params.offset));
-
-    const queryString = searchParams.toString();
-    return this.request<HealthLogListResponse>(
-      `/api/health/logs${queryString ? `?${queryString}` : ""}`,
-    );
-  }
-
-  async getHealthStats(days: number = 7): Promise<HealthStatsResponse> {
-    return this.request<HealthStatsResponse>(`/api/health/stats?days=${days}`);
   }
 
   // ============================================================================

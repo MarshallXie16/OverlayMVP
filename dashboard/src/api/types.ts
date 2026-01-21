@@ -12,8 +12,6 @@ export interface SignupRequest {
   email: string;
   password: string;
   name: string;
-  company_name?: string | null;
-  invite_token?: string | null;
 }
 
 export interface LoginRequest {
@@ -22,12 +20,10 @@ export interface LoginRequest {
 }
 
 export interface UserResponse {
-  id: number;
+  id: string;
   email: string;
   name: string;
   role: string;
-  company_id: number;
-  company_name: string;
   timezone: string | null;
   created_at: string;
   last_login_at: string | null;
@@ -63,9 +59,8 @@ export interface ChangePasswordResponse {
 // ============================================================================
 
 export interface WorkflowListItem {
-  id: number;
-  company_id: number;
-  created_by: number | null;
+  id: string;
+  created_by: string | null;
   name: string;
   description: string | null;
   starting_url: string;
@@ -115,6 +110,7 @@ export interface StepResponse {
   action_data: Record<string, any> | null;
   dom_context: Record<string, any> | null;
   screenshot_id: number | null;
+  screenshot_url: string | null;
 
   // AI-generated labels
   field_label: string | null;
@@ -194,79 +190,11 @@ export interface Viewport {
 }
 
 // ============================================================================
-// COMPANY TYPES
+// USER TYPES
 // ============================================================================
 
 export type UserRole = "admin" | "editor" | "viewer";
 export type UserStatus = "active" | "suspended";
-
-export interface CompanyResponse {
-  id: number;
-  name: string;
-  invite_token: string;
-  created_at: string;
-  member_count: number;
-}
-
-export interface TeamMemberResponse {
-  id: number;
-  name: string | null;
-  email: string;
-  role: UserRole;
-  status: UserStatus;
-  created_at: string;
-  last_login_at: string | null;
-}
-
-export interface UpdateCompanyRequest {
-  name: string;
-}
-
-export interface UpdateMemberRoleRequest {
-  role: UserRole;
-}
-
-export interface UpdateMemberStatusRequest {
-  status: UserStatus;
-}
-
-export interface InviteInfoResponse {
-  company_name: string;
-}
-
-// ============================================================================
-// INVITE TYPES
-// ============================================================================
-
-export interface InviteCreateRequest {
-  email: string;
-  role: UserRole;
-}
-
-export interface InviteResponse {
-  id: number;
-  token: string;
-  email: string;
-  role: UserRole;
-  company_id: number;
-  invited_by_id: number;
-  expires_at: string;
-  accepted_at: string | null;
-  created_at: string;
-}
-
-export interface InviteListResponse {
-  invites: InviteResponse[];
-  total: number;
-}
-
-export interface InviteVerifyResponse {
-  valid: boolean;
-  company_name: string | null;
-  role: UserRole | null;
-  email: string | null;
-  expired: boolean;
-}
 
 // ============================================================================
 // NOTIFICATION TYPES
@@ -300,46 +228,6 @@ export interface NotificationListResponse {
 
 export interface MarkAsReadRequest {
   read: boolean;
-}
-
-// ============================================================================
-// HEALTH DASHBOARD TYPES
-// ============================================================================
-
-export type HealthLogStatus =
-  | "success"
-  | "healed_deterministic"
-  | "healed_ai"
-  | "failed";
-
-export interface HealthLogResponse {
-  id: number;
-  workflow_id: number;
-  workflow_name: string;
-  step_id: number | null;
-  status: HealthLogStatus;
-  error_type: string | null;
-  error_message: string | null;
-  healing_confidence: number | null;
-  execution_time_ms: number | null;
-  page_url: string | null;
-  created_at: string;
-}
-
-export interface HealthLogListResponse {
-  logs: HealthLogResponse[];
-  total: number;
-}
-
-export interface HealthStatsResponse {
-  total_executions: number;
-  success_count: number;
-  healed_count: number;
-  failed_count: number;
-  success_rate: number;
-  healing_rate: number;
-  avg_execution_time_ms: number;
-  workflows_by_status: Record<string, number>;
 }
 
 // ============================================================================

@@ -5,7 +5,7 @@ IMPORTANT: This is a MOCKED implementation for MVP.
 In production, replace with real boto3 S3 calls.
 
 Expected S3 Bucket Structure:
-    companies/{company_id}/workflows/{workflow_id}/screenshots/{screenshot_id}.jpg
+    workflows/{workflow_id}/screenshots/{screenshot_id}.jpg
 
 Real Implementation Notes:
     - Use boto3.client('s3') for real S3 operations
@@ -118,7 +118,7 @@ def upload_to_s3(file_content: bytes, key: str) -> str:
     In production, this will use boto3 to upload to real S3 bucket.
 
     Expected Storage Structure:
-        screenshots/companies/{company_id}/workflows/{workflow_id}/{screenshot_id}.jpg
+        screenshots/workflows/{workflow_id}/{screenshot_id}.jpg
 
     Args:
         file_content: Raw bytes of the file to upload
@@ -199,14 +199,13 @@ def generate_presigned_url(storage_key: str, expiration: int = 900) -> str:
         return f"https://{bucket_name}.s3.amazonaws.com/{storage_key}?expires={expiration}"
 
 
-def build_storage_key(company_id: int, workflow_id: int, screenshot_id: int, format: str = "jpg") -> str:
+def build_storage_key(workflow_id: int, screenshot_id: int, format: str = "jpg") -> str:
     """
     Build S3 object key following the expected structure.
 
-    Structure: companies/{company_id}/workflows/{workflow_id}/screenshots/{screenshot_id}.{ext}
+    Structure: workflows/{workflow_id}/screenshots/{screenshot_id}.{ext}
 
     Args:
-        company_id: Company ID
         workflow_id: Workflow ID
         screenshot_id: Screenshot ID
         format: File extension (default: "jpg")
@@ -214,7 +213,7 @@ def build_storage_key(company_id: int, workflow_id: int, screenshot_id: int, for
     Returns:
         S3 object key string
     """
-    return f"companies/{company_id}/workflows/{workflow_id}/screenshots/{screenshot_id}.{format}"
+    return f"workflows/{workflow_id}/screenshots/{screenshot_id}.{format}"
 
 
 def delete_file(storage_key: str) -> bool:
@@ -271,7 +270,7 @@ def delete_directory(storage_key_prefix: str) -> bool:
     Useful for cleaning up all screenshots for a workflow at once.
 
     Args:
-        storage_key_prefix: Directory path prefix (e.g., "companies/1/workflows/5/")
+        storage_key_prefix: Directory path prefix (e.g., "workflows/5/")
 
     Returns:
         True if directory was deleted or didn't exist, False if deletion failed

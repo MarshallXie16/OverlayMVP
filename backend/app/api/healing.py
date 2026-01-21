@@ -9,8 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.models.user import User
-from app.utils.dependencies import get_current_user
+from app.utils.dependencies import get_current_user, AuthUser
 from app.schemas.healing import (
     HealingValidationRequest,
     HealingValidationResponse,
@@ -29,7 +28,7 @@ router = APIRouter()
 @router.post("/validate", response_model=HealingValidationResponse)
 async def validate_healing_match(
     request: HealingValidationRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: AuthUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -108,7 +107,7 @@ async def validate_healing_match(
 
 @router.get("/status")
 async def get_healing_service_status(
-    current_user: User = Depends(get_current_user),
+    current_user: AuthUser = Depends(get_current_user),
 ):
     """
     Check if AI healing validation service is available.
