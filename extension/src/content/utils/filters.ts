@@ -21,15 +21,15 @@
  * Interactive HTML elements that warrant recording clicks
  */
 const INTERACTIVE_ELEMENTS = new Set([
-  'a',
-  'button',
-  'input',
-  'select',
-  'textarea',
-  'option',
-  'label',
+  "a",
+  "button",
+  "input",
+  "select",
+  "textarea",
+  "option",
+  "label",
   // Form elements
-  'form',
+  "form",
   // Common interactive roles
   '[role="button"]',
   '[role="link"]',
@@ -44,20 +44,20 @@ const INTERACTIVE_ELEMENTS = new Set([
  * Input types that should be recorded
  */
 const RECORDABLE_INPUT_TYPES = new Set([
-  'text',
-  'email',
-  'password',
-  'search',
-  'tel',
-  'url',
-  'number',
-  'date',
-  'datetime-local',
-  'time',
-  'month',
-  'week',
-  'checkbox',
-  'radio',
+  "text",
+  "email",
+  "password",
+  "search",
+  "tel",
+  "url",
+  "number",
+  "date",
+  "datetime-local",
+  "time",
+  "month",
+  "week",
+  "checkbox",
+  "radio",
 ]);
 
 /**
@@ -72,18 +72,18 @@ function isInteractiveElement(element: Element): boolean {
   }
 
   // Check for interactive role
-  const role = element.getAttribute('role');
+  const role = element.getAttribute("role");
   if (role && INTERACTIVE_ELEMENTS.has(`[role="${role}"]`)) {
     return true;
   }
 
   // Check for onclick handler
-  if (element.hasAttribute('onclick')) {
+  if (element.hasAttribute("onclick")) {
     return true;
   }
 
   // Check for clickable elements with tabindex
-  const tabIndex = element.getAttribute('tabindex');
+  const tabIndex = element.getAttribute("tabindex");
   if (tabIndex !== null && parseInt(tabIndex) >= 0) {
     return true;
   }
@@ -91,7 +91,7 @@ function isInteractiveElement(element: Element): boolean {
   // Check if element has cursor: pointer
   if (element instanceof HTMLElement) {
     const style = window.getComputedStyle(element);
-    if (style.cursor === 'pointer') {
+    if (style.cursor === "pointer") {
       return true;
     }
   }
@@ -106,7 +106,7 @@ function isClickMeaningful(event: MouseEvent, element: Element): boolean {
   const tagName = element.tagName.toLowerCase();
 
   // Exclude clicks on body, html, or document
-  if (tagName === 'body' || tagName === 'html') {
+  if (tagName === "body" || tagName === "html") {
     return false;
   }
 
@@ -133,7 +133,7 @@ function isInputMeaningful(event: Event, element: Element): boolean {
   }
 
   // For blur events, check if value changed
-  if (event.type === 'blur') {
+  if (event.type === "blur") {
     // Always meaningful - we'll capture the final value
     return true;
   }
@@ -170,40 +170,46 @@ function isFormSubmitMeaningful(_event: Event, element: Element): boolean {
  */
 export function isInteractionMeaningful(
   event: Event,
-  element: Element
+  element: Element,
 ): boolean {
   try {
     const eventType = event.type;
 
     switch (eventType) {
-      case 'click':
+      case "click":
         return isClickMeaningful(event as MouseEvent, element);
 
-      case 'blur':
+      case "blur":
         return isInputMeaningful(event, element);
 
-      case 'change':
+      case "change":
         // Could be select or input
         if (element instanceof HTMLSelectElement) {
           return isSelectChangeMeaningful(event, element);
         } else if (element instanceof HTMLInputElement) {
           // For checkboxes and radios, change event is meaningful
-          return element.type === 'checkbox' || element.type === 'radio';
+          return element.type === "checkbox" || element.type === "radio";
         }
         return false;
 
-      case 'submit':
+      case "submit":
         return isFormSubmitMeaningful(event, element);
 
-      case 'beforeunload':
+      case "beforeunload":
         // Navigation is always meaningful
+        return true;
+
+      // Clipboard events are always meaningful
+      case "copy":
+      case "cut":
+      case "paste":
         return true;
 
       default:
         return false;
     }
   } catch (error) {
-    console.error('Error checking interaction meaningfulness:', error);
+    console.error("Error checking interaction meaningfulness:", error);
     return false;
   }
 }
@@ -213,36 +219,63 @@ export function isInteractionMeaningful(
  */
 export function getActionType(
   event: Event,
-  element: Element
-): 'click' | 'input_commit' | 'select_change' | 'submit' | 'navigate' {
+  element: Element,
+):
+  | "click"
+  | "input_commit"
+  | "select_change"
+  | "submit"
+  | "navigate"
+  | "copy"
+  | "cut"
+  | "paste" {
   const eventType = event.type;
 
   switch (eventType) {
-    case 'click':
-      return 'click';
+    case "click":
+      return "click";
 
-    case 'blur':
-      return 'input_commit';
+    case "blur":
+      return "input_commit";
 
-    case 'change':
+    case "keydown":
+      // Enter key on input/textarea should be treated as input_commit
+      // This captures the value before navigation happens
+      if (
+        element instanceof HTMLInputElement ||
+        element instanceof HTMLTextAreaElement
+      ) {
+        return "input_commit";
+      }
+      return "click";
+
+    case "change":
       if (element instanceof HTMLSelectElement) {
-        return 'select_change';
+        return "select_change";
       } else if (
         element instanceof HTMLInputElement &&
-        (element.type === 'checkbox' || element.type === 'radio')
+        (element.type === "checkbox" || element.type === "radio")
       ) {
-        return 'click'; // Treat checkbox/radio as clicks
+        return "click"; // Treat checkbox/radio as clicks
       }
-      return 'input_commit';
+      return "input_commit";
 
-    case 'submit':
-      return 'submit';
+    case "submit":
+      return "submit";
 
-    case 'beforeunload':
-      return 'navigate';
+    case "beforeunload":
+      return "navigate";
+
+    // Clipboard events
+    case "copy":
+      return "copy";
+    case "cut":
+      return "cut";
+    case "paste":
+      return "paste";
 
     default:
-      return 'click';
+      return "click";
   }
 }
 

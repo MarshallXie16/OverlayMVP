@@ -19,10 +19,30 @@ import {
 // GAP-001: Multi-page walkthrough session management
 import {
   startSession,
+  endSession,
   getSessionForTab,
   updateSession,
   handleNavigationComplete,
+  forceNavigationComplete,
 } from "./walkthroughSession";
+
+// Multi-page recording session management
+import {
+  startRecordingSession,
+  addStepToSession,
+  updateSessionTimer,
+  endRecordingSession,
+  getSessionForTab as getRecordingSessionForTab,
+  getRecordingSession,
+  handleRecordingNavigationComplete,
+} from "./recordingSession";
+
+// IndexedDB screenshot storage (replaces chrome.storage.session for screenshots)
+import {
+  storeScreenshot,
+  getScreenshotsForSession,
+  clearScreenshotsForSession,
+} from "./screenshotStore";
 
 // ============================================================================
 // FAILED UPLOAD STORAGE (FEAT-012)
@@ -152,7 +172,7 @@ export function handleMessage(
       break;
 
     case "CAPTURE_SCREENSHOT":
-      handleCaptureScreenshot(message, sendResponse);
+      handleCaptureScreenshot(message, sender, sendResponse);
       break;
 
     case "GET_RECORDING_STATE":
@@ -194,6 +214,35 @@ export function handleMessage(
 
     case "WALKTHROUGH_NAVIGATION_DONE":
       handleWalkthroughNavigationDone(sender, sendResponse);
+      break;
+
+    // Multi-page recording session handlers
+    case "RECORDING_GET_STATE":
+      handleGetRecordingSessionState(sender, sendResponse);
+      break;
+
+    case "RECORDING_START_SESSION":
+      handleStartRecordingSession(message, sender, sendResponse);
+      break;
+
+    case "RECORDING_ADD_STEP":
+      handleRecordingAddStep(message, sendResponse);
+      break;
+
+    case "RECORDING_ADD_SCREENSHOT":
+      handleRecordingAddScreenshot(message, sendResponse);
+      break;
+
+    case "RECORDING_UPDATE_TIMER":
+      handleRecordingUpdateTimer(message, sendResponse);
+      break;
+
+    case "RECORDING_NAVIGATION_DONE":
+      handleRecordingNavigationDone(sender, sendResponse);
+      break;
+
+    case "RECORDING_SESSION_END":
+      handleRecordingSessionEnd(message, sendResponse);
       break;
 
     default:
@@ -279,6 +328,7 @@ function handlePing(
 /**
  * Handle START_RECORDING message
  * Initializes recording state and injects content scripts
+ * Also creates a recording session for multi-page persistence
  */
 async function handleStartRecording(
   message: ExtensionMessage,
@@ -296,8 +346,25 @@ async function handleStartRecording(
       throw new Error("startingUrl is required and must be a string");
     }
 
-    // Start recording
+    // Get active tab ID for session tracking (multi-page recording)
+    const [activeTab] = await chrome.tabs.query({
+      active: true,
+      currentWindow: true,
+    });
+    const tabId = activeTab?.id;
+    if (!tabId) {
+      throw new Error("No active tab found for recording");
+    }
+
+    // Start recording (original flow - manages state in chrome.storage)
     const recordingState = await startRecording(workflowName, startingUrl);
+
+    // Also create session for multi-page persistence (chrome.storage.session)
+    // This enables widget restoration after page navigation
+    await startRecordingSession(workflowName, startingUrl, tabId);
+    console.log(
+      `[Background] Recording session created for tab ${tabId}: ${workflowName}`,
+    );
 
     sendResponse({
       type: "START_RECORDING",
@@ -331,7 +398,7 @@ async function handleStopRecording(
   let recordingState: Awaited<ReturnType<typeof stopRecording>> | null = null;
 
   try {
-    // Get recording state
+    // Get recording state from old system (state.ts)
     recordingState = await stopRecording();
 
     if (!recordingState) {
@@ -340,8 +407,61 @@ async function handleStopRecording(
 
     // Get steps and screenshots from message payload (sent from content script)
     const payload = message.payload || {};
-    const steps = payload.steps || recordingState.steps || [];
-    const screenshots = payload.screenshots || [];
+
+    // Get session ID for IndexedDB screenshot retrieval BEFORE ending session
+    const { session: currentSession } = await getRecordingSession();
+    const sessionId = currentSession?.sessionId;
+
+    // Get session data from new session system (chrome.storage.session)
+    // This contains steps that were recorded across page navigations
+    const sessionData = await endRecordingSession("user_stop");
+    console.log(
+      "[Background] Session data retrieved:",
+      sessionData ? `${sessionData.steps.length} steps` : "no session",
+    );
+
+    // Use session steps as primary source (works across origins)
+    // Fall back to payload.steps (IndexedDB - origin-scoped) or recordingState.steps
+    const sessionSteps = sessionData?.steps || [];
+    const payloadSteps = payload.steps || [];
+    const legacySteps = recordingState.steps || [];
+
+    // Use whichever source has more steps (session is preferred for multi-page)
+    let steps = sessionSteps;
+    if (payloadSteps.length > steps.length) {
+      steps = payloadSteps;
+      console.log("[Background] Using payload steps (IndexedDB)");
+    } else if (legacySteps.length > steps.length) {
+      steps = legacySteps;
+      console.log("[Background] Using legacy state steps");
+    } else if (steps.length > 0) {
+      console.log("[Background] Using session steps (chrome.storage.session)");
+    }
+
+    // Get screenshots from IndexedDB (stored there to avoid chrome.storage.session 1MB limit)
+    let screenshots: Array<{
+      step_number: number;
+      dataUrl: string;
+      timestamp: string;
+    }> = [];
+    if (sessionId) {
+      const indexedDbScreenshots = await getScreenshotsForSession(sessionId);
+      screenshots = indexedDbScreenshots.map((s) => ({
+        step_number: s.stepNumber,
+        dataUrl: s.dataUrl,
+        timestamp: s.timestamp, // Use stored timestamp (ISO string)
+      }));
+      console.log(
+        `[Background] Retrieved ${screenshots.length} screenshots from IndexedDB`,
+      );
+    }
+    // Fall back to payload screenshots if IndexedDB was empty
+    if (screenshots.length === 0 && payload.screenshots?.length > 0) {
+      screenshots = payload.screenshots;
+      console.log(
+        `[Background] Using ${screenshots.length} screenshots from payload`,
+      );
+    }
 
     console.log(
       `Uploading workflow "${recordingState.workflowName}" with ${steps.length} steps and ${screenshots.length} screenshots`,
@@ -381,22 +501,44 @@ async function handleStopRecording(
       workflowResponse,
     );
 
-    // Step 2: Upload screenshots with workflow_id (in background, don't block response)
-    if (screenshots.length > 0) {
-      uploadScreenshotsAsync(workflowResponse.workflow_id, screenshots)
-        .then(() => {
-          console.log(
-            `✅ All ${screenshots.length} screenshots uploaded and linked successfully`,
-          );
-        })
-        .catch((error) => {
-          console.error("❌ Screenshot upload/linking failed:", error);
-          // Don't fail the whole workflow creation - screenshots can be retried later
-        });
+    // Step 2: Upload screenshots with workflow_id
+    // CRITICAL: We must await this to prevent MV3 service worker suspension mid-upload
+    // and to ensure screenshots are only cleared from IndexedDB after successful upload
+    if (screenshots.length > 0 && sessionId) {
+      try {
+        await uploadScreenshotsAsync(workflowResponse.workflow_id, screenshots);
+        console.log(
+          `✅ All ${screenshots.length} screenshots uploaded and linked successfully`,
+        );
+
+        // Only clear IndexedDB screenshots AFTER successful upload
+        await clearScreenshotsForSession(sessionId);
+        console.log(
+          "[Background] IndexedDB screenshots cleared after successful upload",
+        );
+      } catch (error) {
+        console.error("❌ Screenshot upload/linking failed:", error);
+        // Keep screenshots in IndexedDB for potential retry
+        // The workflow was still created successfully, so don't fail the response
+        console.log(
+          "[Background] Keeping screenshots in IndexedDB for retry. SessionId:",
+          sessionId,
+        );
+      }
+    } else if (sessionId) {
+      // No screenshots to upload, just clean up
+      await clearScreenshotsForSession(sessionId).catch((error) => {
+        console.warn(
+          "[Background] Failed to clear IndexedDB screenshots:",
+          error,
+        );
+      });
     }
 
-    // Clean up recording state
+    // Clean up recording state (old state.ts system)
+    // Note: endRecordingSession() was already called earlier to retrieve session data
     await cleanupRecordingState();
+    console.log("[Background] Recording state cleaned up");
 
     sendResponse({
       type: "STOP_RECORDING",
@@ -484,9 +626,74 @@ async function handleStopRecording(
 }
 
 /**
+ * Helper: Wait for a tab to complete loading at an expected URL
+ *
+ * IMPORTANT: When called after chrome.tabs.update, the tab status may briefly
+ * still be "complete" before Chrome starts loading the new URL. This function
+ * handles that race condition by:
+ * 1. If expectedUrl is provided, first waiting for URL to change
+ * 2. Then waiting for status to become "complete"
+ */
+async function waitForTabLoad(
+  tabId: number,
+  expectedUrl?: string,
+  timeoutMs: number = 10000,
+): Promise<void> {
+  const startTime = Date.now();
+
+  // Helper to check if URL matches expected (handles trailing slashes and hash)
+  const urlMatches = (tabUrl: string | undefined): boolean => {
+    if (!expectedUrl) return true; // No expected URL means any URL is fine
+    if (!tabUrl) return false; // Have expected but no actual URL
+
+    // Compare origins and pathnames (ignore query params and fragments for flexibility)
+    try {
+      const expected = new URL(expectedUrl);
+      const actual = new URL(tabUrl);
+      return (
+        actual.origin === expected.origin &&
+        actual.pathname.replace(/\/$/, "") ===
+          expected.pathname.replace(/\/$/, "")
+      );
+    } catch {
+      // Fallback: simple string startsWith comparison
+      // We know expectedUrl and tabUrl are defined here due to early returns above
+      const expectedBase = expectedUrl!.split("?")[0]!.split("#")[0]!;
+      return tabUrl!.startsWith(expectedBase);
+    }
+  };
+
+  // Phase 1: If expectedUrl is provided, wait for URL to change
+  if (expectedUrl) {
+    while (Date.now() - startTime < timeoutMs) {
+      const tab = await chrome.tabs.get(tabId);
+      if (urlMatches(tab.url) || urlMatches(tab.pendingUrl)) {
+        break; // URL has changed to expected destination
+      }
+      await new Promise((r) => setTimeout(r, 50));
+    }
+  }
+
+  // Phase 2: Wait for tab status to become "complete"
+  while (Date.now() - startTime < timeoutMs) {
+    const tab = await chrome.tabs.get(tabId);
+    if (tab.status === "complete" && (!expectedUrl || urlMatches(tab.url))) {
+      return;
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+
+  throw new Error(
+    `Tab ${tabId} did not complete loading within ${timeoutMs}ms`,
+  );
+}
+
+/**
  * Handle START_WALKTHROUGH message
  * Fetches workflow from API and sends to content script
  * EXT-001: Walkthrough Messaging & Data Loading
+ *
+ * Fixed: Properly navigates to workflow starting_url before injecting walkthrough
  */
 async function handleStartWalkthrough(
   message: ExtensionMessage,
@@ -515,13 +722,17 @@ async function handleStartWalkthrough(
       throw new Error("Workflow has no steps");
     }
 
-    // Get the active tab (where dashboard opened the URL)
-    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tabs[0]?.id) {
-      throw new Error("No active tab found");
+    // Always create a new tab for the walkthrough
+    // This ensures the dashboard (sender tab) stays open for the user
+    const newTab = await chrome.tabs.create({ url: workflow.starting_url });
+    if (!newTab.id) {
+      throw new Error("Failed to create new tab");
     }
-
-    const tabId = tabs[0].id;
+    const tabId = newTab.id;
+    console.log(
+      `[Background] Created new tab ${tabId} for workflow starting URL: ${workflow.starting_url}`,
+    );
+    await waitForTabLoad(tabId, workflow.starting_url);
 
     // GAP-001: Create walkthrough session for multi-page persistence
     const session = await startSession(workflow, tabId);
@@ -529,17 +740,46 @@ async function handleStartWalkthrough(
       `[Background] Created walkthrough session: ${session.sessionId}`,
     );
 
-    // Ensure walkthrough content script is injected before messaging
-    console.log(
-      "[Background] Injecting walkthrough content script into tab",
-      tabId,
-    );
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      files: ["content/walkthrough.js"],
-    });
+    // Check if walkthrough content script is already loaded (manifest injects on <all_urls>)
+    // Only inject if ping fails to avoid duplicate listeners
+    let contentScriptReady = false;
+    try {
+      const pingResponse = await chrome.tabs.sendMessage(tabId, {
+        type: "WALKTHROUGH_PING",
+      });
+      contentScriptReady = pingResponse?.ready === true;
+      console.log(
+        "[Background] WALKTHROUGH_PING response:",
+        pingResponse,
+        "ready:",
+        contentScriptReady,
+      );
+    } catch (err) {
+      console.log(
+        "[Background] WALKTHROUGH_PING failed, content script not loaded yet:",
+        err,
+      );
+    }
+
+    if (!contentScriptReady) {
+      console.log(
+        "[Background] Injecting walkthrough content script into tab",
+        tabId,
+      );
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        files: ["content/walkthrough.js"],
+      });
+
+      // Small delay to ensure content script message listener is ready
+      await new Promise((r) => setTimeout(r, 100));
+    }
 
     // Send workflow data with retries in case listener init lags
+    // Now properly waits for content script initialization to complete
+    let walkthroughStarted = false;
+    let lastError: string | null = null;
+
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         const response = await chrome.tabs.sendMessage(tabId, {
@@ -556,26 +796,52 @@ async function handleStartWalkthrough(
           `[Background] WALKTHROUGH_DATA ack (attempt ${attempt}):`,
           response,
         );
-        break;
+
+        // Check if content script successfully initialized
+        if (response?.success) {
+          walkthroughStarted = true;
+          break;
+        } else {
+          lastError = response?.error || "Content script initialization failed";
+          console.warn(
+            `[Background] WALKTHROUGH_DATA attempt ${attempt} - content script reported error:`,
+            lastError,
+          );
+        }
       } catch (err) {
+        lastError = err instanceof Error ? err.message : String(err);
         console.warn(
           `[Background] WALKTHROUGH_DATA attempt ${attempt} failed:`,
           err,
         );
-        await new Promise((r) => setTimeout(r, 250));
       }
+      // Wait before retry (increasing delay)
+      await new Promise((r) => setTimeout(r, 150 * attempt));
     }
 
-    // Respond to dashboard immediately
-    sendResponse({
-      type: "START_WALKTHROUGH",
-      payload: {
-        success: true,
-        workflowId: workflow.id,
-        workflowName: workflow.name,
-        stepCount: workflow.steps.length,
-      },
-    });
+    // Report result to dashboard
+    if (walkthroughStarted) {
+      sendResponse({
+        type: "START_WALKTHROUGH",
+        payload: {
+          success: true,
+          workflowId: workflow.id,
+          workflowName: workflow.name,
+          stepCount: workflow.steps.length,
+        },
+      });
+    } else {
+      // End the session since walkthrough failed to start
+      await endSession("error");
+      sendResponse({
+        type: "START_WALKTHROUGH",
+        payload: {
+          success: false,
+          error:
+            lastError || "Failed to initialize walkthrough in content script",
+        },
+      });
+    }
   } catch (error) {
     console.error("[Background] Failed to start walkthrough:", error);
     sendResponse({
@@ -684,16 +950,49 @@ async function uploadScreenshotsAsync(
 
 /**
  * Handle CAPTURE_SCREENSHOT message
- * Captures screenshot of active tab
+ * Captures screenshot of sender's tab (not just active tab)
+ * This ensures we capture the correct tab during cross-origin navigation
  */
 async function handleCaptureScreenshot(
   _message: ExtensionMessage,
+  sender: chrome.runtime.MessageSender,
   sendResponse: (response?: any) => void,
 ): Promise<void> {
   try {
-    const result = await captureScreenshot();
+    // DIAGNOSTIC: Log full sender object to debug cross-origin issues
+    console.log(
+      `[CAPTURE_SCREENSHOT] 📸 Full sender:`,
+      JSON.stringify({
+        tabId: sender.tab?.id,
+        tabUrl: sender.tab?.url,
+        tabStatus: sender.tab?.status,
+        tabActive: sender.tab?.active,
+        tabWindowId: sender.tab?.windowId,
+        frameId: sender.frameId,
+        url: sender.url,
+        origin: sender.origin,
+      }),
+    );
+
+    // Use sender's tab ID to ensure we capture the correct tab
+    // This is critical for cross-origin recording where active tab may differ
+    const senderTabId = sender.tab?.id;
+
+    if (!senderTabId) {
+      console.error(
+        `[CAPTURE_SCREENSHOT] ⚠️ sender.tab.id is UNDEFINED! sender.url=${sender.url}`,
+      );
+    }
+
+    console.log(`[CAPTURE_SCREENSHOT] Capturing sender tab ${senderTabId}`);
+
+    const result = await captureScreenshot(senderTabId);
 
     if ("error" in result) {
+      console.error(
+        `[CAPTURE_SCREENSHOT] Failed for tab ${senderTabId}:`,
+        result.error,
+      );
       throw new Error(result.error);
     }
 
@@ -1180,6 +1479,9 @@ async function handleWalkthroughNavigationDone(
 
     console.log(`[Background] WALKTHROUGH_NAVIGATION_DONE from tab ${tabId}`);
 
+    // Force clear navigation flag first to ensure it's not stuck
+    await forceNavigationComplete();
+    // Then call normal handler
     await handleNavigationComplete(tabId);
 
     sendResponse({
@@ -1191,6 +1493,337 @@ async function handleWalkthroughNavigationDone(
     sendResponse({
       type: "WALKTHROUGH_NAVIGATION_DONE",
       payload: { success: false },
+    });
+  }
+}
+
+// ============================================================================
+// MULTI-PAGE RECORDING SESSION HANDLERS
+// ============================================================================
+
+/**
+ * Handle RECORDING_GET_STATE message
+ * Returns recording session state for content script restoration after page navigation
+ */
+async function handleGetRecordingSessionState(
+  sender: chrome.runtime.MessageSender,
+  sendResponse: (response?: any) => void,
+): Promise<void> {
+  try {
+    const tabId = sender.tab?.id;
+    if (!tabId) {
+      sendResponse({
+        type: "RECORDING_GET_STATE",
+        payload: { session: null, shouldRestore: false },
+      });
+      return;
+    }
+
+    console.log(`[Background] RECORDING_GET_STATE from tab ${tabId}`);
+
+    const { session, shouldRestore } = await getRecordingSessionForTab(tabId);
+
+    console.log(
+      `[Background] Recording session for tab ${tabId}:`,
+      session ? `found (step ${session.currentStepNumber})` : "none",
+      `shouldRestore: ${shouldRestore}`,
+    );
+
+    sendResponse({
+      type: "RECORDING_GET_STATE",
+      payload: { session, shouldRestore },
+    });
+  } catch (error) {
+    console.error("[Background] RECORDING_GET_STATE failed:", error);
+    sendResponse({
+      type: "RECORDING_GET_STATE",
+      payload: { session: null, shouldRestore: false },
+    });
+  }
+}
+
+/**
+ * Handle RECORDING_START_SESSION message
+ * Creates a new recording session in storage
+ */
+async function handleStartRecordingSession(
+  message: ExtensionMessage,
+  sender: chrome.runtime.MessageSender,
+  sendResponse: (response?: any) => void,
+): Promise<void> {
+  try {
+    const { workflowName, startingUrl } = message.payload || {};
+    const tabId = sender.tab?.id;
+
+    if (!workflowName || typeof workflowName !== "string") {
+      throw new Error("workflowName is required");
+    }
+
+    if (!startingUrl || typeof startingUrl !== "string") {
+      throw new Error("startingUrl is required");
+    }
+
+    if (!tabId) {
+      throw new Error("Tab ID not available");
+    }
+
+    console.log(`[Background] RECORDING_START_SESSION: ${workflowName}`);
+
+    const session = await startRecordingSession(
+      workflowName,
+      startingUrl,
+      tabId,
+    );
+
+    sendResponse({
+      type: "RECORDING_START_SESSION",
+      payload: { success: true, session },
+    });
+  } catch (error) {
+    console.error("[Background] RECORDING_START_SESSION failed:", error);
+    sendResponse({
+      type: "RECORDING_START_SESSION",
+      payload: {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to start recording session",
+      },
+    });
+  }
+}
+
+/**
+ * Handle RECORDING_ADD_STEP message
+ * Adds a step to the recording session
+ */
+async function handleRecordingAddStep(
+  message: ExtensionMessage,
+  sendResponse: (response?: any) => void,
+): Promise<void> {
+  try {
+    const { step } = message.payload || {};
+
+    if (!step) {
+      throw new Error("Step data is required");
+    }
+
+    // addStepToSession now assigns the step_number and returns it
+    const result = await addStepToSession(step);
+
+    if (result) {
+      sendResponse({
+        type: "RECORDING_ADD_STEP",
+        payload: { success: true, stepNumber: result.stepNumber },
+      });
+    } else {
+      sendResponse({
+        type: "RECORDING_ADD_STEP",
+        payload: { success: false },
+      });
+    }
+  } catch (error) {
+    console.error("[Background] RECORDING_ADD_STEP failed:", error);
+    sendResponse({
+      type: "RECORDING_ADD_STEP",
+      payload: { success: false },
+    });
+  }
+}
+
+/**
+ * Handle RECORDING_ADD_SCREENSHOT message
+ * Stores screenshot in IndexedDB (not chrome.storage.session) to avoid 1MB limit
+ *
+ * IMPORTANT: Includes retry logic for navigation transitions. During cross-origin
+ * navigation, the session lookup may temporarily fail due to cache staleness.
+ * We retry after a short delay to handle this race condition.
+ */
+async function handleRecordingAddScreenshot(
+  message: ExtensionMessage,
+  sendResponse: (response?: any) => void,
+): Promise<void> {
+  try {
+    const { stepNumber, dataUrl } = message.payload || {};
+
+    if (typeof stepNumber !== "number") {
+      throw new Error("stepNumber is required");
+    }
+
+    if (!dataUrl || typeof dataUrl !== "string") {
+      throw new Error("dataUrl is required");
+    }
+
+    // Get current session ID for IndexedDB storage
+    // Retry logic: session may be temporarily unavailable during navigation transition
+    let session = (await getRecordingSession()).session;
+
+    if (!session) {
+      console.log(
+        `[Background] Screenshot step ${stepNumber}: Session not found, retrying after delay...`,
+      );
+      // Wait for navigation to settle and cache to refresh
+      await new Promise((r) => setTimeout(r, 100));
+      session = (await getRecordingSession()).session;
+
+      if (!session) {
+        // Second retry with longer delay
+        console.log(
+          `[Background] Screenshot step ${stepNumber}: Retry 1 failed, trying again...`,
+        );
+        await new Promise((r) => setTimeout(r, 200));
+        session = (await getRecordingSession()).session;
+      }
+    }
+
+    if (!session) {
+      console.error(
+        `[Background] Screenshot step ${stepNumber}: No session after retries`,
+      );
+      throw new Error("No active recording session after retries");
+    }
+
+    console.log(
+      `[Background] Storing screenshot for step ${stepNumber}, session: ${session.sessionId.substring(0, 8)}...`,
+    );
+
+    // Store in IndexedDB (no size limit, unlike chrome.storage.session's 1MB limit)
+    const success = await storeScreenshot(
+      session.sessionId,
+      stepNumber,
+      dataUrl,
+    );
+
+    if (success) {
+      console.log(
+        `[Background] Screenshot step ${stepNumber} stored successfully`,
+      );
+    }
+
+    sendResponse({
+      type: "RECORDING_ADD_SCREENSHOT",
+      payload: { success },
+    });
+  } catch (error) {
+    console.error("[Background] RECORDING_ADD_SCREENSHOT failed:", error);
+    sendResponse({
+      type: "RECORDING_ADD_SCREENSHOT",
+      payload: { success: false },
+    });
+  }
+}
+
+/**
+ * Handle RECORDING_UPDATE_TIMER message
+ * Syncs widget timer state to session
+ */
+async function handleRecordingUpdateTimer(
+  message: ExtensionMessage,
+  sendResponse: (response?: any) => void,
+): Promise<void> {
+  try {
+    const { elapsedSeconds } = message.payload || {};
+
+    if (typeof elapsedSeconds !== "number") {
+      throw new Error("elapsedSeconds is required");
+    }
+
+    const success = await updateSessionTimer(elapsedSeconds);
+
+    sendResponse({
+      type: "RECORDING_UPDATE_TIMER",
+      payload: { success },
+    });
+  } catch (error) {
+    console.error("[Background] RECORDING_UPDATE_TIMER failed:", error);
+    sendResponse({
+      type: "RECORDING_UPDATE_TIMER",
+      payload: { success: false },
+    });
+  }
+}
+
+/**
+ * Handle RECORDING_NAVIGATION_DONE message
+ * Marks navigation as complete in recording session
+ */
+async function handleRecordingNavigationDone(
+  sender: chrome.runtime.MessageSender,
+  sendResponse: (response?: any) => void,
+): Promise<void> {
+  try {
+    const tabId = sender.tab?.id;
+    if (!tabId) {
+      sendResponse({
+        type: "RECORDING_NAVIGATION_DONE",
+        payload: { success: false },
+      });
+      return;
+    }
+
+    console.log(`[Background] RECORDING_NAVIGATION_DONE from tab ${tabId}`);
+
+    await handleRecordingNavigationComplete(tabId);
+
+    sendResponse({
+      type: "RECORDING_NAVIGATION_DONE",
+      payload: { success: true },
+    });
+  } catch (error) {
+    console.error("[Background] RECORDING_NAVIGATION_DONE failed:", error);
+    sendResponse({
+      type: "RECORDING_NAVIGATION_DONE",
+      payload: { success: false },
+    });
+  }
+}
+
+/**
+ * Handle RECORDING_SESSION_END message
+ * Ends the recording session and returns final data for upload
+ */
+async function handleRecordingSessionEnd(
+  message: ExtensionMessage,
+  sendResponse: (response?: any) => void,
+): Promise<void> {
+  try {
+    const { reason } = message.payload || {};
+    const validReasons = ["completed", "user_stop", "tab_closed", "timeout"];
+    const endReason = validReasons.includes(reason) ? reason : "user_stop";
+
+    console.log(`[Background] RECORDING_SESSION_END: ${endReason}`);
+
+    const session = await endRecordingSession(endReason);
+
+    if (session) {
+      sendResponse({
+        type: "RECORDING_SESSION_END",
+        payload: {
+          success: true,
+          session,
+        },
+      });
+    } else {
+      sendResponse({
+        type: "RECORDING_SESSION_END",
+        payload: {
+          success: false,
+          error: "No active recording session",
+        },
+      });
+    }
+  } catch (error) {
+    console.error("[Background] RECORDING_SESSION_END failed:", error);
+    sendResponse({
+      type: "RECORDING_SESSION_END",
+      payload: {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to end recording session",
+      },
     });
   }
 }

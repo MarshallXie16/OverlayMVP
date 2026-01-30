@@ -6,11 +6,15 @@
  * 1. Intent over mechanics - Record what user meant to do, not every DOM event
  * 2. Event hierarchy - Pick most semantic event from related group
  * 3. Value-based recording - Only record inputs when value changes
- * 4. Deduplication window - Group events within 100ms
+ * 4. Deduplication window - Group events within 15ms (reduced from 100ms for navigation)
  *
  * Example:
  * User clicks checkbox label → Triggers: click(label), click(input), change(input)
  * Records: Only change(input) - the most semantic event
+ *
+ * IMPORTANT: Buffer delay was reduced from 100ms to 15ms to fix click→navigate timing.
+ * Browser navigation can start as fast as 15ms after a click, so we need to flush
+ * events quickly before beforeunload fires.
  */
 
 /**
@@ -18,11 +22,14 @@
  */
 const EVENT_PRIORITY = {
   submit: 100, // Form submission (highest priority)
+  navigate: 100, // Navigation events (same priority as submit)
   change: 80, // Select/checkbox/radio changes
+  copy: 75, // Clipboard copy
+  cut: 75, // Clipboard cut
+  paste: 75, // Clipboard paste
   input_commit: 60, // Text input commits (blur with value change)
   select_change: 80, // Select dropdown changes
   click: 40, // Clicks on buttons/links
-  navigate: 100, // Navigation events
 } as const;
 
 /**
@@ -37,12 +44,20 @@ interface PendingEvent {
 }
 
 /**
+ * Callback type for recording events
+ * Must be async to support awaiting step recording during navigation
+ */
+type RecordCallback = (event: Event, element: Element) => void | Promise<void>;
+
+/**
  * Manages event grouping and deduplication
  */
 export class EventDeduplicator {
   private pendingEvents: PendingEvent[] = [];
   private flushTimer: number | null = null;
-  private readonly bufferDelay = 100; // ms to wait before flushing events
+  // Reduced from 100ms to 15ms to fix click→navigate timing race condition
+  // Browser navigation can start as fast as 15ms after a click
+  private readonly bufferDelay = 15;
 
   // Track input values to detect changes
   private inputValues: WeakMap<HTMLInputElement, string> = new WeakMap();
@@ -66,6 +81,18 @@ export class EventDeduplicator {
   }
 
   /**
+   * Marks an input's current value as "recorded"
+   * Call this after recording via keydown to prevent blur from re-recording
+   */
+  markInputRecorded(input: HTMLInputElement): void {
+    this.inputValues.set(input, this.getInputValue(input));
+    console.log(
+      "[EventDeduplicator] Marked input as recorded, value:",
+      this.getInputValue(input).substring(0, 50),
+    );
+  }
+
+  /**
    * Gets normalized input value (handles checkboxes, radios, text)
    */
   private getInputValue(input: HTMLInputElement): string {
@@ -78,12 +105,14 @@ export class EventDeduplicator {
   /**
    * Adds an event to the pending queue
    * Events are buffered and deduplicated before recording
+   *
+   * @param recordCallback - Async callback that records the event
    */
   addEvent(
     event: Event,
     element: Element,
     actionType: string,
-    recordCallback: (event: Event, element: Element) => void,
+    recordCallback: RecordCallback,
   ): void {
     const priority = this.getEventPriority(event, element, actionType);
 
@@ -216,26 +245,28 @@ export class EventDeduplicator {
   /**
    * Schedules flushing pending events
    */
-  private scheduleFlush(
-    recordCallback: (event: Event, element: Element) => void,
-  ): void {
+  private scheduleFlush(recordCallback: RecordCallback): void {
     if (this.flushTimer !== null) {
       window.clearTimeout(this.flushTimer);
     }
 
     this.flushTimer = window.setTimeout(() => {
-      this.flush(recordCallback);
+      // Fire-and-forget for scheduled flush (non-blocking)
+      this.flush(recordCallback).catch((error) => {
+        console.error("[EventDeduplicator] Scheduled flush error:", error);
+      });
     }, this.bufferDelay);
   }
 
   /**
    * Flushes pending events - deduplicates and records
+   * Now async to properly await recording callbacks during navigation
+   *
+   * @returns The number of events that were recorded (after deduplication)
    */
-  private flush(
-    recordCallback: (event: Event, element: Element) => void,
-  ): void {
+  private async flush(recordCallback: RecordCallback): Promise<number> {
     if (this.pendingEvents.length === 0) {
-      return;
+      return 0;
     }
 
     console.log(
@@ -245,20 +276,27 @@ export class EventDeduplicator {
     // Group events by element or related elements
     const groups = this.groupRelatedEvents(this.pendingEvents);
 
-    // For each group, pick the highest priority event
+    // Track how many events we actually record
+    let recordedCount = 0;
+
+    // For each group, pick the highest priority event and await recording
     for (const group of groups) {
       const bestEvent = this.pickBestEvent(group);
       if (bestEvent) {
         console.log(
           `[EventDeduplicator] Recording ${bestEvent.event.type} on ${bestEvent.element.tagName} (priority: ${bestEvent.priority})`,
         );
-        recordCallback(bestEvent.event, bestEvent.element);
+        // Await the callback to ensure recording completes before navigation
+        await recordCallback(bestEvent.event, bestEvent.element);
+        recordedCount++;
       }
     }
 
     // Clear pending events
     this.pendingEvents = [];
     this.flushTimer = null;
+
+    return recordedCount;
   }
 
   /**
@@ -375,14 +413,17 @@ export class EventDeduplicator {
   }
 
   /**
-   * Forces immediate flush (used when stopping recording)
+   * Forces immediate flush (used when stopping recording or before navigation)
+   * Now async to properly await recording callbacks
+   *
+   * @returns The number of events that were recorded (after deduplication)
    */
-  forceFlush(recordCallback: (event: Event, element: Element) => void): void {
+  async forceFlush(recordCallback: RecordCallback): Promise<number> {
     if (this.flushTimer !== null) {
       window.clearTimeout(this.flushTimer);
       this.flushTimer = null;
     }
-    this.flush(recordCallback);
+    return this.flush(recordCallback);
   }
 
   /**

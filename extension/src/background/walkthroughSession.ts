@@ -327,19 +327,26 @@ export async function handleNavigationStart(
 /**
  * Handle navigation complete
  * Called when a session tab finishes loading
+ *
+ * Note: We always clear navigationInProgress if a session exists,
+ * even if the tab isn't recognized as part of the session. This prevents
+ * the flag from getting stuck due to timing issues between navigation
+ * events and content script initialization.
  */
 export async function handleNavigationComplete(tabId: number): Promise<void> {
-  const { session, isPartOfSession } = await getSession(tabId);
+  const { session } = await getSession(tabId);
 
-  if (!session || !isPartOfSession) {
+  if (!session) {
     return;
   }
 
+  // Always clear navigation flag to prevent it from getting stuck
+  // The content script will call WALKTHROUGH_GET_STATE after this
   if (session.navigationInProgress) {
     await updateSession({
       navigationInProgress: false,
     });
-    console.log("[WalkthroughSession] Navigation completed");
+    console.log("[WalkthroughSession] Navigation completed for tab:", tabId);
   }
 }
 
@@ -386,6 +393,23 @@ export async function endSession(
 export async function hasActiveSession(): Promise<boolean> {
   const { session } = await getSession();
   return session !== null && session.status === "active";
+}
+
+/**
+ * Force clear the navigation flag
+ * Used by content script after successful restoration to ensure flag is cleared
+ */
+export async function forceNavigationComplete(): Promise<boolean> {
+  const session = cachedSession || (await loadFromStorage());
+  if (!session) return false;
+
+  if (session.navigationInProgress) {
+    console.log(
+      "[WalkthroughSession] Force clearing navigationInProgress flag",
+    );
+    return updateSession({ navigationInProgress: false });
+  }
+  return true;
 }
 
 /**

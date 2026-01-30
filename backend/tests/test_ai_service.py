@@ -201,7 +201,7 @@ class TestPromptBuilding:
     def test_build_prompt_with_all_fields(self):
         """Test prompt building with complete metadata."""
         service = AIService(api_key="test-key")
-        
+
         element_meta = {
             "tag_name": "input",
             "type": "email",
@@ -209,7 +209,8 @@ class TestPromptBuilding:
             "placeholder": "your@email.com",
             "nearby_text": "Sign in to continue",
         }
-        action_data = {"input_value": "test@example.com"}
+        # Note: key is "value" not "input_value" - matches frontend action_data format
+        action_data = {"value": "test@example.com"}
         
         prompt = service._build_prompt(
             element_meta=element_meta,

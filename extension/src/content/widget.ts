@@ -297,6 +297,57 @@ class RecordingWidgetImpl implements RecordingWidget {
   public onPause(callback: () => void): void {
     this.pauseCallback = callback;
   }
+
+  /**
+   * Restore widget state after navigation (multi-page recording)
+   */
+  public restoreState(elapsedSeconds: number, isPaused: boolean): void {
+    console.log("[Widget] Restoring state:", { elapsedSeconds, isPaused });
+
+    // Restore elapsed time
+    this.elapsedSeconds = elapsedSeconds;
+    this.updateTimerDisplay();
+
+    // Restore pause state
+    this.isPaused = isPaused;
+    if (this.widget) {
+      if (isPaused) {
+        this.widget.classList.add("paused");
+      } else {
+        this.widget.classList.remove("paused");
+      }
+    }
+
+    // Update timer label
+    if (this.timerLabelElement) {
+      this.timerLabelElement.textContent = isPaused ? "Paused" : "Rec";
+    }
+
+    // Update pause/resume button
+    if (this.pauseBtn) {
+      if (isPaused) {
+        this.pauseBtn.innerHTML = ICONS.play;
+        this.pauseBtn.className = "icon-btn resume-btn";
+        this.pauseBtn.title = "Resume";
+      } else {
+        this.pauseBtn.innerHTML = ICONS.pause;
+        this.pauseBtn.className = "icon-btn pause-btn";
+        this.pauseBtn.title = "Pause";
+      }
+    }
+
+    // Start timer interval (it will respect isPaused flag)
+    if (this.timerInterval === null) {
+      this.timerInterval = window.setInterval(() => {
+        if (!this.isPaused) {
+          this.elapsedSeconds++;
+          this.updateTimerDisplay();
+        }
+      }, 1000);
+    }
+
+    console.log("[Widget] State restored successfully");
+  }
 }
 
 // Singleton instance
@@ -354,4 +405,18 @@ export function onWidgetStop(callback: () => void): void {
 export function onWidgetPause(callback: () => void): void {
   const widget = getRecordingWidget();
   widget.onPause(callback);
+}
+
+/**
+ * Restore widget state after navigation (multi-page recording)
+ * Restores timer value and pause state
+ */
+export function restoreWidgetState(
+  elapsedSeconds: number,
+  isPaused: boolean,
+): void {
+  const widget = getRecordingWidget() as RecordingWidgetImpl;
+  if (widget && typeof (widget as any).restoreState === "function") {
+    (widget as any).restoreState(elapsedSeconds, isPaused);
+  }
 }

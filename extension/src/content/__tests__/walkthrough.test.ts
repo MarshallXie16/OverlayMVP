@@ -197,10 +197,13 @@ describe("Walkthrough Mode", () => {
       expect(state?.status).toBe("active");
     });
 
-    it("should return early if no steps provided", async () => {
+    it("should throw error if no steps provided", async () => {
       const payload = createPayload([], { totalSteps: 0 });
 
-      await initializeAndWait(payload);
+      // Should throw an error when no steps are provided
+      await expect(initializeAndWait(payload)).rejects.toThrow(
+        "Walkthrough has no steps",
+      );
 
       const state = getWalkthroughState();
       // State should not be initialized
@@ -1492,9 +1495,8 @@ describe("Walkthrough Mode", () => {
       // Enable fake timers AFTER initialization (to avoid initializeAndWait blocking)
       vi.useFakeTimers();
 
-      // Rapid clicks increment state synchronously via handleNext -> advanceStep
-      // The isShowingStep guard prevents concurrent showCurrentStep calls
-      // This test verifies the system doesn't crash and state remains consistent
+      // Rapid clicks - buttons are disabled during processing to prevent race conditions
+      // Only the first click is processed, subsequent clicks on disabled buttons are ignored
       nextBtn?.click();
       nextBtn?.click();
       nextBtn?.click();
@@ -1509,8 +1511,8 @@ describe("Walkthrough Mode", () => {
       const finalState = getWalkthroughState();
       expect(finalState).not.toBeNull();
       expect(finalState?.status).toBe("active");
-      // currentStepIndex should be exactly 3 (0+3 clicks)
-      expect(finalState?.currentStepIndex).toBe(3);
+      // currentStepIndex should be 1 (only first click processed due to button disabling)
+      expect(finalState?.currentStepIndex).toBe(1);
       // Overlay should still exist and be functional
       expect(document.getElementById("walkthrough-overlay")).toBeTruthy();
     });
@@ -1526,6 +1528,7 @@ describe("Walkthrough Mode", () => {
       vi.useFakeTimers();
 
       // Click 10 times rapidly (more than available steps)
+      // Due to button disabling during processing, only first click is processed
       for (let i = 0; i < 10; i++) {
         nextBtn?.click();
       }
@@ -1536,11 +1539,11 @@ describe("Walkthrough Mode", () => {
       // Restore real timers
       vi.useRealTimers();
 
-      // Should stop at last step (index 2), status may be completed or active
+      // Should be at step 1 (only first click processed due to button disabling)
       const finalState = getWalkthroughState();
-      expect(finalState?.currentStepIndex).toBe(2);
-      // Status should be consistent (completed because we reached end, or active if still showing)
-      expect(["active", "completed"]).toContain(finalState?.status);
+      expect(finalState?.currentStepIndex).toBe(1);
+      // Status should be consistent
+      expect(finalState?.status).toBe("active");
     });
   });
 

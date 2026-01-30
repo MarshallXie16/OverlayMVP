@@ -103,6 +103,15 @@ class AIService:
                 logger.warning(f"Step {step.id} has no screenshot, using fallback")
                 return self._generate_fallback_label(step, element_meta)
             
+            # Extract workflow context for better labelling
+            workflow_context = None
+            if step.workflow:
+                workflow_context = {
+                    "name": step.workflow.name,
+                    "step_number": step.step_number,
+                    "total_steps": step.workflow.step_count,
+                }
+
             # Try AI labeling
             try:
                 labels = self._call_claude_api(
@@ -111,6 +120,7 @@ class AIService:
                     action_type=step.action_type,
                     action_data=action_data,
                     page_context=page_context,
+                    workflow_context=workflow_context,
                 )
                 
                 # Add model version
@@ -134,20 +144,22 @@ class AIService:
         action_type: str,
         action_data: dict,
         page_context: dict,
+        workflow_context: dict | None = None,
     ) -> Dict[str, any]:
         """
         Call Claude Vision API with screenshot and metadata.
-        
+
         Args:
             screenshot_url: URL to screenshot image (local or S3)
             element_meta: Element metadata (tag, role, labels, etc.)
             action_type: Type of action (click, input_commit, etc.)
             action_data: Action data (e.g., input value)
             page_context: Page context (URL, title, viewport)
-        
+            workflow_context: Optional workflow context (name, step number, total steps)
+
         Returns:
             dict: Parsed API response with labels and confidence
-        
+
         Raises:
             APIError: If Claude API fails
             RateLimitError: If rate limit exceeded
@@ -158,6 +170,7 @@ class AIService:
             action_type=action_type,
             action_data=action_data,
             page_context=page_context,
+            workflow_context=workflow_context,
         )
         
         # Prepare image source
@@ -275,16 +288,18 @@ class AIService:
         action_type: str,
         action_data: dict,
         page_context: dict,
+        workflow_context: dict | None = None,
     ) -> str:
         """
         Build prompt for Claude based on technical requirements.
-        
+
         Args:
             element_meta: Element metadata
             action_type: Action type
             action_data: Action data
             page_context: Page context
-        
+            workflow_context: Optional workflow context (name, step number, total steps)
+
         Returns:
             str: Formatted prompt
         """
@@ -294,26 +309,126 @@ class AIService:
         label_text = element_meta.get("label_text", "N/A")
         placeholder = element_meta.get("placeholder", "N/A")
         nearby_text = element_meta.get("nearby_text", "N/A")
-        
-        # Input value (if applicable)
-        input_value = action_data.get("input_value", "")
-        
-        # Build prompt (simpler now that tool calling handles structure)
-        prompt = f"""Analyze this screenshot and element to generate clear workflow labels.
 
-ELEMENT DETAILS:
-- Tag: {tag}
-- Type: {elem_type}
-- Label text: {label_text}
-- Placeholder: {placeholder}
-- Nearby text: {nearby_text}
+        # Enhanced context - additional fields for better labelling
+        text_content = element_meta.get("text", "")
+        role = element_meta.get("role", "")
+        aria_label = element_meta.get("aria_label", "")
+        visual_region = element_meta.get("visualRegion", "unknown")
 
-ACTION: {action_type}
-{f"Input value: {input_value}" if input_value else ''}
+        # Visibility status
+        is_visible = element_meta.get("visible", True)
 
-Generate a short, descriptive field label and a clear instruction for this workflow step."""
-        
-        return prompt
+        # Bounding box - element position on screen
+        bounding_box = element_meta.get("bounding_box", {})
+        position = ""
+        if bounding_box:
+            x = bounding_box.get("x", 0)
+            y = bounding_box.get("y", 0)
+            position = f"at position ({x}, {y})"
+
+        # Form context - critical for disambiguation
+        form_context = element_meta.get("formContext", {})
+        form_info = ""
+        if form_context:
+            form_id = form_context.get("form_id", "")
+            form_action = form_context.get("form_action", "")
+            field_index = form_context.get("field_index", "")
+            total_fields = form_context.get("total_fields", "")
+            if field_index and total_fields:
+                form_info = f"Field {field_index} of {total_fields}"
+                if form_id:
+                    form_info += f" in form '{form_id}'"
+                if form_action:
+                    form_info += f" (submits to: {form_action})"
+
+        # Nearby landmarks - contextual clues
+        nearby_landmarks = element_meta.get("nearbyLandmarks", {})
+        closest_heading = ""
+        closest_label = ""
+        if nearby_landmarks:
+            heading_info = nearby_landmarks.get("closestHeading")
+            if heading_info and heading_info.get("text"):
+                closest_heading = heading_info.get("text", "")[:50]
+            label_info = nearby_landmarks.get("closest_label")
+            if label_info and label_info.get("text"):
+                closest_label = label_info.get("text", "")[:50]
+            sibling_texts = nearby_landmarks.get("siblingTexts", [])
+            if sibling_texts:
+                nearby_text = ", ".join(sibling_texts[:3])  # Limit to 3
+
+        # Page context
+        page_url = page_context.get("url", "")
+        page_title = page_context.get("title", "")
+
+        # Input value (if applicable) - BUGFIX: key is "value" not "input_value"
+        input_value = action_data.get("value", "") if action_data else ""
+
+        # Workflow context
+        workflow_info = ""
+        if workflow_context:
+            wf_name = workflow_context.get("name", "")
+            step_num = workflow_context.get("step_number", "")
+            total_steps = workflow_context.get("total_steps", "")
+            if wf_name and step_num and total_steps:
+                workflow_info = f'Workflow: "{wf_name}" - Step {step_num} of {total_steps}'
+
+        # Build prompt sections
+        sections = ["Analyze this screenshot and element to generate clear workflow labels.", ""]
+
+        # Workflow context section (if available)
+        if workflow_info:
+            sections.append("WORKFLOW CONTEXT:")
+            sections.append(f"- {workflow_info}")
+            sections.append("")
+
+        # Page context section
+        sections.append("PAGE CONTEXT:")
+        sections.append(f"- URL: {page_url}")
+        sections.append(f"- Title: {page_title}")
+        sections.append(f"- Visual region: {visual_region}")
+        if closest_heading:
+            sections.append(f"- Section heading: {closest_heading}")
+        if not is_visible:
+            sections.append("- Visible: Hidden")
+        sections.append("")
+
+        # Element details section
+        sections.append("ELEMENT DETAILS:")
+        sections.append(f"- Tag: {tag}")
+        sections.append(f"- Type: {elem_type}")
+        if role:
+            sections.append(f"- ARIA role: {role}")
+        if aria_label:
+            sections.append(f"- ARIA label: {aria_label}")
+        sections.append(f"- Label text: {label_text}")
+        if closest_label:
+            sections.append(f"- Closest label: {closest_label}")
+        sections.append(f"- Placeholder: {placeholder}")
+        if text_content:
+            sections.append(f"- Element text: {text_content[:100]}")
+        sections.append(f"- Nearby text: {nearby_text}")
+        if position:
+            sections.append(f"- Position: {position}")
+        if form_info:
+            sections.append(f"- Form context: {form_info}")
+        sections.append("")
+
+        # Action section
+        sections.append(f"ACTION: {action_type}")
+        if input_value:
+            sections.append(f"Input value: {input_value}")
+        sections.append("")
+
+        # Instructions section
+        sections.append("INSTRUCTIONS:")
+        sections.append("1. The element should be highlighted with a green outline in the screenshot")
+        sections.append("2. Use the page title and URL to understand the application context")
+        sections.append("3. Use form context and step position to disambiguate similar fields")
+        sections.append("4. Generate a short, descriptive field label (max 5 words) that identifies this UI element")
+        sections.append("5. Generate a clear, action-oriented instruction for this workflow step (1-2 sentences)")
+
+        return "\n".join(sections)
     
     def _generate_fallback_label(
         self,

@@ -120,6 +120,9 @@ export async function restoreWalkthrough(
   // Allow Escape key to exit walkthrough
   setupEscapeKeyHandler();
 
+  // Keep spotlight in sync with element position during resize/scroll
+  setupSpotlightUpdateHandlers();
+
   // Show current step
   await showCurrentStep();
 
@@ -166,17 +169,17 @@ function syncStateToBackground(): void {
 // Initialize on script load (GAP-001)
 // Use retry with backoff to handle service worker cold starts
 async function initializeWithRetry(
-  maxRetries: number = 3,
-  baseDelay: number = 100,
+  maxRetries: number = 5, // Increased from 3 for better timing tolerance
+  baseDelay: number = 150, // Increased from 100 for better timing alignment
 ): Promise<void> {
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
       await initializeContentScript();
       return; // Success
     } catch (error) {
-      const delay = baseDelay * Math.pow(2, attempt); // Exponential backoff
+      const delay = baseDelay * Math.pow(1.5, attempt); // Gentler backoff (1.5x instead of 2x)
       console.debug(
-        `[Walkthrough] Init attempt ${attempt + 1} failed, retrying in ${delay}ms`,
+        `[Walkthrough] Init attempt ${attempt + 1}/${maxRetries} failed, retrying in ${Math.round(delay)}ms`,
       );
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
@@ -184,10 +187,13 @@ async function initializeWithRetry(
   console.log("[Walkthrough] Session check completed (no active session)");
 }
 
-// Start initialization after a short delay to ensure DOM is ready
+// Start initialization after a delay to ensure DOM is ready
+// and give background time to create session after tab load
+// 200ms provides better timing alignment with background's session creation
+// and allows chrome.webNavigation.onCompleted to fire first
 setTimeout(() => {
   initializeWithRetry();
-}, 50);
+}, 200);
 
 // SVG Icons (inline to avoid dependencies)
 const ICONS = {
@@ -224,6 +230,128 @@ let activeListeners: Array<{
   handler: EventListener;
 }> = [];
 const inputValues = new WeakMap<HTMLElement, string>();
+
+// Spotlight update handlers for resize/scroll
+let spotlightUpdateHandler: (() => void) | null = null;
+
+// Drag state for tooltip
+let isDragging = false;
+let dragOffset = { x: 0, y: 0 };
+let tooltipDragSetup = false;
+
+/**
+ * Debounce helper for spotlight updates
+ */
+function debounce(fn: () => void, delay: number): () => void {
+  let timeoutId: number | null = null;
+  return () => {
+    if (timeoutId) window.clearTimeout(timeoutId);
+    timeoutId = window.setTimeout(fn, delay);
+  };
+}
+
+/**
+ * Setup drag handlers for tooltip card
+ * Allows user to reposition the card by dragging the header
+ */
+function setupTooltipDrag(): void {
+  if (!tooltipElement || tooltipDragSetup) return;
+
+  const header = tooltipElement.querySelector(
+    ".walkthrough-tooltip-header",
+  ) as HTMLElement;
+  if (!header) return;
+
+  header.style.cursor = "grab";
+  header.style.userSelect = "none";
+
+  const handleMouseDown = (e: MouseEvent) => {
+    // Don't drag if clicking on buttons
+    if ((e.target as HTMLElement).closest("button")) return;
+
+    isDragging = true;
+    header.style.cursor = "grabbing";
+    const rect = tooltipElement!.getBoundingClientRect();
+    dragOffset = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    e.preventDefault();
+  };
+
+  const handleMouseMove = (e: MouseEvent) => {
+    if (!isDragging || !tooltipElement) return;
+    tooltipElement.style.left = `${e.clientX - dragOffset.x}px`;
+    tooltipElement.style.top = `${e.clientY - dragOffset.y}px`;
+    tooltipElement.style.transform = "";
+  };
+
+  const handleMouseUp = () => {
+    if (isDragging) {
+      isDragging = false;
+      header.style.cursor = "grab";
+    }
+  };
+
+  header.addEventListener("mousedown", handleMouseDown);
+  document.addEventListener("mousemove", handleMouseMove);
+  document.addEventListener("mouseup", handleMouseUp);
+
+  tooltipDragSetup = true;
+}
+
+/**
+ * Setup handlers to update spotlight position on resize/scroll
+ */
+function setupSpotlightUpdateHandlers(): void {
+  if (spotlightUpdateHandler) return; // Already setup
+
+  const updateSpotlightDebounced = debounce(() => {
+    if (currentTargetElement && walkthroughState?.status === "active") {
+      updateSpotlight(currentTargetElement);
+      // Also reposition tooltip
+      if (tooltipElement && walkthroughState) {
+        const currentStep =
+          walkthroughState.steps[walkthroughState.currentStepIndex];
+        if (currentStep) {
+          updateTooltipPosition(currentTargetElement);
+        }
+      }
+    }
+  }, 100);
+
+  spotlightUpdateHandler = updateSpotlightDebounced;
+  window.addEventListener("resize", spotlightUpdateHandler);
+  window.addEventListener("scroll", spotlightUpdateHandler, true);
+  console.log("[Walkthrough] Spotlight update handlers set up");
+}
+
+/**
+ * Remove spotlight update handlers
+ */
+function removeSpotlightUpdateHandlers(): void {
+  if (spotlightUpdateHandler) {
+    window.removeEventListener("resize", spotlightUpdateHandler);
+    window.removeEventListener("scroll", spotlightUpdateHandler, true);
+    spotlightUpdateHandler = null;
+    console.log("[Walkthrough] Spotlight update handlers removed");
+  }
+}
+
+/**
+ * Update tooltip position (extracted for reuse)
+ */
+function updateTooltipPosition(targetElement: HTMLElement): void {
+  if (!tooltipElement) return;
+
+  const targetRect = targetElement.getBoundingClientRect();
+  const tooltipRect = tooltipElement.getBoundingClientRect();
+  const pos = calculateTooltipPosition(
+    targetRect,
+    tooltipRect.width,
+    tooltipRect.height,
+  );
+
+  tooltipElement.style.top = `${pos.top}px`;
+  tooltipElement.style.left = `${pos.left}px`;
+}
 
 // Flash success effect with cleanup tracking
 const flashPrevStyles = new Map<
@@ -296,10 +424,18 @@ export async function initializeWalkthrough(payload: {
     },
   );
 
+  // Guard against concurrent initialization (race condition with restoreWalkthrough)
+  if (walkthroughState !== null) {
+    console.log(
+      "[Walkthrough] Already initialized, skipping duplicate initialization",
+    );
+    return;
+  }
+
   // Validate payload
   if (!payload.steps || payload.steps.length === 0) {
     console.error("[Walkthrough] No steps provided");
-    return;
+    throw new Error("Walkthrough has no steps");
   }
 
   // Create walkthrough state
@@ -329,6 +465,9 @@ export async function initializeWalkthrough(payload: {
 
   // Allow Escape key to exit walkthrough
   setupEscapeKeyHandler();
+
+  // Keep spotlight in sync with element position during resize/scroll
+  setupSpotlightUpdateHandlers();
 
   // Show first step
   await showCurrentStep();
@@ -728,6 +867,7 @@ function destroyOverlay(): void {
     backdropElement = null;
     currentTargetElement = null;
     tooltipDelegationSetup = false; // Reset for next walkthrough
+    tooltipDragSetup = false; // Reset drag setup for next walkthrough
     console.log("[Walkthrough] Overlay destroyed");
   }
 }
@@ -1197,15 +1337,34 @@ async function validateHealingWithAI(
  */
 function updateSpotlight(targetElement: HTMLElement): void {
   const spotlightRect = document.getElementById("spotlight-cutout");
-  if (!spotlightRect) return;
+  if (!spotlightRect) {
+    console.error(
+      "[Walkthrough] Spotlight cutout element not found - SVG may not be initialized",
+    );
+    return;
+  }
 
   const rect = targetElement.getBoundingClientRect();
   const padding = 8; // Breathing room around element
+
+  // Validate rect values - element may be hidden or have zero size
+  if (rect.width === 0 || rect.height === 0) {
+    console.warn(
+      "[Walkthrough] Target element has zero dimensions, spotlight may not be visible",
+    );
+  }
 
   spotlightRect.setAttribute("x", String(rect.left - padding));
   spotlightRect.setAttribute("y", String(rect.top - padding));
   spotlightRect.setAttribute("width", String(rect.width + padding * 2));
   spotlightRect.setAttribute("height", String(rect.height + padding * 2));
+
+  console.log("[Walkthrough] Spotlight positioned at:", {
+    x: rect.left - padding,
+    y: rect.top - padding,
+    width: rect.width + padding * 2,
+    height: rect.height + padding * 2,
+  });
 }
 
 /**
@@ -1284,6 +1443,9 @@ function updateTooltip(step: StepResponse, targetElement: HTMLElement): void {
 
   // Note: Button click handlers are managed via event delegation in setupTooltipEventDelegation()
   // No need to attach individual listeners here - this prevents listener accumulation on re-renders
+
+  // Setup drag handlers for repositioning (only once)
+  setupTooltipDrag();
 }
 
 /**
@@ -1431,28 +1593,50 @@ async function showElementNotFoundError(step: StepResponse): Promise<void> {
 /**
  * Handle Next button click
  */
-function handleNext(): void {
+async function handleNext(): Promise<void> {
+  // Disable buttons to prevent double-clicks during async processing
+  const nextBtn = document.getElementById(
+    "walkthrough-btn-next",
+  ) as HTMLButtonElement | null;
+  const backBtn = document.getElementById(
+    "walkthrough-btn-back",
+  ) as HTMLButtonElement | null;
+  if (nextBtn) nextBtn.disabled = true;
+  if (backBtn) backBtn.disabled = true;
+
   // Remove action listeners before advancing (EXT-004)
   removeActionListeners();
 
   if (advanceStep()) {
-    showCurrentStep();
+    await showCurrentStep(); // Now properly awaited
   } else {
     // Completed all steps
     showCompletionMessage();
   }
+  // Note: buttons get re-enabled when tooltip is re-rendered in showCurrentStep
 }
 
 /**
  * Handle Back button click
  */
-function handleBack(): void {
+async function handleBack(): Promise<void> {
+  // Disable buttons to prevent double-clicks during async processing
+  const nextBtn = document.getElementById(
+    "walkthrough-btn-next",
+  ) as HTMLButtonElement | null;
+  const backBtn = document.getElementById(
+    "walkthrough-btn-back",
+  ) as HTMLButtonElement | null;
+  if (nextBtn) nextBtn.disabled = true;
+  if (backBtn) backBtn.disabled = true;
+
   // Remove action listeners before going back (EXT-004)
   removeActionListeners();
 
   if (previousStep()) {
-    showCurrentStep();
+    await showCurrentStep(); // Now properly awaited
   }
+  // Note: buttons get re-enabled when tooltip is re-rendered in showCurrentStep
 }
 
 /**
@@ -1760,13 +1944,25 @@ function attachActionListeners(
     };
 
     // For submit events, listen on form (not button)
-    const listenOn: EventTarget =
-      eventType === "submit"
-        ? targetElement.closest("form") || document
-        : targetElement;
-
-    listenOn.addEventListener(eventType, handler);
-    activeListeners.push({ element: listenOn, event: eventType, handler });
+    // Skip submit listener entirely if no form is found to avoid false positives
+    if (eventType === "submit") {
+      const form = targetElement.closest("form");
+      if (!form) {
+        console.log(
+          "[Walkthrough] No form found for submit action, skipping submit listener",
+        );
+        return; // Skip this event type
+      }
+      form.addEventListener(eventType, handler);
+      activeListeners.push({ element: form, event: eventType, handler });
+    } else {
+      targetElement.addEventListener(eventType, handler);
+      activeListeners.push({
+        element: targetElement,
+        event: eventType,
+        handler,
+      });
+    }
   });
 }
 
@@ -1921,6 +2117,8 @@ export function exitWalkthrough(): void {
   removeBeforeUnloadHandler();
   // Remove Escape key handler
   removeEscapeKeyHandler();
+  // Remove spotlight update handlers
+  removeSpotlightUpdateHandlers();
   // Clean up any lingering visual effects on page elements
   cleanupFlashEffects();
 
@@ -1935,6 +2133,12 @@ export function exitWalkthrough(): void {
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   console.log("[Walkthrough] Received message:", message.type);
 
+  // WALKTHROUGH_PING: Verify content script is ready
+  if (message.type === "WALKTHROUGH_PING") {
+    sendResponse({ success: true, ready: true });
+    return false;
+  }
+
   if (message.type === "WALKTHROUGH_DATA") {
     // Prevent duplicate initialization
     if (walkthroughState !== null) {
@@ -1944,9 +2148,24 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       sendResponse({ success: true, status: "already_initialized" });
       return false;
     }
-    initializeWalkthrough(message.payload);
-    sendResponse({ success: true, status: "initialized" });
-    return false;
+
+    // Handle async initialization properly
+    // Must return true to indicate we'll call sendResponse asynchronously
+    console.log("[Walkthrough] Starting async initialization...");
+    initializeWalkthrough(message.payload)
+      .then(() => {
+        console.log("[Walkthrough] Initialization completed successfully");
+        sendResponse({ success: true, status: "initialized" });
+      })
+      .catch((error) => {
+        console.error("[Walkthrough] Initialization failed:", error);
+        sendResponse({
+          success: false,
+          status: "error",
+          error: String(error),
+        });
+      });
+    return true; // Indicates async response
   }
 
   if (message.type === "WALKTHROUGH_ERROR") {

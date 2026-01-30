@@ -1,14 +1,14 @@
 /**
  * Element Finder with Selector Fallback
- * 
+ *
  * Finds elements using cascading selector fallback strategy.
  * Tries selectors in priority order: primary → CSS → XPath → data-testid
  * Waits for element with MutationObserver for dynamic content.
- * 
+ *
  * EXT-003: Element Finder with Selector Fallback
  */
 
-import type { StepResponse } from '@/shared/types';
+import type { StepResponse } from "@/shared/types";
 
 // Element finding timeout (hardcoded for MVP, easily configurable later)
 const ELEMENT_FIND_TIMEOUT = 5000; // 5 seconds
@@ -26,19 +26,24 @@ export function isInteractable(element: HTMLElement): boolean {
     return false;
   }
 
-  // Check if element is in viewport
-  if (rect.bottom < 0 || rect.top > window.innerHeight) {
-    return false; // Off-screen (could scroll to it, but not currently visible)
-  }
+  // Note: We do NOT check viewport here because we scroll to elements
+  // Elements off-screen are still valid targets
 
   // Check if element is disabled
-  if (element.hasAttribute('disabled') || element.getAttribute('aria-disabled') === 'true') {
+  if (
+    element.hasAttribute("disabled") ||
+    element.getAttribute("aria-disabled") === "true"
+  ) {
     return false;
   }
 
   // Check if element is hidden
   const style = window.getComputedStyle(element);
-  if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+  if (
+    style.display === "none" ||
+    style.visibility === "hidden" ||
+    style.opacity === "0"
+  ) {
     return false;
   }
 
@@ -48,15 +53,18 @@ export function isInteractable(element: HTMLElement): boolean {
 /**
  * Try to find element using a specific selector
  */
-function trySelector(selector: string, type: 'css' | 'xpath' | 'attribute'): HTMLElement | null {
+function trySelector(
+  selector: string,
+  type: "css" | "xpath" | "attribute",
+): HTMLElement | null {
   try {
-    if (type === 'xpath') {
+    if (type === "xpath") {
       const result = document.evaluate(
         selector,
         document,
         null,
         XPathResult.FIRST_ORDERED_NODE_TYPE,
-        null
+        null,
       );
       return result.singleNodeValue as HTMLElement | null;
     } else {
@@ -72,21 +80,25 @@ function trySelector(selector: string, type: 'css' | 'xpath' | 'attribute'): HTM
 /**
  * Try all selectors in priority order
  */
-function tryAllSelectors(step: StepResponse): { element: HTMLElement; selectorUsed: string } | null {
+function tryAllSelectors(
+  step: StepResponse,
+): { element: HTMLElement; selectorUsed: string } | null {
   const selectors = step.selectors as any;
 
   // Priority 1: Primary selector (ID, data-testid, or name)
   if (selectors.primary) {
-    const element = trySelector(selectors.primary, 'css');
+    const element = trySelector(selectors.primary, "css");
     if (element && isInteractable(element)) {
-      console.log(`[ElementFinder] Found with primary selector: ${selectors.primary}`);
+      console.log(
+        `[ElementFinder] Found with primary selector: ${selectors.primary}`,
+      );
       return { element, selectorUsed: `primary: ${selectors.primary}` };
     }
   }
 
   // Priority 2: CSS selector
   if (selectors.css) {
-    const element = trySelector(selectors.css, 'css');
+    const element = trySelector(selectors.css, "css");
     if (element && isInteractable(element)) {
       console.log(`[ElementFinder] Found with CSS selector: ${selectors.css}`);
       return { element, selectorUsed: `css: ${selectors.css}` };
@@ -95,7 +107,7 @@ function tryAllSelectors(step: StepResponse): { element: HTMLElement; selectorUs
 
   // Priority 3: XPath
   if (selectors.xpath) {
-    const element = trySelector(selectors.xpath, 'xpath');
+    const element = trySelector(selectors.xpath, "xpath");
     if (element && isInteractable(element)) {
       console.log(`[ElementFinder] Found with XPath: ${selectors.xpath}`);
       return { element, selectorUsed: `xpath: ${selectors.xpath}` };
@@ -105,9 +117,11 @@ function tryAllSelectors(step: StepResponse): { element: HTMLElement; selectorUs
   // Priority 4: data-testid
   if (selectors.data_testid) {
     const selector = `[data-testid="${selectors.data_testid}"]`;
-    const element = trySelector(selector, 'attribute');
+    const element = trySelector(selector, "attribute");
     if (element && isInteractable(element)) {
-      console.log(`[ElementFinder] Found with data-testid: ${selectors.data_testid}`);
+      console.log(
+        `[ElementFinder] Found with data-testid: ${selectors.data_testid}`,
+      );
       return { element, selectorUsed: `data-testid: ${selectors.data_testid}` };
     }
   }
@@ -121,7 +135,7 @@ function tryAllSelectors(step: StepResponse): { element: HTMLElement; selectorUs
  */
 function waitForElement(
   step: StepResponse,
-  timeoutMs: number
+  timeoutMs: number,
 ): Promise<{ element: HTMLElement; selectorUsed: string }> {
   return new Promise((resolve, reject) => {
     const startTime = Date.now();
@@ -149,7 +163,7 @@ function waitForElement(
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ['style', 'class', 'disabled', 'aria-disabled'],
+      attributeFilter: ["style", "class", "disabled", "aria-disabled"],
     });
 
     // Also poll every RETRY_INTERVAL as a fallback
@@ -166,7 +180,7 @@ function waitForElement(
       if (Date.now() - startTime > timeoutMs) {
         observer.disconnect();
         clearInterval(pollInterval);
-        reject(new Error('Element not found: timeout exceeded'));
+        reject(new Error("Element not found: timeout exceeded"));
       }
     }, RETRY_INTERVAL);
 
@@ -181,16 +195,16 @@ function waitForElement(
 
 /**
  * Find element for a workflow step
- * 
+ *
  * Main entry point for element finding. Uses cascading selector fallback
  * with MutationObserver for dynamic content.
- * 
+ *
  * @param step - Workflow step with selectors
  * @returns Promise resolving to found element and selector used
  * @throws Error if element not found after timeout
  */
 export async function findElement(
-  step: StepResponse
+  step: StepResponse,
 ): Promise<{ element: HTMLElement; selectorUsed: string }> {
   console.log(`[ElementFinder] Finding element for step ${step.step_number}`);
 
@@ -201,7 +215,9 @@ export async function findElement(
   }
 
   // Wait for element with MutationObserver (handles dynamic content)
-  console.log(`[ElementFinder] Element not immediately found, waiting up to ${ELEMENT_FIND_TIMEOUT}ms...`);
+  console.log(
+    `[ElementFinder] Element not immediately found, waiting up to ${ELEMENT_FIND_TIMEOUT}ms...`,
+  );
   return waitForElement(step, ELEMENT_FIND_TIMEOUT);
 }
 
@@ -210,8 +226,8 @@ export async function findElement(
  */
 export function scrollToElement(element: HTMLElement): void {
   element.scrollIntoView({
-    behavior: 'smooth',
-    block: 'center',
-    inline: 'center',
+    behavior: "smooth",
+    block: "center",
+    inline: "center",
   });
 }

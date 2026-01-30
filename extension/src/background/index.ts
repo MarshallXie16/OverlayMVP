@@ -20,6 +20,14 @@ import {
   removeTabFromSession,
   addTabToSession,
 } from "./walkthroughSession";
+// Multi-page recording session management
+import {
+  getRecordingSession,
+  handleRecordingNavigationStart,
+  handleRecordingNavigationComplete,
+  endRecordingSession,
+  checkSessionTimeout,
+} from "./recordingSession";
 
 // ============================================================================
 // INITIALIZATION
@@ -132,15 +140,27 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
  * Handle tab removal (close)
  * Removes tab from session; ends session if all tabs closed
  * GAP-002: Multi-tab workflow support
+ * Also handles recording tab close (auto-save)
  */
 chrome.tabs.onRemoved.addListener(async (tabId) => {
   try {
+    // Check walkthrough session
     const { session, isPartOfSession } = await getSession(tabId);
     if (session && isPartOfSession) {
       console.log(
         `[Background] Tab ${tabId} closed during walkthrough session`,
       );
       await removeTabFromSession(tabId);
+    }
+
+    // Check recording session - auto-save on tab close
+    const { session: recordingSession, isRecordingTab } =
+      await getRecordingSession(tabId);
+    if (recordingSession && isRecordingTab) {
+      console.log(
+        `[Background] Recording tab ${tabId} closed - auto-saving recording`,
+      );
+      await handleRecordingTabClose(recordingSession);
     }
   } catch (error) {
     console.error("[Background] Error handling tab removal:", error);
@@ -150,19 +170,30 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
 /**
  * Handle navigation start in session tabs
  * Marks session as navigating to prevent premature restoration
- * GAP-001: Multi-page workflow support
+ * GAP-001: Multi-page workflow support (walkthrough and recording)
  */
 chrome.webNavigation.onBeforeNavigate.addListener(async (details) => {
   // Only track main frame navigations (not iframes)
   if (details.frameId !== 0) return;
 
   try {
+    // Check walkthrough session
     const { session, isPartOfSession } = await getSession(details.tabId);
     if (session && isPartOfSession) {
       console.log(
-        `[Background] Navigation starting in session tab ${details.tabId}: ${details.url}`,
+        `[Background] Navigation starting in walkthrough tab ${details.tabId}: ${details.url}`,
       );
       await handleNavigationStart(details.tabId, details.url);
+    }
+
+    // Check recording session
+    const { session: recordingSession, isRecordingTab } =
+      await getRecordingSession(details.tabId);
+    if (recordingSession && isRecordingTab) {
+      console.log(
+        `[Background] Navigation starting in recording tab ${details.tabId}: ${details.url}`,
+      );
+      await handleRecordingNavigationStart(details.tabId, details.url);
     }
   } catch (error) {
     console.error("[Background] Error handling navigation start:", error);
@@ -172,19 +203,58 @@ chrome.webNavigation.onBeforeNavigate.addListener(async (details) => {
 /**
  * Handle navigation complete in session tabs
  * Clears navigation flag so content script can restore
- * GAP-001: Multi-page workflow support
+ * GAP-001: Multi-page workflow support (walkthrough and recording)
  */
 chrome.webNavigation.onCompleted.addListener(async (details) => {
   // Only track main frame navigations (not iframes)
   if (details.frameId !== 0) return;
 
   try {
+    // Check walkthrough session
     const { session, isPartOfSession } = await getSession(details.tabId);
     if (session && isPartOfSession) {
       console.log(
-        `[Background] Navigation completed in session tab ${details.tabId}: ${details.url}`,
+        `[Background] Navigation completed in walkthrough tab ${details.tabId}: ${details.url}`,
       );
       await handleNavigationComplete(details.tabId);
+    }
+
+    // Check recording session
+    const { session: recordingSession, isRecordingTab } =
+      await getRecordingSession(details.tabId);
+    if (recordingSession && isRecordingTab) {
+      console.log(
+        `[Background] Navigation completed in recording tab ${details.tabId}: ${details.url}`,
+      );
+      await handleRecordingNavigationComplete(details.tabId);
+
+      // Re-inject recorder content script for the new page
+      // (Content scripts are destroyed on navigation, need to re-inject for multi-page recording)
+      try {
+        // Skip chrome:// and extension pages where injection is not allowed
+        if (
+          !details.url.startsWith("chrome://") &&
+          !details.url.startsWith("chrome-extension://")
+        ) {
+          await chrome.scripting.executeScript({
+            target: { tabId: details.tabId },
+            files: ["content/recorder.js"],
+          });
+          console.log(
+            `[Background] Re-injected recorder.js into tab ${details.tabId}`,
+          );
+        } else {
+          console.log(
+            `[Background] Skipping recorder injection for restricted page: ${details.url}`,
+          );
+        }
+      } catch (injectionError) {
+        // Log but don't crash - page might be restricted
+        console.warn(
+          `[Background] Failed to re-inject recorder.js into tab ${details.tabId}:`,
+          injectionError,
+        );
+      }
     }
   } catch (error) {
     console.error("[Background] Error handling navigation complete:", error);
@@ -244,3 +314,74 @@ self.addEventListener("error", (event) => {
   console.error("Uncaught error in service worker:", event.error);
   event.preventDefault();
 });
+
+// ============================================================================
+// MULTI-PAGE RECORDING: AUTO-SAVE AND TIMEOUT
+// ============================================================================
+
+import type {
+  RecordingSessionState,
+  CreateWorkflowRequest,
+} from "@/shared/types";
+import { apiClient } from "@/shared/api";
+
+/**
+ * Handle recording tab close - auto-save the recording
+ */
+async function handleRecordingTabClose(
+  session: RecordingSessionState,
+): Promise<void> {
+  console.log(
+    `[Background] Auto-saving recording session ${session.sessionId} (${session.steps.length} steps)`,
+  );
+
+  // Only upload if there are steps
+  if (session.steps.length > 0) {
+    try {
+      // Build workflow creation request
+      const workflowRequest: CreateWorkflowRequest = {
+        name: session.workflowName || "Auto-saved Recording",
+        description: "Auto-saved on tab close or timeout",
+        starting_url: session.startingUrl,
+        tags: ["auto-saved"],
+        steps: session.steps,
+      };
+
+      // Create workflow via API
+      const workflowResponse = await apiClient.createWorkflow(workflowRequest);
+
+      console.log(
+        `[Background] ✅ Auto-saved recording. Workflow ID: ${workflowResponse.workflow_id}`,
+      );
+
+      // Note: Screenshots are stored in IndexedDB (screenshotStore.ts) and won't be
+      // uploaded on auto-save. Full upload happens on normal stop only.
+      // We don't check screenshot count here to avoid async complexity in tab close.
+    } catch (error) {
+      console.error("[Background] Error auto-saving recording:", error);
+      // Store as failed upload for later retry would be ideal here
+      // For now, just log the error
+    }
+  } else {
+    console.log("[Background] No steps to save, skipping auto-save");
+  }
+
+  // End the session
+  await endRecordingSession("tab_closed");
+}
+
+/**
+ * Recording session timeout checker
+ * Runs every 60 seconds to check for expired sessions
+ */
+setInterval(async () => {
+  try {
+    const expiredSession = await checkSessionTimeout();
+    if (expiredSession) {
+      console.log("[Background] Recording session timed out, auto-saving");
+      await handleRecordingTabClose(expiredSession);
+    }
+  } catch (error) {
+    console.error("[Background] Error checking session timeout:", error);
+  }
+}, 60000); // Check every 60 seconds

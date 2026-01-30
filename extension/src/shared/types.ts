@@ -172,7 +172,10 @@ export interface StepCreate {
     | "input_commit"
     | "select_change"
     | "submit"
-    | "navigate";
+    | "navigate"
+    | "copy"
+    | "cut"
+    | "paste";
   selectors: Record<string, any>;
   element_meta: Record<string, any>;
   page_context: Record<string, any>;
@@ -288,7 +291,16 @@ export type MessageType =
   | "WALKTHROUGH_NAVIGATION_DONE"
   | "WALKTHROUGH_TAB_JOINED"
   | "WALKTHROUGH_TAB_LEFT"
-  | "WALKTHROUGH_SESSION_END";
+  | "WALKTHROUGH_SESSION_END"
+  | "WALKTHROUGH_PING"
+  // Multi-page recording session messages
+  | "RECORDING_GET_STATE"
+  | "RECORDING_START_SESSION"
+  | "RECORDING_ADD_STEP"
+  | "RECORDING_ADD_SCREENSHOT"
+  | "RECORDING_UPDATE_TIMER"
+  | "RECORDING_NAVIGATION_DONE"
+  | "RECORDING_SESSION_END";
 
 /**
  * Extension message structure
@@ -379,6 +391,62 @@ export const WALKTHROUGH_SESSION_STORAGE_KEY = "walkthrough_session";
  * Session timeout in milliseconds (30 minutes)
  */
 export const WALKTHROUGH_SESSION_TIMEOUT_MS = 30 * 60 * 1000;
+
+/**
+ * Multi-page recording session state
+ * Stored in chrome.storage.session for cross-origin recording support
+ * Survives page navigations, cleared on browser close
+ *
+ * Note: Screenshots are stored in IndexedDB (screenshotStore.ts) to avoid
+ * chrome.storage.session's ~1MB size limit. Each screenshot is 300-500KB base64.
+ */
+export interface RecordingSessionState {
+  // Session identification
+  sessionId: string; // UUID for this recording session
+
+  // Recording metadata
+  workflowName: string;
+  startingUrl: string;
+
+  // Tab tracking (single-tab recording)
+  primaryTabId: number; // The tab being recorded
+
+  // Step tracking
+  currentStepNumber: number; // For widget display and step numbering
+
+  // Recording state
+  status: "active" | "paused";
+
+  // Step data storage (moved from IndexedDB for cross-origin support)
+  steps: StepCreate[];
+
+  // Timing
+  startedAt: number; // Date.now() when started
+  lastActivityAt: number; // Date.now() of last interaction
+  expiresAt: number; // Date.now() + 30 minutes
+
+  // Widget state persistence
+  elapsedSeconds: number; // Timer value for persistence across navigations
+  isPaused: boolean;
+
+  // Navigation context
+  navigationInProgress: boolean; // True between navigation start and page load complete
+
+  // Pending screenshot for NAVIGATE steps
+  // When a NAVIGATE step is recorded, we don't capture screenshot immediately (wrong page)
+  // Instead, we store the step number and capture on the destination page after navigation completes
+  pendingNavigateScreenshotStepNumber: number | null;
+}
+
+/**
+ * Storage key for recording session state
+ */
+export const RECORDING_SESSION_STORAGE_KEY = "recording_session";
+
+/**
+ * Recording session timeout in milliseconds (30 minutes)
+ */
+export const RECORDING_SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 
 /**
  * Auth state stored in chrome.storage

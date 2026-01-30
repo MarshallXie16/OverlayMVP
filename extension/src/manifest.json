@@ -10,10 +10,7 @@
     "scripting",
     "webNavigation"
   ],
-  "host_permissions": [
-    "http://*/*",
-    "https://*/*"
-  ],
+  "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background/index.js",
     "type": "module"

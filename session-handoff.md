@@ -1,127 +1,81 @@
-# Session Handoff: 2026-01-14
+# Session Handoff: 2026-01-29
 
 ## Current Task
-**Task**: Walkthrough Test Quality Improvements
+**Task**: Fix 5 Walkthrough UX Bugs (Session 4)
 **Status**: Complete
-**Progress**: All 3 Codex recommendations implemented, all 83 tests passing
-**Remaining**: None - ready for next sprint work
+**Progress**: All 5 bugs fixed, build passes, all 484 tests pass
 
-## Active Files
-- `extension/src/content/__tests__/walkthrough.test.ts` - Added fake timers, helper function, standardized mocks
-- `docs/walkthrough-audit-report.md` - Updated test quality score to 8/10
+## Bugs Fixed This Session
+
+| Bug | Severity | Root Cause | Fix |
+|-----|----------|------------|-----|
+| 5: Multi-page navigation stops | CRITICAL | `navigationInProgress` flag stuck true | Always clear flag in `handleNavigationComplete()`, added `forceNavigationComplete()` |
+| 2: Next button broken | CRITICAL | Race condition - no await on `showCurrentStep()` | Made handlers async with await, added button disabling |
+| 1: Missing spotlight | HIGH | Spotlight lost on resize/scroll | Added debounced resize/scroll handlers |
+| 3: False "element not found" | MEDIUM | Viewport check too strict, submit listens on document | Removed viewport check, scoped submit listener to form |
+| 4: Card not draggable | LOW | No drag functionality | Added drag handlers on tooltip header |
+
+## Active Files Modified
+
+- `extension/src/background/walkthroughSession.ts` - Fixed `handleNavigationComplete()`, added `forceNavigationComplete()`
+- `extension/src/background/messaging.ts` - Updated to use `forceNavigationComplete()`
+- `extension/src/content/walkthrough.ts` - Major changes:
+  - Async `handleNext()`/`handleBack()` with button disabling
+  - Spotlight update handlers (debounce, resize, scroll)
+  - Draggable tooltip header
+  - Scoped submit listener to form only
+- `extension/src/content/utils/elementFinder.ts` - Removed viewport check from `isInteractable()`
+- `extension/src/content/__tests__/walkthrough.test.ts` - Updated rapid click test expectations
 
 ## Key Findings This Session
 
-### 1. sendMessage Mock Must Return Promise
-The global `chrome.runtime.sendMessage` mock in `extension/src/test/setup.ts` was created as `vi.fn()` which returns `undefined`. The walkthrough code does:
-```typescript
-chrome.runtime.sendMessage({...}).catch(...)
-```
-This crashes when sendMessage returns undefined. **Fix**: Add to beforeEach:
-```typescript
-vi.mocked(chrome.runtime.sendMessage).mockResolvedValue(undefined);
-```
+1. **Button disabling is the correct fix for race conditions** - Previously, rapid clicks caused state corruption. Now buttons are disabled during processing, and only one click is handled at a time.
 
-### 2. Fake Timers Must Be Enabled BEFORE the Action
-When testing code that uses `setTimeout`, enable fake timers BEFORE dispatching the action that triggers the timeout:
-```typescript
-// WRONG - timeout is scheduled with real timers
-mockElement.dispatchEvent(clickEvent);
-vi.useFakeTimers();  // Too late!
+2. **Viewport check was too strict** - `isInteractable()` was rejecting off-screen elements, but we scroll to elements anyway so they don't need to be visible at find time.
 
-// CORRECT
-vi.useFakeTimers();
-mockElement.dispatchEvent(clickEvent);  // setTimeout uses fake timer
-await vi.advanceTimersByTimeAsync(100);
-vi.useRealTimers();
-```
+3. **Submit listener on document caused false positives** - Listening for submit on document caught ALL form submits on the page. Scoping to the target's form (or skipping if no form) prevents this.
 
-### 3. Test Pollution from setTimeout Callbacks
-When a test clicks an element that has a setTimeout handler (e.g., auto-advance after 60ms), the callback can fire during the NEXT test if real timers are used. Solution: Either use fake timers OR add delay in beforeEach:
-```typescript
-beforeEach(async () => {
-  await new Promise((resolve) => setTimeout(resolve, 100));
-  // ... rest of setup
-});
-```
-
-### 4. Click Action Auto-Advance Delay
-The walkthrough code uses different delays for auto-advance:
-- click/submit: 60ms
-- select_change: 120ms
-- input_commit: 150ms
-
-Located at `walkthrough.ts:1458-1470` in `handleActionDetected()`.
+4. **Drag setup needs guard** - Used `tooltipDragSetup` flag to prevent multiple drag handler attachments on re-render.
 
 ## Decisions Made
 
-- **Decision**: Use fake timers only for specific tests, not describe-level beforeEach
-  **Rationale**: `initializeAndWait()` uses setTimeout(10ms) which blocks forever with fake timers
-  **Alternative Rejected**: Using `vi.useFakeTimers({ shouldAdvanceTime: true })` was too unpredictable
+- **Decision**: Button disabling during step transitions
+  **Rationale**: Prevents race conditions without complex debouncing
+  **Impact**: Rapid clicks now correctly ignored (only first click processed)
 
-- **Decision**: Standardize on vi.mocked() for chrome.runtime.sendMessage
-  **Rationale**: It's already vi.fn() in setup.ts, so vi.spyOn() is redundant
-  **Alternative Rejected**: vi.spyOn() works but creates duplicate mock setup
+- **Decision**: Remove viewport check in `isInteractable()`
+  **Rationale**: We scroll to elements, so they don't need to be in viewport to be "found"
+  **Impact**: Elements off-screen are now correctly detected
 
-- **Decision**: Keep vi.spyOn() for window.confirm
-  **Rationale**: It's a global not in our mock setup, and vi.spyOn() with mockRestore() is clean
-  **Alternative Rejected**: vi.stubGlobal() works but is more verbose
+## Tests Updated
 
-## Failed Approaches (Don't Repeat)
-
-1. **Tried**: Adding `vi.useFakeTimers()` in describe-level beforeEach
-   **Failed Because**: `initializeAndWait()` uses setTimeout which hangs forever with fake timers
-
-2. **Tried**: Using `vi.runAllTimersAsync()` after click to advance timers
-   **Failed Because**: setTimeout was scheduled with real timers before fake timers were enabled
-
-3. **Tried**: Adding `vi.restoreAllMocks()` in afterEach
-   **Failed Because**: It restores module mocks like findElement, breaking subsequent tests
+Two rapid-click tests updated to expect new behavior:
+- "should handle rapid consecutive next clicks" - expects index 1 (not 3) after 3 clicks
+- "should not advance past last step" - expects index 1 (not 2) after 10 clicks
 
 ## Important Context
 
-### Mock Approach (documented in test file header)
-- Module mocks (findElement, healElement): Use `vi.mocked()`
-- Chrome APIs: Use `vi.mocked(chrome.runtime.sendMessage)`
-- Globals (window.confirm): Use `vi.spyOn()` with `mockRestore()` in same test
-- Timing: Use `vi.useFakeTimers()` AFTER initialization, then advance
+- Plan file still at: `/Users/marshallxie/.claude/plans/keen-launching-kahan.md` (can be archived)
+- Notepad for prior sessions: `docs/notepad-recording-ai-investigation-2026-01-24.md`
+- All walkthrough fixes from Sessions 1-4 are complete
 
-### Helper Function Added
-```typescript
-function createNStepWorkflow(n: number): StepResponse[] {
-  return Array.from({ length: n }, (_, i) => ({
-    ...mockStep,
-    id: i + 1,
-    step_number: i + 1,
-  }));
-}
-```
+## Previous Sessions Summary
+
+- **Session 1**: Element highlighting, AI context, destination screenshot, docs
+- **Session 2**: Walkthrough race condition (init timing), outline timing, AI context, docs org
+- **Session 3**: Cross-window postMessage bug (dashboard -> extension communication)
+- **Session 4**: 5 UX bugs (this session)
 
 ## Immediate Next Steps
-1. Consider committing these test improvements
-2. Check `docs/walkthrough-audit-report.md` for remaining P2 items:
-   - Multi-page workflow support (architectural)
-   - Architecture documentation
-   - Developer guide documentation
-3. Continue with next sprint work
 
-## Files to Read First
-- `docs/walkthrough-audit-report.md` - Overall status of walkthrough fixes
-- `extension/src/content/__tests__/walkthrough.test.ts` - Test file header explains mock approach
-- `extension/src/test/setup.ts` - Global Chrome API mocks
+1. User should reload extension in chrome://extensions and test walkthrough
+2. If working, commit changes: `git add -A && git commit -m "Fix 5 walkthrough UX bugs"`
+3. Consider archiving plan file and updating notepad with Session 4 summary
 
-## Git Status (Uncommitted Changes)
-```
-Modified:
-- extension/src/content/__tests__/walkthrough.test.ts (test improvements)
-- extension/src/content/walkthrough.ts (Escape key handler added)
-- extension/src/content/utils/sanitize.ts (new file - XSS prevention)
-- docs/walkthrough-audit-report.md (updated)
-```
+## Files to Read First (for next session)
+- `docs/notepad-recording-ai-investigation-2026-01-24.md` - Full investigation history
+- `extension/src/content/walkthrough.ts` - Main walkthrough logic
 
 ## Open Questions for User
-- None - all test improvements complete
-
----
-
-**End of Handoff Document**
+- Ready to test the walkthrough fixes?
+- Should we commit these changes?
