@@ -18,14 +18,16 @@ This guide covers testing procedures for the Workflow Automation Platform.
 
 ```
 backend/tests/
-├── unit/                    # Unit tests for services and utilities
-│   ├── test_auth_service.py
-│   ├── test_workflow_service.py
-│   └── test_screenshot_service.py
-├── integration/             # API endpoint tests
+├── unit/                    # Focused unit/security tests
+│   ├── test_jwt.py
+│   ├── test_permissions.py
+│   └── test_security.py
+├── integration/             # API endpoint integration tests
 │   ├── test_auth_api.py
-│   ├── test_workflows_api.py
-│   └── test_healing_api.py
+│   ├── test_company_api.py
+│   └── test_invites_api.py
+├── test_ai_service.py       # AI service behavior tests
+├── test_steps_api.py        # Step API behavior tests
 └── conftest.py              # Shared fixtures
 ```
 
@@ -56,8 +58,10 @@ extension/src/
 ```
 dashboard/src/
 ├── utils/
+│   ├── permissions.test.ts
+│   ├── validation.test.ts
 │   ├── workflowHealth.test.ts
-│   └── typeMappers.test.ts
+│   └── (additional utility tests)
 └── components/
     └── (component tests as needed)
 ```
@@ -70,28 +74,36 @@ dashboard/src/
 
 ```bash
 cd backend
-source venv/bin/activate
 
 # Run all tests
-pytest
+./venv/bin/python -m pytest
 
 # Run with verbose output
-pytest -v
+./venv/bin/python -m pytest -v
 
 # Run specific test file
-pytest tests/integration/test_auth_api.py
+./venv/bin/python -m pytest tests/integration/test_auth_api.py
 
 # Run tests matching pattern
-pytest -k "test_login"
+./venv/bin/python -m pytest -k "test_login"
 
 # Run with coverage
-pytest --cov=app --cov-report=html
+./venv/bin/python -m pytest --cov=app --cov-report=html
 
 # Run only unit tests
-pytest tests/unit/
+./venv/bin/python -m pytest tests/unit/
 
 # Run only integration tests
-pytest tests/integration/
+./venv/bin/python -m pytest tests/integration/
+```
+
+### Live External API Tests (Opt-In)
+
+`backend/tests/test_anthropic_api.py` makes real network calls to Anthropic and is disabled by default.
+
+```bash
+cd backend
+RUN_LIVE_ANTHROPIC_TESTS=1 ./venv/bin/python -m pytest tests/test_anthropic_api.py -v
 ```
 
 ### Extension Tests
@@ -134,10 +146,7 @@ npm test -- --watch
 
 ```bash
 # From project root
-npm run test:all  # If configured in root package.json
-
-# Or run each manually
-cd backend && pytest && cd ..
+cd backend && ./venv/bin/python -m pytest && cd ..
 cd extension && npm test && cd ..
 cd dashboard && npm test && cd ..
 ```

@@ -25,7 +25,7 @@ If you modified extension code (`extension/src/**`):
 cd extension
 npm test
 ```
-- [ ] All extension tests pass (currently 48+ tests)
+- [ ] All extension tests pass
 - [ ] No new warnings or errors in test output
 
 ### Manual Verification (Critical Changes Only)
@@ -46,7 +46,7 @@ cd backend
 source venv/bin/activate  # Windows: venv\Scripts\activate
 python -m pytest tests/ -v
 ```
-- [ ] All backend tests pass (currently 11+ tests)
+- [ ] All backend tests pass
 - [ ] No new failures or warnings
 
 ### API Endpoint Changes
@@ -101,12 +101,12 @@ If you changed authentication or core workflows:
 
 If your changes affect user-facing behavior or setup:
 - [ ] Update `README.md` if setup changed
-- [ ] Update `QUICKSTART.md` if quick start flow changed
-- [ ] Update `docs/testing.md` if testing scenarios changed
+- [ ] Update `docs/guides/QUICKSTART.md` if quick start flow changed
+- [ ] Update `docs/guides/TESTING_GUIDE.md` if testing scenarios changed
 - [ ] Update `docs/architecture.md` if system structure changed
-- [ ] Update `docs/recording-system.md` if recording logic changed
+- [ ] Update `docs/recording-process.md` if recording logic changed
 - [ ] Add entry to `memory.md` for key lessons learned
-- [ ] Add bug to `fixed_bugs.md` if you fixed an issue
+- [ ] Add non-trivial bug learnings to `lessons.md`
 
 ---
 
@@ -208,7 +208,7 @@ cd backend && source venv/bin/activate && python -c "from app.main import app; p
 ## 📋 Issue Reporting
 
 If you find that tests don't catch an issue:
-1. Document the issue in `fixed_bugs.md`
+1. Document the issue in `lessons.md` (if non-trivial)
 2. Add a test that would have caught it
 3. Update this checklist if needed
 4. Consider what process would prevent it (e.g., better pre-commit hooks)

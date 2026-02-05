@@ -24,9 +24,10 @@ Action detection monitors user interactions during a walkthrough and automatical
 
 From `StepResponse.action_type`:
 - **click**: User clicks/taps an element (button, link, checkbox, etc.)
-- **input_commit**: User types in input field and commits (blur/enter)
+- **input_commit**: User types in input field and commits (focusout/enter)
 - **select_change**: User selects option from dropdown
 - **submit**: User submits form
+- **copy**: User copies selected text (Ctrl/Cmd+C or context menu)
 - **navigate**: Page navigation (usually automatic, not user-triggered)
 
 ---
@@ -40,10 +41,11 @@ When showing a step, register appropriate event listeners based on `action_type`
 | Action Type | Events to Listen | Validation |
 |-------------|------------------|------------|
 | `click` | `click` | Target element matches |
-| `input_commit` | `blur`, `change` | Target element + value changed |
+| `input_commit` | `focusout`, `keydown (Enter)` | Target element + value changed |
 | `select_change` | `change` | Target element + value changed |
 | `submit` | `submit` | Form element matches |
-| `navigate` | Skip auto-advance | Manual Next only |
+| `copy` | `copy` | Target element + copied text matches (clipboard preview) |
+| `navigate` | (Background) `URL_CHANGED` | Auto-complete when URL matches expected destination |
 
 ### Validation Logic
 
@@ -66,7 +68,7 @@ function validateAction(
       return event.type === 'click';
     
     case 'input_commit':
-      return (event.type === 'blur' || event.type === 'change') && 
+      return (event.type === 'focusout' || event.type === 'keydown') && 
              hasValueChanged(eventTarget);
     
     case 'select_change':
@@ -76,6 +78,10 @@ function validateAction(
     case 'submit':
       return event.type === 'submit';
     
+    case 'copy':
+      return event.type === 'copy' &&
+             copiedTextMatchesPreview(event);
+
     default:
       return false;
   }
@@ -203,7 +209,7 @@ function handleBack(): void {
 ### 2. Value Tracking for Inputs
 
 **Scenario**: Need to know if value actually changed  
-**Solution**: Store initial value on focus, compare on blur
+**Solution**: Store initial value on focus, compare on focusout (bubbling)
 
 ```typescript
 const inputValues = new WeakMap<HTMLElement, string>();

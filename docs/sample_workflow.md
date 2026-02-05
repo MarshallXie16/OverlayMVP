@@ -6,18 +6,18 @@ Each of the following is an expected “step” that should be recorded.
 
 Initial starting location: google.com
 
-Step 1 (INPUT COMMIT): On google.com, the user enters a search query (e.g. “claude code hooks”) into the search bar. The search bar (input) is the selected element and is ONLY recorded once the input is committed, which happens in step 2.
+Step 1 (INPUT COMMIT): On google.com, the user enters a search query (e.g. “claude code hooks”) into the search bar **and presses Enter**. This should be recorded as a single `input_commit` step (commit occurs on Enter keydown).
 
-Step 2 (SUBMIT): The user presses enter to submit their search query. Both step 1 and 2 are recorded when this occurs. This action has a side effect of navigating to a new page (i.e. the search results page); this should NOT be treated as a separate navigation action.
+Note: Pressing Enter has a side effect of navigating to the search results page; this should **NOT** be recorded as a separate `navigate` step.
 
-Step 3 (CLICK): On the search results page, the user clicks the 1st search result (a link). This has a side effect of navigating to a different website (in this case, anthropic documentation). This action is recorded as a CLICK action, NOT navigation.
+Step 2 (CLICK): On the search results page, the user clicks the 1st search result (a link). This has a side effect of navigating to a different website (in this case, anthropic documentation). This action is recorded as a `click` action, NOT `navigate`.
 
-Step 4 (COPY): On the anthropic documentation page, the user copies a paragraph. This is a COPY action and records the specific text that was copied (by examining the clipboard, not from the screenshot).
+Step 3 (COPY): On the anthropic documentation page, the user copies a paragraph. This is a `copy` action and records the specific text that was copied (by examining the clipboard, not from the screenshot).
 
-Step 5 (NAVIGATE): The user navigates to docs.google.com by typing the url in the browser’s search bar. This is a NAVIGATE action, which only occurs when the user explicitly changes the URL.
+Step 4 (NAVIGATE): The user navigates to docs.google.com by typing the url in the browser’s address bar. This is a `navigate` action, which only occurs when the user explicitly changes the URL.
 
-Step 6 (CLICK): On docs.google.com, the user clicks create a new document button. This has a side effect of taking the user to a fresh google doc.
+Step 5 (CLICK): On docs.google.com, the user clicks create a new document button. This has a side effect of taking the user to a fresh google doc.
 
-Step 7 (INPUT COMMIT): The user pastes the copied contents onto the page. This is a PASTE action and is currently not recorded. The user clicks the document title input box, which automatically populates a name for the google doc. When the user clicks out of the input box, it counts as an INPUT COMMIT action.
+Step 6 (INPUT COMMIT): The user pastes the copied contents onto the page. This is a `paste` action and is currently not recorded. The user clicks the document title input box, which automatically populates a name for the google doc. When the user clicks out of the input box, it counts as an `input_commit` action.
 
-Step 8 (CLICK): The user clicks the google docs logo, which takes the user to the google docs homepage. The user ends the recording here.
+Step 7 (CLICK): The user clicks the google docs logo, which takes the user to the google docs homepage. The user ends the recording here.

@@ -19,6 +19,7 @@ Quick reference for the Overlay Guidance codebase documentation.
 | [guides/QUICKSTART.md](./guides/QUICKSTART.md) | Getting started guide |
 | [guides/TESTING_GUIDE.md](./guides/TESTING_GUIDE.md) | Testing practices |
 | [guides/PRE_COMMIT_CHECKLIST.md](./guides/PRE_COMMIT_CHECKLIST.md) | Pre-commit quality checks |
+| [../backend/docs/celery-setup.md](../backend/docs/celery-setup.md) | Celery and Redis background worker setup |
 | [debugging-with-mcp.md](./debugging-with-mcp.md) | Debug with Chrome DevTools MCP |
 
 ## API & Database
@@ -62,7 +63,7 @@ See [walkthrough-architecture.md](./walkthrough-architecture.md) for details.
 
 ### Test Count
 
-802 tests across all components (as of Sprint 6 completion).
+Test totals change frequently. Use `docs/guides/TESTING_GUIDE.md` commands to get current counts.
 
 ### Feature Flags
 

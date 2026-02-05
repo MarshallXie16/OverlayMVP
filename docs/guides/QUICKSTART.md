@@ -18,10 +18,10 @@ python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
-# Create .env file from template
-cp .env.example .env
+# Create .env file
+touch .env
 
-# Or create manually - edit these values:
+# Edit these values:
 # JWT_SECRET_KEY - REQUIRED: Generate with: python -c "import secrets; print(secrets.token_urlsafe(32))"
 # ANTHROPIC_API_KEY - REQUIRED for AI labeling: Get from https://console.anthropic.com
 # REDIS_URL - REQUIRED for Celery: redis://localhost:6379 (or your Redis URL)

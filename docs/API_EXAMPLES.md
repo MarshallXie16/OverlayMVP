@@ -389,7 +389,8 @@ curl -X POST http://localhost:8000/api/invites/me/invites \
 ```
 
 **Side Effects:**
-- Sends invitation email via Resend (async via Celery)
+- Queues invitation email via Celery (Resend delivery)
+- If the queue is unavailable, invite creation still succeeds and the API logs an email enqueue failure
 
 **Errors:**
 - `400`: `USER_ALREADY_EXISTS` - Email already registered in company
@@ -1229,8 +1230,8 @@ curl http://localhost:8000/api/healing/status \
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `SECRET_KEY` | JWT signing secret (min 32 chars) | `your-super-secret-key-min-32-chars` |
-| `DATABASE_URL` | SQLite/PostgreSQL connection | `sqlite:///./overlay.db` |
+| `JWT_SECRET_KEY` | JWT signing secret (min 32 chars) | `your-super-secret-key-min-32-chars` |
+| `DATABASE_URL` | SQLite/PostgreSQL connection | `sqlite:///./app.db` |
 | `REDIS_URL` | Redis connection for Celery | `redis://localhost:6379/0` |
 
 ### Email Configuration (Resend)
@@ -1262,10 +1263,10 @@ curl http://localhost:8000/api/healing/status \
 
 ```bash
 # Security
-SECRET_KEY=your-super-secret-key-minimum-32-characters-long
+JWT_SECRET_KEY=your-super-secret-key-minimum-32-characters-long
 
 # Database
-DATABASE_URL=sqlite:///./overlay.db
+DATABASE_URL=sqlite:///./app.db
 
 # Redis (Celery)
 REDIS_URL=redis://localhost:6379/0

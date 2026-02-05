@@ -82,7 +82,7 @@ WalkthroughOverlay (main coordinator)
 
 ### CSS Strategy
 
-**Load via manifest.json** (Lesson from fixed_bugs.md #4):
+**Load via manifest.json** (see lessons in `lessons.md`):
 ```json
 {
   "content_scripts": [

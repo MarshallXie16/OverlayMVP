@@ -163,9 +163,9 @@ Used by content script to report detected user actions:
 ```typescript
 REPORT_ACTION: {
   stepIndex: number;
-  actionType: string;  // 'click' | 'input_commit' | 'select_change' | 'submit'
+  actionType: string;  // 'click' | 'input_commit' | 'select_change' | 'submit' | 'copy'
   valid: boolean;
-  reason?: 'wrong_element' | 'wrong_action' | 'no_value_change' | 'invalid_target';
+  reason?: 'wrong_element' | 'wrong_action' | 'wrong_value' | 'no_value_change' | 'invalid_target';
 }
 ```
 
