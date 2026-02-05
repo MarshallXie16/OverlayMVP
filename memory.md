@@ -9,7 +9,7 @@ Building a Chrome Extension + Web Dashboard + API server for recording, managing
 
 ---
 
-## Current Status (Updated 2025-01-08)
+## Current Status (Updated 2026-02-03)
 
 ### Feature Completion Matrix
 
@@ -35,31 +35,39 @@ Building a Chrome Extension + Web Dashboard + API server for recording, managing
 | **6. Settings** | Company Settings | ⚠️ 30% | TeamView incomplete |
 | | Profile Settings | ❌ Not Started | No profile page |
 
-### Test Status (2025-01-08) - Sprint 2 Complete
+### Walkthrough System Redesign (2026)
 
-| Component | Total | Pass | Fail | Notes |
-|-----------|-------|------|------|-------|
-| Backend | 327 | 326 | 0 | 1 skipped (all passing) |
-| Extension | 435 | 426 | 9 | Environment issues only (jsdom XPath, tag casing) |
-| Dashboard | 41 | 41 | 0 | All passing |
+New state machine-based architecture replaces legacy event-driven system. Feature-flagged to run parallel with legacy during rollout.
 
-**Sprint 2 Fixes Applied:**
-- Backend: Fixed fixture names, model versions, status codes, timing
-- Extension: Fixed positionSimilarity (effectiveDistance), attributeMatch (conditional factors)
-- Added 25 new walkthrough tests (64 total)
+**Status**: Sprints 1-6 complete (305 walkthrough tests, 802 total)
+
+**Sprint 6 Complete**: Feature flag integration with popup toggle
+- Feature flag `WALKTHROUGH_USE_NEW_SYSTEM` defaults to `true`
+- Toggle via popup Developer Settings
+- Both P0 issues from Codex review fixed (alarms permission, cold-start race)
+- Legacy code remains for rollback capability
+
+**Architecture**: Background (SessionManager, NavigationWatcher, StepRouter) + Content (WalkthroughController, UI, Actions, Messaging)
+
+**Docs**: `docs/walkthrough-architecture.md` | Sprint plans: `docs/plans/walkthrough-overhaul/`
+
+### Test Status
+
+| Component | Tests | Status |
+|-----------|-------|--------|
+| Extension | 802 | All passing |
+| Backend | 327 | All passing (1 skipped) |
+| Dashboard | 41 | All passing |
 
 ### Critical Gaps
 
 **Security (P0)**:
 - SECURITY-001: XPath injection vulnerability
 - SECURITY-002: XSS via innerHTML in walkthrough
-- SECURITY-003: PostMessage spoofing (no origin check)
-- SECURITY-004: No rate limiting on auth
 
 **Core Features (P1)**:
 - HealthView shows mock data, not real health metrics
 - Notification bell UI doesn't exist
-- Click validation bug (clicks on child elements fail)
 - TeamView uses mock data
 
 ### SME Readiness: 6/10
@@ -256,11 +264,63 @@ See `docs/SME_VALUE_PROPOSITION.md` for detailed analysis.
 **Benefit:** Smooth metric that responds to trends without being too sensitive to single failures.
 
 ### 18. Always Run Builds After Implementation (Sprint 3)
-**Context:** TypeScript errors not caught until user tried to build extension.  
-**Lesson:** Run `npm run build` after implementing features to catch compilation errors immediately.  
-**Pattern:** After each ticket or significant change, run build command for affected packages.  
-**Benefit:** Catches unused variables, type errors, undefined access early before commit.  
+**Context:** TypeScript errors not caught until user tried to build extension.
+**Lesson:** Run `npm run build` after implementing features to catch compilation errors immediately.
+**Pattern:** After each ticket or significant change, run build command for affected packages.
+**Benefit:** Catches unused variables, type errors, undefined access early before commit.
 **Note:** Especially important for TypeScript projects with strict type checking.
+
+### 26. Click Validation: Use contains() Not Strict Equality
+**Problem:** Click validation fails when users click nested elements (e.g., icon inside button).
+**Lesson:** Check clicks using: direct match → contains() → composedPath() (shadow DOM).
+
+### 27. Input Baseline Must Be Set at Attach Time
+**Problem:** Input validation failed when user was already focused on input before listener attached.
+**Lesson:** Set input baseline immediately on attach, not just on focusin.
+
+### 28. Session-Scoped Click Interception
+**Problem:** Click blocking only during specific state missed clicks during transitions.
+**Lesson:** Make interceptors session-scoped (enabled at start, disabled at end), update target per step.
+
+### 29. State Transition Cleanup is Critical
+**Problem:** Rapid state transitions left stale event listeners attached.
+**Lesson:** Explicitly cleanup when LEAVING a state, not just when ENTERING a new one.
+
+### 30. Track and Cancel Pending Timeouts
+**Problem:** setTimeout commands sent after session ended (ghost commands).
+**Lesson:** Track all timeouts, cancel them in destroy()/cleanup.
+
+### 31. Serialize Async Dispatch to Prevent Race Conditions
+**Problem:** Multiple dispatch() calls in quick succession caused race conditions with state machine.
+**Lesson:** Serialize all dispatch operations through a promise queue to prevent interleaved transitions.
+
+### 32. SPA Navigation Requires Immediate PAGE_LOADED
+**Problem:** SPA navigation (popstate/hashchange) strands state machine in NAVIGATING (no webNavigation events).
+**Lesson:** For SPA navigation, dispatch PAGE_LOADED immediately after URL_CHANGED.
+
+### 33. Message Format Mismatch Causes Silent Failures
+**Problem:** Sender sent `{ payload: { url } }` but handler expected `{ url }` directly - silent failure.
+**Lesson:** Verify message format matches between sender and receiver. Type-check payloads.
+
+### 34. User-Initiated State Changes Should Complete in One Transition
+**Problem:** JUMP_TO_STEP went to TRANSITIONING, stranding state machine without auto-advance.
+**Lesson:** User-driven navigation should complete immediately, not require additional events.
+
+### 35. Use chrome.alarms for Service Worker Timeouts
+**Problem:** Service workers can restart, losing in-memory setTimeout handles.
+**Lesson:** Use chrome.alarms for timeouts that must survive SW restarts.
+
+### 36. Retry Logic with Cancellation
+**Problem:** Service worker can restart during command execution, causing "Receiving end does not exist" errors.
+**Lesson:** Implement exponential backoff retry with cancellation support. Only retry transport errors, not business errors.
+
+### 37. Origin Allowlist for PostMessage Security
+**Problem:** Cross-origin postMessage can be spoofed by malicious pages.
+**Lesson:** Validate origin against explicit allowlist before processing. Silently reject invalid messages.
+
+### 38. Feature Flag Gating for Gradual Rollout
+**Problem:** Need safe rollout of new system while keeping legacy as fallback.
+**Lesson:** Gate new components behind feature flag at initialization. Legacy always available as fallback.
 
 ### 19. AI SDK Major Version Upgrades
 **Problem:** `'Anthropic' object has no attribute 'messages'` error.

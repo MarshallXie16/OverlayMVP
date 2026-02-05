@@ -11,6 +11,7 @@ import { LoginForm } from "./components/LoginForm";
 import { RecordingControls } from "./components/RecordingControls";
 import { WorkflowList } from "./components/WorkflowList";
 import { FailedUploads } from "./components/FailedUploads";
+import { DeveloperSettings } from "./components/DeveloperSettings";
 
 const App: React.FC = () => {
   const { user, isLoading, checkAuth, logout } = useAuthStore();
@@ -117,6 +118,7 @@ const App: React.FC = () => {
         <FailedUploads />
         <RecordingControls />
         <WorkflowList />
+        <DeveloperSettings />
       </div>
     </div>
   );

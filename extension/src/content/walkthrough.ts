@@ -4,6 +4,10 @@
  *
  * EXT-001: Walkthrough Messaging & Data Loading
  * EXT-002: Overlay UI Foundation
+ *
+ * Sprint 6: Feature flag routes to new or legacy system:
+ * - Flag = true: Uses new WalkthroughController (Sprint 1-5)
+ * - Flag = false: Uses legacy code in this file
  */
 
 import type {
@@ -18,6 +22,9 @@ import {
   type HealingResult,
   type ElementContext,
 } from "./healing";
+
+// Sprint 6: Feature flag for new walkthrough system
+import { useNewWalkthroughSystem } from "../shared/featureFlags";
 
 console.log("🎯 Walkthrough Mode: Content script loaded");
 
@@ -191,8 +198,31 @@ async function initializeWithRetry(
 // and give background time to create session after tab load
 // 200ms provides better timing alignment with background's session creation
 // and allows chrome.webNavigation.onCompleted to fire first
-setTimeout(() => {
-  initializeWithRetry();
+//
+// Sprint 6: Feature flag routes to new or legacy system
+setTimeout(async () => {
+  const useNewSystem = await useNewWalkthroughSystem();
+
+  if (useNewSystem) {
+    // NEW SYSTEM: Use WalkthroughController from Sprint 1-5
+    console.log("[Walkthrough] Using new walkthrough system");
+    try {
+      // Dynamic import to avoid loading new code when using legacy system
+      // Note: esbuild bundles this inline (no code splitting), but the import
+      // only executes when flag is true
+      const { WalkthroughController } =
+        await import("./walkthrough/WalkthroughController");
+      const controller = new WalkthroughController({ debug: true });
+      await controller.initialize();
+      console.log("[Walkthrough] New WalkthroughController initialized");
+    } catch (error) {
+      console.error("[Walkthrough] Failed to initialize new system:", error);
+    }
+  } else {
+    // LEGACY SYSTEM: Use existing code in this file
+    console.log("[Walkthrough] Using legacy walkthrough system");
+    initializeWithRetry();
+  }
 }, 200);
 
 // SVG Icons (inline to avoid dependencies)
@@ -209,6 +239,7 @@ let walkthroughState: WalkthroughState | null = null;
 let overlayContainer: HTMLDivElement | null = null;
 let tooltipElement: HTMLDivElement | null = null;
 let backdropElement: HTMLDivElement | null = null;
+let spotlightRectElement: SVGRectElement | null = null;
 let currentTargetElement: HTMLElement | null = null;
 
 // Flag to track if tooltip event delegation is set up
@@ -749,10 +780,20 @@ function createOverlay(): void {
   svg.setAttribute("width", "100%");
   svg.setAttribute("height", "100%");
 
-  // Create mask definition
+  // Create mask definition with unique IDs to avoid conflicts with page SVGs
+  const maskId = `wt-mask-${Math.random().toString(36).slice(2, 9)}`;
+  const cutoutId = `wt-cutout-${Math.random().toString(36).slice(2, 9)}`;
+
   const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
   const mask = document.createElementNS("http://www.w3.org/2000/svg", "mask");
-  mask.id = "spotlight-mask";
+  mask.id = maskId;
+  // Ensure consistent behavior across sites (some page CSS can override defaults).
+  // Using luminance ensures a black cutout produces a transparent "hole".
+  // Set as both SVG attribute AND CSS property for maximum browser compatibility.
+  mask.setAttribute("mask-type", "luminance");
+  mask.style.setProperty("mask-type", "luminance");
+  mask.setAttribute("maskUnits", "userSpaceOnUse");
+  mask.setAttribute("maskContentUnits", "userSpaceOnUse");
 
   // White rectangle (shows backdrop)
   const whiteRect = document.createElementNS(
@@ -767,14 +808,17 @@ function createOverlay(): void {
   const spotlightRect = document.createElementNS(
     "http://www.w3.org/2000/svg",
     "rect",
-  );
-  spotlightRect.id = "spotlight-cutout";
+  ) as SVGRectElement;
+  spotlightRect.id = cutoutId;
   spotlightRect.setAttribute("fill", "black");
   spotlightRect.setAttribute("x", "0");
   spotlightRect.setAttribute("y", "0");
   spotlightRect.setAttribute("width", "0");
   spotlightRect.setAttribute("height", "0");
   spotlightRect.setAttribute("rx", "8");
+
+  // Store reference for updateSpotlight() and cleanup
+  spotlightRectElement = spotlightRect;
 
   mask.appendChild(whiteRect);
   mask.appendChild(spotlightRect);
@@ -789,7 +833,7 @@ function createOverlay(): void {
   backdropRect.setAttribute("fill", "rgba(0, 0, 0, 0.7)");
   backdropRect.setAttribute("width", "100%");
   backdropRect.setAttribute("height", "100%");
-  backdropRect.setAttribute("mask", "url(#spotlight-mask)");
+  backdropRect.setAttribute("mask", `url(#${maskId})`);
 
   svg.appendChild(backdropRect);
   backdropElement.appendChild(svg);
@@ -865,6 +909,7 @@ function destroyOverlay(): void {
     overlayContainer = null;
     tooltipElement = null;
     backdropElement = null;
+    spotlightRectElement = null;
     currentTargetElement = null;
     tooltipDelegationSetup = false; // Reset for next walkthrough
     tooltipDragSetup = false; // Reset drag setup for next walkthrough
@@ -1336,13 +1381,13 @@ async function validateHealingWithAI(
  * Update spotlight SVG mask to highlight target element
  */
 function updateSpotlight(targetElement: HTMLElement): void {
-  const spotlightRect = document.getElementById("spotlight-cutout");
-  if (!spotlightRect) {
+  if (!spotlightRectElement) {
     console.error(
       "[Walkthrough] Spotlight cutout element not found - SVG may not be initialized",
     );
     return;
   }
+  const spotlightRect = spotlightRectElement;
 
   const rect = targetElement.getBoundingClientRect();
   const padding = 8; // Breathing room around element
@@ -1695,10 +1740,9 @@ async function showCompletionMessage(): Promise<void> {
   tooltipElement.style.transform = "translate(-50%, -50%)";
 
   // Remove spotlight
-  const spotlightRect = document.getElementById("spotlight-cutout");
-  if (spotlightRect) {
-    spotlightRect.setAttribute("width", "0");
-    spotlightRect.setAttribute("height", "0");
+  if (spotlightRectElement) {
+    spotlightRectElement.setAttribute("width", "0");
+    spotlightRectElement.setAttribute("height", "0");
   }
 
   // EXT-006: Log successful completion via background

@@ -29,11 +29,62 @@ import {
   checkSessionTimeout,
 } from "./recordingSession";
 
+// Sprint 4: Walkthrough session management
+import { sessionManager } from "./walkthrough/SessionManager";
+import { NavigationWatcher } from "./walkthrough/NavigationWatcher";
+import { TabManager } from "./walkthrough/TabManager";
+import { useNewWalkthroughSystem } from "../shared/featureFlags";
+
+// Sprint 4: Walkthrough components (instantiated but only initialized if feature flag is on)
+// These are created at module level to allow initialization in any lifecycle event
+let navigationWatcher: NavigationWatcher | null = null;
+let tabManager: TabManager | null = null;
+
+/**
+ * Initialize Sprint 4 walkthrough components if feature flag is enabled.
+ * Safe to call multiple times - idempotent.
+ */
+async function initializeNewWalkthroughSystem(): Promise<void> {
+  const useNewSystem = await useNewWalkthroughSystem();
+
+  if (!useNewSystem) {
+    console.log("[Background] New walkthrough system disabled by feature flag");
+    return;
+  }
+
+  // Initialize SessionManager (always needed for state machine)
+  await sessionManager.initialize();
+
+  // Create and initialize navigation components only if feature flag is on
+  if (!navigationWatcher) {
+    navigationWatcher = new NavigationWatcher(sessionManager, { debug: true });
+  }
+  navigationWatcher.initialize();
+
+  if (!tabManager) {
+    tabManager = new TabManager(sessionManager, { debug: true });
+  }
+  tabManager.initialize();
+
+  console.log("[Background] Sprint 4 walkthrough components initialized");
+}
+
 // ============================================================================
 // INITIALIZATION
 // ============================================================================
 
 console.log("🚀 Workflow Recorder: Background service worker loaded");
+
+// Sprint 4: Immediate initialization for MV3 service worker
+// This handles cases where worker wakes up from events (not just install/startup)
+(async () => {
+  try {
+    await initializeNewWalkthroughSystem();
+    console.log("Walkthrough initialization complete (immediate)");
+  } catch (error) {
+    console.error("Failed to initialize walkthrough components:", error);
+  }
+})();
 
 // ============================================================================
 // LIFECYCLE EVENTS
@@ -42,8 +93,16 @@ console.log("🚀 Workflow Recorder: Background service worker loaded");
 /**
  * Handle extension installation and updates
  */
-chrome.runtime.onInstalled.addListener((details) => {
+chrome.runtime.onInstalled.addListener(async (details) => {
   console.log("Extension installed:", details);
+
+  // Sprint 4: Initialize walkthrough components (if feature flag enabled)
+  try {
+    await initializeNewWalkthroughSystem();
+    console.log("Walkthrough initialization complete (onInstalled)");
+  } catch (error) {
+    console.error("Failed to initialize walkthrough components:", error);
+  }
 
   if (details.reason === "install") {
     // First install - could open onboarding page
@@ -61,6 +120,14 @@ chrome.runtime.onInstalled.addListener((details) => {
  */
 chrome.runtime.onStartup.addListener(async () => {
   console.log("Service worker started");
+
+  // Sprint 4: Initialize walkthrough components on restart (if feature flag enabled)
+  try {
+    await initializeNewWalkthroughSystem();
+    console.log("Walkthrough initialization complete (onStartup)");
+  } catch (error) {
+    console.error("Failed to initialize walkthrough components:", error);
+  }
 
   try {
     // Check if there was an active recording before shutdown

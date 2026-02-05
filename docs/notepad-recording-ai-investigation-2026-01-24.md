@@ -365,6 +365,83 @@ When dashboard calls `newTab.postMessage()`, `event.source` is the **dashboard w
 
 ---
 
+## Session 5: Walkthrough System Overhaul (2026-01-30)
+
+### Objective
+Full rewrite of walkthrough system to eliminate race conditions, improve multi-page support,
+and make the codebase maintainable.
+
+### Investigation Completed
+- Launched 3 Explore agents to analyze current walkthrough system
+- Identified issues: 2,266-line monolith, dual state, timing hacks, race condition patches
+- User confirmed: Full rewrite, critical multi-page, full navigation flexibility, both reliability + maintainability
+
+### Sprint Plans Created
+Located in: `docs/plans/walkthrough-overhaul/`
+- `00-overview.md` - High-level overview
+- `01-foundation.md` - Sprint 1: State machine, types, SessionManager
+- `02-ui-layer.md` - Sprint 2: UI wrappers (keep existing UI)
+- `03-action-detection.md` - Sprint 3: Action handling
+- `04-navigation.md` - Sprint 4: Multi-page (critical path)
+- `05-messaging.md` - Sprint 5: Message protocol
+- `06-migration.md` - Sprint 6: Feature flag, cleanup
+
+### Codex Review Feedback (Applied)
+**P0 Fixes**:
+1. StateMachine.ts → moved to `shared/walkthrough/` (not content-only)
+2. BroadcastChannel → replaced with `chrome.tabs.sendMessage`
+3. Added TAB_READY event for content script handshake
+4. StepRouter → moved to background (needs SessionManager access)
+5. Estimates revised to 18-22 days
+
+**Key Decision**: Keep existing walkthrough UI - it's good. Sprint 2 wraps it, doesn't rewrite.
+
+### Architecture Summary
+```
+shared/walkthrough/      ← StateMachine, types, events, messages
+background/walkthrough/  ← SessionManager (SOURCE OF TRUTH), NavigationWatcher, StepRouter
+content/walkthrough/     ← WalkthroughController (renders state), UI wrappers, actions
+```
+
+### Current Status
+- Sprint plans updated with Codex feedback ✅
+- Sprint 1: Foundation - COMPLETED ✅
+
+### Sprint 1 Implementation (2026-01-30)
+
+**Files Created**:
+| File | Lines | Purpose |
+|------|-------|---------|
+| `shared/walkthrough/constants.ts` | ~90 | Timeouts, thresholds, UI constants |
+| `shared/walkthrough/WalkthroughState.ts` | ~250 | Unified state interface, helper functions |
+| `shared/walkthrough/events.ts` | ~310 | All event types for state machine |
+| `shared/walkthrough/messages.ts` | ~340 | Message protocol (6 message types) |
+| `shared/walkthrough/StateMachine.ts` | ~500 | State machine with transition table |
+| `shared/walkthrough/index.ts` | ~110 | Barrel exports |
+| `background/walkthrough/SessionManager.ts` | ~320 | Single source of truth, persistence |
+| `background/walkthrough/index.ts` | ~15 | Barrel exports |
+| `content/walkthrough/types.ts` | ~65 | Content-specific types |
+| `content/walkthrough/WalkthroughController.ts` | ~290 | Controller skeleton with placeholders |
+| `content/walkthrough/index.ts` | ~15 | Barrel exports |
+| `shared/walkthrough/__tests__/StateMachine.test.ts` | ~420 | 36 unit tests for state machine |
+
+**Total**: ~2,725 new lines across 12 files
+
+**Tests**: 520 total (484 original + 36 new)
+
+**Next**: Sprint 2 - UI Layer (OverlayManager, SpotlightRenderer, TooltipRenderer)
+
+### Key File References
+| File | Purpose |
+|------|---------|
+| `extension/src/shared/walkthrough/` | New walkthrough types, state machine, messages |
+| `extension/src/background/walkthrough/` | SessionManager (source of truth) |
+| `extension/src/content/walkthrough/` | WalkthroughController skeleton |
+| `extension/src/content/walkthrough.ts` | OLD monolith (2,266 lines) - will be replaced |
+| `extension/src/background/walkthroughSession.ts` | OLD session manager - will be replaced |
+
+---
+
 ## Session Handoff Notes
 
 If starting a new session, read this notepad first. Key context:
@@ -372,3 +449,5 @@ If starting a new session, read this notepad first. Key context:
 2. Session 1: highlight → AI context → destination screenshot → docs - ALL COMPLETED ✅
 3. Session 2: walkthrough race condition fix, outline timing, AI context, docs - ALL COMPLETED ✅
 4. Session 3: Fixed REAL walkthrough bug - cross-window postMessage issue ✅
+5. Session 4: Fixed 5 UX bugs (see session-handoff.md) ✅
+6. Session 5: Walkthrough overhaul Sprint 1 Foundation - COMPLETED ✅

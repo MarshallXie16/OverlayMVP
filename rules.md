@@ -21,6 +21,7 @@ GUIDELINES:
 - After rebuilding extension, **reload it in chrome://extensions** for changes to take effect
 - Content scripts cannot use ES module imports - must be self-contained IIFE bundles
 - Recording/walkthrough suddenly broken? First suspect is build issue - rebuild and reload
+- **Walkthrough changes**: ALWAYS test manually after build - look for "placeholder" in console logs (indicates incomplete implementation)
 
 ## Code Quality
 - Read files before editing - understand existing patterns
@@ -42,3 +43,11 @@ GUIDELINES:
 - Click validation: use `contains()` not strict equality (handles nested elements)
 - File uploads: need explicit linking calls after creation
 - AI APIs: use tool calling for structured output, not text parsing
+- Message format: verify sender and receiver agree on structure (check payload vs direct fields)
+- SPA navigation: dispatch PAGE_LOADED immediately (no webNavigation events for client-side routing)
+- **Recording ↔ Walkthrough data**: Check actual API response field names (snake_case: `selectors`, `action_type`), not assumed names
+
+## State Machine / Async
+- Serialize dispatch calls via promise queue to prevent race conditions
+- Use chrome.alarms for timeouts in service workers (setTimeout lost on restart)
+- User-initiated state changes should complete in single transition (no stranding)

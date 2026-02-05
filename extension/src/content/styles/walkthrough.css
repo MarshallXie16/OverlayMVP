@@ -281,6 +281,17 @@
   background-color: #fee2e2;
 }
 
+/* Retry Button - Secondary */
+.walkthrough-btn-retry {
+  background-color: #f3f4f6;
+  color: #374151;
+  border: 1px solid #d1d5db;
+}
+
+.walkthrough-btn-retry:hover {
+  background-color: #e5e7eb;
+}
+
 /* Progress Bar */
 .walkthrough-progress-bar {
   height: 3px;
@@ -469,4 +480,162 @@
     opacity: 1;
     transform: translateX(-50%) translateY(0);
   }
+}
+
+/* ============================================================================
+   SPRINT 3: Action Detection Visual Feedback
+   ============================================================================ */
+
+/* Success flash - green glow on valid action */
+.walkthrough-flash-success {
+  animation: walkthroughFlashSuccess 0.25s ease-out;
+}
+
+@keyframes walkthroughFlashSuccess {
+  0% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(34, 197, 94, 0.4);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+  }
+}
+
+/* Error flash - red glow on invalid action */
+.walkthrough-flash-error {
+  animation: walkthroughFlashError 0.4s ease-out;
+}
+
+@keyframes walkthroughFlashError {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
+  25%,
+  75% {
+    box-shadow: 0 0 0 6px rgba(239, 68, 68, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.3);
+  }
+}
+
+/* Pulse effect - teal pulse when click blocked */
+.walkthrough-pulse {
+  animation: walkthroughPulse 0.6s ease-out;
+}
+
+@keyframes walkthroughPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(20, 184, 166, 0.7);
+  }
+  40% {
+    box-shadow: 0 0 0 12px rgba(20, 184, 166, 0.3);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(20, 184, 166, 0);
+  }
+}
+
+/* ============================================================================
+   SPRINT 4: Navigation Loading State
+   ============================================================================ */
+
+/* Navigation state styling */
+.walkthrough-navigating .walkthrough-tooltip-header {
+  background-color: #f0fdfa;
+  border-bottom-color: #ccfbf1;
+}
+
+.walkthrough-navigating .walkthrough-navigation-content {
+  text-align: center;
+  padding: 32px 20px;
+}
+
+.walkthrough-navigating .walkthrough-field-label {
+  color: #0d9488;
+  margin-top: 16px;
+}
+
+.walkthrough-navigating .walkthrough-instruction {
+  color: #6b7280;
+}
+
+/* Spinner container */
+.walkthrough-spinner-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Spinner animation */
+.walkthrough-spinner {
+  width: 40px;
+  height: 40px;
+  color: #0d9488;
+  animation: walkthroughSpin 1s linear infinite;
+}
+
+@keyframes walkthroughSpin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ============================================================================
+   SPRINT 5: Healing State
+   ============================================================================ */
+
+/* Healing state styling - uses amber/orange colors to indicate "searching" */
+.walkthrough-healing .walkthrough-tooltip-header {
+  background-color: #fffbeb;
+  border-bottom-color: #fef3c7;
+}
+
+.walkthrough-healing .walkthrough-healing-content {
+  text-align: center;
+  padding: 32px 20px;
+}
+
+.walkthrough-healing .walkthrough-field-label {
+  color: #d97706;
+  margin-top: 16px;
+}
+
+.walkthrough-healing .walkthrough-instruction {
+  color: #6b7280;
+}
+
+/* Override spinner color for healing state */
+.walkthrough-healing .walkthrough-spinner {
+  color: #d97706;
+}
+
+/* Close button in healing mode */
+.walkthrough-btn-close {
+  background: none;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.walkthrough-btn-close:hover {
+  background-color: #f3f4f6;
+  color: #4b5563;
+}
+
+.walkthrough-btn-close svg {
+  width: 20px;
+  height: 20px;
 }

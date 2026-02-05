@@ -1,81 +1,92 @@
-# Session Handoff: 2026-01-29
+# Session Handoff: 2026-02-03 (Night - Final)
 
 ## Current Task
-**Task**: Fix 5 Walkthrough UX Bugs (Session 4)
-**Status**: Complete
-**Progress**: All 5 bugs fixed, build passes, all 484 tests pass
+**Task**: Post-Sprint 6 Bug Fixes - Walkthrough System
+**Status**: COMPLETED - Codex fixes applied, ready for manual testing
+**Progress**:
+- Fixed Bug 1: Spotlight cutout not showing (SVG mask-type issue)
+- Fixed Bug 2: Walkthrough restarts on navigation (URL matching issue)
+- All 803 tests pass
+- Build succeeds
 
-## Bugs Fixed This Session
+## What Was Done This Session
 
-| Bug | Severity | Root Cause | Fix |
-|-----|----------|------------|-----|
-| 5: Multi-page navigation stops | CRITICAL | `navigationInProgress` flag stuck true | Always clear flag in `handleNavigationComplete()`, added `forceNavigationComplete()` |
-| 2: Next button broken | CRITICAL | Race condition - no await on `showCurrentStep()` | Made handlers async with await, added button disabling |
-| 1: Missing spotlight | HIGH | Spotlight lost on resize/scroll | Added debounced resize/scroll handlers |
-| 3: False "element not found" | MEDIUM | Viewport check too strict, submit listens on document | Removed viewport check, scoped submit listener to form |
-| 4: Card not draggable | LOW | No drag functionality | Added drag handlers on tooltip header |
+### Bug 1: Spotlight Cutout Not Showing - FIXED (Codex)
+**Root Cause**: SVG mask `mask-type` defaulting to `alpha` instead of `luminance` on some pages, causing the black cutout rect to not create a transparent hole.
 
-## Active Files Modified
+**Fix**: Added explicit SVG mask attributes in `OverlayManager.ts`:
+```typescript
+mask.style.setProperty("mask-type", "luminance");
+mask.setAttribute("maskUnits", "userSpaceOnUse");
+mask.setAttribute("maskContentUnits", "userSpaceOnUse");
+```
 
-- `extension/src/background/walkthroughSession.ts` - Fixed `handleNavigationComplete()`, added `forceNavigationComplete()`
-- `extension/src/background/messaging.ts` - Updated to use `forceNavigationComplete()`
-- `extension/src/content/walkthrough.ts` - Major changes:
-  - Async `handleNext()`/`handleBack()` with button disabling
-  - Spotlight update handlers (debounce, resize, scroll)
-  - Draggable tooltip header
-  - Scoped submit listener to form only
-- `extension/src/content/utils/elementFinder.ts` - Removed viewport check from `isInteractable()`
-- `extension/src/content/__tests__/walkthrough.test.ts` - Updated rapid click test expectations
+**Files Modified**:
+- `extension/src/content/walkthrough/ui/OverlayManager.ts:85-91` - Added mask attributes
+- `extension/src/content/walkthrough.ts` - Same fix for legacy system
 
-## Key Findings This Session
+### Bug 2: Walkthrough Restarts on Navigation - FIXED (Codex)
+**Root Cause**: StepRouter was navigating back to root URL ("/") when user was on a different path (e.g., "/search?q=..."). This triggered a "Jump to step 1" because the URL matching saw a mismatch.
 
-1. **Button disabling is the correct fix for race conditions** - Previously, rapid clicks caused state corruption. Now buttons are disabled during processing, and only one click is handled at a time.
+**Fix**: Added `shouldTreatTargetRootAsMatch()` method to `StepRouter.ts` that treats root URLs as matching any path on the same origin:
+```typescript
+private shouldTreatTargetRootAsMatch(currentUrl: string, targetUrl: string): boolean {
+  const current = this.safeParseUrl(currentUrl);
+  const target = this.safeParseUrl(targetUrl);
+  if (!current || !target) return false;
+  const targetPath = this.normalizePath(target.pathname);
+  if (targetPath !== "/") return false;
+  return current.origin === target.origin;
+}
+```
 
-2. **Viewport check was too strict** - `isInteractable()` was rejecting off-screen elements, but we scroll to elements anyway so they don't need to be visible at find time.
+**Files Modified**:
+- `extension/src/background/walkthrough/StepRouter.ts:271-295` - Added root URL matching
+- `extension/src/background/walkthrough/__tests__/StepRouter.test.ts` - Added test case
 
-3. **Submit listener on document caused false positives** - Listening for submit on document caught ALL form submits on the page. Scoping to the target's form (or skipping if no form) prevents this.
+### Earlier Fixes (May be redundant but kept)
+- `WalkthroughUI.ts:164-178` - Double rAF for spotlight timing
+- `messageHandlers.ts:289-301` - Primary tab restoration logic
 
-4. **Drag setup needs guard** - Used `tooltipDragSetup` flag to prevent multiple drag handler attachments on re-render.
+## Key Technical Details
 
-## Decisions Made
+### SVG Mask-Type (Bug 1)
+- SVG masks use `mask-type: alpha` by default, which interprets black/white as opacity levels
+- `mask-type: luminance` interprets black as fully transparent and white as fully opaque
+- Page CSS can override defaults, so explicit setting is required
 
-- **Decision**: Button disabling during step transitions
-  **Rationale**: Prevents race conditions without complex debouncing
-  **Impact**: Rapid clicks now correctly ignored (only first click processed)
+### URL Root Matching (Bug 2)
+- Workflows often store step URLs as just the root ("/")
+- After actions like Google search that navigate to "/search?q=...", the router was seeing a mismatch
+- The fix treats "/" as matching any path on the same origin, preventing unnecessary navigation
 
-- **Decision**: Remove viewport check in `isInteractable()`
-  **Rationale**: We scroll to elements, so they don't need to be in viewport to be "found"
-  **Impact**: Elements off-screen are now correctly detected
-
-## Tests Updated
-
-Two rapid-click tests updated to expect new behavior:
-- "should handle rapid consecutive next clicks" - expects index 1 (not 3) after 3 clicks
-- "should not advance past last step" - expects index 1 (not 2) after 10 clicks
-
-## Important Context
-
-- Plan file still at: `/Users/marshallxie/.claude/plans/keen-launching-kahan.md` (can be archived)
-- Notepad for prior sessions: `docs/notepad-recording-ai-investigation-2026-01-24.md`
-- All walkthrough fixes from Sessions 1-4 are complete
-
-## Previous Sessions Summary
-
-- **Session 1**: Element highlighting, AI context, destination screenshot, docs
-- **Session 2**: Walkthrough race condition (init timing), outline timing, AI context, docs org
-- **Session 3**: Cross-window postMessage bug (dashboard -> extension communication)
-- **Session 4**: 5 UX bugs (this session)
+## Verification Status
+- **803 tests passing** (all extension tests)
+- **Build succeeds** (TypeScript + Vite + esbuild)
+- **NOT YET MANUALLY TESTED** - Extension needs reload and walkthrough test
 
 ## Immediate Next Steps
+1. **Reload extension** in chrome://extensions
+2. **Test walkthrough manually**:
+   - Go to google.com
+   - Start a walkthrough via popup
+   - **Verify spotlight cutout appears** around search bar (Bug 1 fix)
+   - Type search term and press Enter
+   - **Verify walkthrough continues at correct step** (Bug 2 fix)
+3. If issues persist, check console logs for debug output
 
-1. User should reload extension in chrome://extensions and test walkthrough
-2. If working, commit changes: `git add -A && git commit -m "Fix 5 walkthrough UX bugs"`
-3. Consider archiving plan file and updating notepad with Session 4 summary
+## Files Modified Summary
+| File | Change |
+|------|--------|
+| `extension/src/background/walkthrough/StepRouter.ts` | Root URL matching logic |
+| `extension/src/background/walkthrough/__tests__/StepRouter.test.ts` | New test case |
+| `extension/src/content/walkthrough/ui/OverlayManager.ts` | SVG mask attributes |
+| `extension/src/content/walkthrough.ts` | SVG mask attributes (legacy) |
 
-## Files to Read First (for next session)
-- `docs/notepad-recording-ai-investigation-2026-01-24.md` - Full investigation history
-- `extension/src/content/walkthrough.ts` - Main walkthrough logic
+## Debug Logging Available
+Extensive debug logging exists throughout the spotlight flow:
+- `[WalkthroughUI]` - showStep, createUI
+- `[SpotlightRenderer]` - initialize, highlight, updatePosition
+- `[StepRouter]` - Jump to step, URL matching
 
-## Open Questions for User
-- Ready to test the walkthrough fixes?
-- Should we commit these changes?
+Check browser console (content script) and service worker logs for debugging.

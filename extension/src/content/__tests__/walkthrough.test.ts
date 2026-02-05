@@ -325,10 +325,11 @@ describe("Walkthrough Mode", () => {
       const svg = document.querySelector(".walkthrough-spotlight-mask");
       expect(svg).toBeTruthy();
 
-      const mask = document.getElementById("spotlight-mask");
+      // Mask and cutout IDs are now dynamic (wt-mask-xxx, wt-cutout-xxx)
+      const mask = svg?.querySelector("mask[id^='wt-mask-']");
       expect(mask).toBeTruthy();
 
-      const cutout = document.getElementById("spotlight-cutout");
+      const cutout = svg?.querySelector("rect[id^='wt-cutout-']");
       expect(cutout).toBeTruthy();
     });
 
@@ -582,7 +583,8 @@ describe("Walkthrough Mode", () => {
     });
 
     it("should position spotlight around target element", () => {
-      const cutout = document.getElementById("spotlight-cutout");
+      // Cutout ID is now dynamic (wt-cutout-xxx)
+      const cutout = document.querySelector("rect[id^='wt-cutout-']");
       expect(cutout).toBeTruthy();
 
       // Check that cutout has position attributes

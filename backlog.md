@@ -1,6 +1,6 @@
 # Backlog - Workflow Automation Platform
 
-**Last Updated**: 2025-01-09
+**Last Updated**: 2026-02-03
 
 ## Summary
 
@@ -10,7 +10,7 @@
 | **P1 - High** | 20 | Core features, admin visibility, tests |
 | **P2 - Medium** | 19 | UX polish, refactoring, documentation, accessibility |
 | **P3 - Low** | 11 | Nice-to-haves, performance, enhancements |
-| **Completed** | 10 | Sprint 4 UX Polish (7), SECURITY-004/005/006 |
+| **Completed** | 11 | Sprint 4 UX Polish (7), SECURITY-003/004/005/006 |
 | **Total** | 55 | |
 
 ### Sprint 1 Status (2025-01-07)
@@ -22,7 +22,7 @@
 **Deferred (Extension - higher risk, wait for stability)**:
 - ⏸️ SECURITY-001: XPath injection (affects healing)
 - ⏸️ SECURITY-002: XSS via innerHTML (affects walkthrough UI)
-- ⏸️ SECURITY-003: PostMessage spoofing (affects dashboard-extension comm)
+- ✅ SECURITY-003: PostMessage spoofing - Fixed in Sprint 5 (DashboardBridge origin validation)
 - ⏸️ SECURITY-007: Extension API URL config (affects build)
 
 ### Recent Additions (from Copilot Review 2025-01-07)
@@ -85,24 +85,34 @@ const xpath = options.exact
 **Type**: Tech Debt
 **Component**: Extension
 **File**: `extension/src/content/walkthrough.ts` (1571 lines)
+**Status**: ⚠️ PARTIALLY ADDRESSED - New system has 233 tests, legacy still untested
 
-**Description**: The largest file in the extension has ZERO tests. This is the core user-facing feature.
+**Description**: The legacy `walkthrough.ts` file (1571 lines) has ZERO tests. However, the new state machine-based walkthrough system has comprehensive test coverage.
 
-**Missing Coverage**:
+**New Walkthrough System Test Coverage (2026-02-03):**
+- State Machine: 41 tests (`shared/walkthrough/__tests__/StateMachine.test.ts`)
+- UI Components: 78 tests (`content/walkthrough/ui/__tests__/`)
+- Action Detection: 53 tests (`content/walkthrough/actions/__tests__/`)
+- Navigation: 61 tests (`background/walkthrough/__tests__/` + `content/walkthrough/navigation/__tests__/`)
+- Messaging: 72 tests (`content/walkthrough/messaging/__tests__/` + E2E)
+- **Total: 305 tests for new system (Sprint 5 complete)**
+
+**Still Missing (Legacy System)**:
 - Basic walkthrough initialization and step navigation
 - Element finding/healing integration
 - Cleanup and memory leak prevention
 - Error boundary scenarios
-- Event listener cleanup
 
-**Risk**: Memory leaks, race conditions, DOM manipulation errors, undefined behavior on errors.
+**Risk**: Memory leaks, race conditions in LEGACY system. New system addresses these.
 
 **Acceptance Criteria**:
-- [ ] Basic initialization tests
-- [ ] Navigation tests (next, back, skip)
-- [ ] Cleanup/memory leak tests
-- [ ] Error handling tests
-- [ ] 60%+ coverage target
+- [x] Basic initialization tests (new system)
+- [x] Navigation tests (new system - via state machine + NavigationWatcher/StepRouter)
+- [x] Cleanup/memory leak tests (new system - state cleanup patterns)
+- [ ] Error handling tests (partial - needs more)
+- [x] 60%+ coverage target (new system ~85%)
+
+**Note**: Sprint 6 complete - new system is now default. Full resolution when legacy is removed (W-031 - future sprint).
 
 ---
 
@@ -203,6 +213,37 @@ window.addEventListener("message", (event: MessageEvent) => {
 ---
 
 ## P1 - High Priority
+
+### BUG-010: CSS Stripping on Pages with Existing SVG Masks
+**Type**: Bug
+**Component**: Extension
+**Discovered**: 2026-02-03 (Sprint 6 testing)
+**Status**: Needs investigation
+
+**Description**: The walkthrough overlay strips CSS from certain pages, making them unusable. This happens on pages that have existing SVG elements with masks or filters (data visualization sites, mapping platforms, design tools).
+
+**Root Cause (Partial)**: SVG mask ID collision. The extension creates SVG masks with IDs like `spotlight-mask` and `spotlight-cutout` which can conflict with page-defined SVGs.
+
+**Fix Attempted**: Changed to unique IDs (`wt-mask-{random}`, `wt-cutout-{random}`) - but issue persists on some pages. Need deeper investigation.
+
+**Affected Page Patterns**:
+- Data visualization sites (D3, Plotly, Recharts)
+- Mapping platforms (Mapbox, Google Maps embeds)
+- Design tools with SVG-based UI
+- Sites with animated SVG elements or complex filters
+
+**Files to Investigate**:
+- `extension/src/content/walkthrough.ts` (lines 785-830, SVG mask creation)
+- `extension/src/content/walkthrough/ui/OverlayManager.ts` (lines 77-115, SVG mask creation)
+- `extension/src/content/styles/walkthrough.css` (overlay CSS)
+
+**Acceptance Criteria**:
+- [ ] Walkthrough overlay works on pages with D3 charts
+- [ ] Walkthrough overlay works on pages with Mapbox maps
+- [ ] No CSS stripping on any tested pages
+- [ ] Existing walkthrough tests still pass
+
+---
 
 ### FEAT-011: Workflow Completion Notification
 **Type**: Enhancement
@@ -592,29 +633,27 @@ import { RECENT_EXECUTIONS, HEALTH_STATS } from "@/data/mockData";
 **Component**: Extension
 **File**: `extension/src/content/walkthrough.ts` (Line 1191)
 **Discovered**: 2025-12-25 (Codebase audit with Codex)
+**Status**: ✅ FIXED in new walkthrough system (Sprint 3)
 
 **Description**: Action validation compares `event.target !== targetElement`, which fails when users click on nested child elements (e.g., clicking on an SVG icon inside a button). This causes walkthrough to not auto-advance even when the user clicks the correct element.
 
-**Problematic Code**:
-```typescript
-// Line 1188-1191
-const eventTarget = event.target as HTMLElement;
+**Resolution**: Fixed in new walkthrough system with `isClickOnTarget()` function:
+- Uses 3-tier check: direct match → contains() → composedPath()
+- Supports shadow DOM via composedPath()
+- 21 tests in ActionValidator.test.ts cover nested clicks
+- Feature-flagged new system includes proper validation
 
-if (eventTarget !== targetElement) {
-  // This fails if user clicks a child element!
-  return false;
-}
-```
-
-**Expected Behavior**: Click on button's child SVG should still validate as correct.
-
-**Fix**: Use `event.currentTarget` (the element with the listener) or check `targetElement.contains(eventTarget)` or use `event.composedPath()`.
+**Files**:
+- `extension/src/content/walkthrough/actions/ActionValidator.ts` - New implementation
+- `extension/src/content/walkthrough/actions/__tests__/ActionValidator.test.ts` - Tests
 
 **Acceptance Criteria**:
-- [ ] Click validation uses `contains()` or `composedPath()`
-- [ ] Clicks on child elements correctly validate
-- [ ] Tests added for nested element clicks
-- [ ] No regression in other action validations
+- [x] Click validation uses `contains()` or `composedPath()`
+- [x] Clicks on child elements correctly validate
+- [x] Tests added for nested element clicks
+- [x] No regression in other action validations
+
+**Note**: Legacy `walkthrough.ts` still has the bug. New system is now default (Sprint 6 complete). Full fix when legacy removed (W-031).
 
 ---
 

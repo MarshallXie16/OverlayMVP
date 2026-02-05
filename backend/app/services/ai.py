@@ -109,7 +109,7 @@ class AIService:
                 workflow_context = {
                     "name": step.workflow.name,
                     "step_number": step.step_number,
-                    "total_steps": step.workflow.step_count,
+                    "total_steps": len(step.workflow.steps),
                 }
 
             # Try AI labeling

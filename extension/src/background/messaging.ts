@@ -26,6 +26,12 @@ import {
   forceNavigationComplete,
 } from "./walkthroughSession";
 
+// Sprint 6: Feature flag for new walkthrough system
+import { useNewWalkthroughSystem } from "../shared/featureFlags";
+
+// Sprint 6: New walkthrough session manager
+import { sessionManager } from "./walkthrough/SessionManager";
+
 // Multi-page recording session management
 import {
   startRecordingSession,
@@ -43,6 +49,9 @@ import {
   getScreenshotsForSession,
   clearScreenshotsForSession,
 } from "./screenshotStore";
+
+// Sprint 4: New walkthrough message handlers
+import { handleWalkthroughMessage } from "./walkthrough/messageHandlers";
 
 // ============================================================================
 // FAILED UPLOAD STORAGE (FEAT-012)
@@ -152,6 +161,25 @@ export function handleMessage(
     "from",
     sender.tab ? `tab ${sender.tab.id}` : "extension",
   );
+
+  // Sprint 4: Check if this is a walkthrough message (new protocol)
+  // This handles WALKTHROUGH_COMMAND, WALKTHROUGH_TAB_READY, WALKTHROUGH_ELEMENT_STATUS,
+  // GET_TAB_ID, SPA_NAVIGATION, etc.
+  const walkthroughMessageTypes = [
+    "WALKTHROUGH_COMMAND",
+    "WALKTHROUGH_TAB_READY",
+    "WALKTHROUGH_ELEMENT_STATUS",
+    "WALKTHROUGH_HEALING_RESULT",
+    "GET_TAB_ID",
+    "SPA_NAVIGATION",
+  ];
+  if (walkthroughMessageTypes.includes(message.type)) {
+    handleWalkthroughMessage(message, sender, sendResponse).catch((error) => {
+      console.error("[Messaging] Walkthrough handler error:", error);
+      sendResponse({ success: false, error: String(error) });
+    });
+    return true; // Async response
+  }
 
   // Route to appropriate handler
   switch (message.type) {
@@ -693,6 +721,10 @@ async function waitForTabLoad(
  * Fetches workflow from API and sends to content script
  * EXT-001: Walkthrough Messaging & Data Loading
  *
+ * Sprint 6: Routes to new or legacy system based on feature flag.
+ * - Flag = true: Uses new SessionManager state machine (Sprint 1-5)
+ * - Flag = false: Uses legacy walkthroughSession.ts
+ *
  * Fixed: Properly navigates to workflow starting_url before injecting walkthrough
  */
 async function handleStartWalkthrough(
@@ -708,139 +740,22 @@ async function handleStartWalkthrough(
       throw new Error("workflowId is required and must be a number");
     }
 
-    console.log(`[Background] Starting walkthrough for workflow ${workflowId}`);
-
-    // Fetch workflow from API
-    const workflow = await apiClient.getWorkflow(workflowId);
-
+    // Sprint 6: Check feature flag to determine which system to use
+    const useNewSystem = await useNewWalkthroughSystem();
     console.log(
-      `[Background] Fetched workflow "${workflow.name}" with ${workflow.steps.length} steps`,
+      `[Background] Starting walkthrough for workflow ${workflowId} (system: ${useNewSystem ? "new" : "legacy"})`,
     );
 
-    // Validate workflow has steps
-    if (!workflow.steps || workflow.steps.length === 0) {
-      throw new Error("Workflow has no steps");
-    }
-
-    // Always create a new tab for the walkthrough
-    // This ensures the dashboard (sender tab) stays open for the user
-    const newTab = await chrome.tabs.create({ url: workflow.starting_url });
-    if (!newTab.id) {
-      throw new Error("Failed to create new tab");
-    }
-    const tabId = newTab.id;
-    console.log(
-      `[Background] Created new tab ${tabId} for workflow starting URL: ${workflow.starting_url}`,
-    );
-    await waitForTabLoad(tabId, workflow.starting_url);
-
-    // GAP-001: Create walkthrough session for multi-page persistence
-    const session = await startSession(workflow, tabId);
-    console.log(
-      `[Background] Created walkthrough session: ${session.sessionId}`,
-    );
-
-    // Check if walkthrough content script is already loaded (manifest injects on <all_urls>)
-    // Only inject if ping fails to avoid duplicate listeners
-    let contentScriptReady = false;
-    try {
-      const pingResponse = await chrome.tabs.sendMessage(tabId, {
-        type: "WALKTHROUGH_PING",
-      });
-      contentScriptReady = pingResponse?.ready === true;
-      console.log(
-        "[Background] WALKTHROUGH_PING response:",
-        pingResponse,
-        "ready:",
-        contentScriptReady,
-      );
-    } catch (err) {
-      console.log(
-        "[Background] WALKTHROUGH_PING failed, content script not loaded yet:",
-        err,
-      );
-    }
-
-    if (!contentScriptReady) {
-      console.log(
-        "[Background] Injecting walkthrough content script into tab",
-        tabId,
-      );
-      await chrome.scripting.executeScript({
-        target: { tabId },
-        files: ["content/walkthrough.js"],
-      });
-
-      // Small delay to ensure content script message listener is ready
-      await new Promise((r) => setTimeout(r, 100));
-    }
-
-    // Send workflow data with retries in case listener init lags
-    // Now properly waits for content script initialization to complete
-    let walkthroughStarted = false;
-    let lastError: string | null = null;
-
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        const response = await chrome.tabs.sendMessage(tabId, {
-          type: "WALKTHROUGH_DATA",
-          payload: {
-            workflowId: workflow.id,
-            workflowName: workflow.name,
-            startingUrl: workflow.starting_url,
-            steps: workflow.steps,
-            totalSteps: workflow.steps.length,
-          },
-        });
-        console.log(
-          `[Background] WALKTHROUGH_DATA ack (attempt ${attempt}):`,
-          response,
-        );
-
-        // Check if content script successfully initialized
-        if (response?.success) {
-          walkthroughStarted = true;
-          break;
-        } else {
-          lastError = response?.error || "Content script initialization failed";
-          console.warn(
-            `[Background] WALKTHROUGH_DATA attempt ${attempt} - content script reported error:`,
-            lastError,
-          );
-        }
-      } catch (err) {
-        lastError = err instanceof Error ? err.message : String(err);
-        console.warn(
-          `[Background] WALKTHROUGH_DATA attempt ${attempt} failed:`,
-          err,
-        );
-      }
-      // Wait before retry (increasing delay)
-      await new Promise((r) => setTimeout(r, 150 * attempt));
-    }
-
-    // Report result to dashboard
-    if (walkthroughStarted) {
-      sendResponse({
-        type: "START_WALKTHROUGH",
-        payload: {
-          success: true,
-          workflowId: workflow.id,
-          workflowName: workflow.name,
-          stepCount: workflow.steps.length,
-        },
-      });
+    if (useNewSystem) {
+      // =====================================================================
+      // NEW SYSTEM: Use SessionManager state machine (Sprint 1-5)
+      // =====================================================================
+      await handleStartWalkthroughNew(workflowId, sendResponse);
     } else {
-      // End the session since walkthrough failed to start
-      await endSession("error");
-      sendResponse({
-        type: "START_WALKTHROUGH",
-        payload: {
-          success: false,
-          error:
-            lastError || "Failed to initialize walkthrough in content script",
-        },
-      });
+      // =====================================================================
+      // LEGACY SYSTEM: Existing behavior (WALKTHROUGH_DATA protocol)
+      // =====================================================================
+      await handleStartWalkthroughLegacy(workflowId, sendResponse);
     }
   } catch (error) {
     console.error("[Background] Failed to start walkthrough:", error);
@@ -852,6 +767,214 @@ async function handleStartWalkthrough(
           error instanceof Error
             ? error.message
             : "Failed to start walkthrough",
+      },
+    });
+  }
+}
+
+/**
+ * NEW SYSTEM: Start walkthrough using SessionManager state machine
+ * Uses WALKTHROUGH_STATE_CHANGED broadcasts (content script subscribes)
+ */
+async function handleStartWalkthroughNew(
+  workflowId: number,
+  sendResponse: (response?: any) => void,
+): Promise<void> {
+  // Fetch workflow from API
+  const workflow = await apiClient.getWorkflow(workflowId);
+
+  console.log(
+    `[Background] [NEW] Fetched workflow "${workflow.name}" with ${workflow.steps.length} steps`,
+  );
+
+  // Validate workflow has steps
+  if (!workflow.steps || workflow.steps.length === 0) {
+    throw new Error("Workflow has no steps");
+  }
+
+  // Create new tab for the walkthrough
+  const newTab = await chrome.tabs.create({ url: workflow.starting_url });
+  if (!newTab.id) {
+    throw new Error("Failed to create new tab");
+  }
+  const tabId = newTab.id;
+  console.log(
+    `[Background] [NEW] Created new tab ${tabId} for workflow starting URL: ${workflow.starting_url}`,
+  );
+  await waitForTabLoad(tabId, workflow.starting_url);
+
+  // Ensure SessionManager is initialized (idempotent, handles cold-start race)
+  // This matches the safety guard in handleWalkthroughMessage (messageHandlers.ts:44)
+  await sessionManager.initialize();
+
+  // Dispatch START event to state machine
+  await sessionManager.dispatch({
+    type: "START",
+    workflowId: workflow.id,
+    tabId,
+  });
+
+  // Dispatch DATA_LOADED event with workflow data
+  // This transitions from INITIALIZING to FINDING_ELEMENT and broadcasts state
+  await sessionManager.dispatch({
+    type: "DATA_LOADED",
+    workflow,
+    tabId,
+  });
+
+  console.log("[Background] [NEW] Walkthrough started via SessionManager");
+
+  // Success response
+  sendResponse({
+    type: "START_WALKTHROUGH",
+    payload: {
+      success: true,
+      workflowId: workflow.id,
+      workflowName: workflow.name,
+      stepCount: workflow.steps.length,
+      system: "new",
+    },
+  });
+}
+
+/**
+ * LEGACY SYSTEM: Start walkthrough using walkthroughSession.ts
+ * Uses WALKTHROUGH_DATA direct message to content script
+ */
+async function handleStartWalkthroughLegacy(
+  workflowId: number,
+  sendResponse: (response?: any) => void,
+): Promise<void> {
+  // Fetch workflow from API
+  const workflow = await apiClient.getWorkflow(workflowId);
+
+  console.log(
+    `[Background] [LEGACY] Fetched workflow "${workflow.name}" with ${workflow.steps.length} steps`,
+  );
+
+  // Validate workflow has steps
+  if (!workflow.steps || workflow.steps.length === 0) {
+    throw new Error("Workflow has no steps");
+  }
+
+  // Always create a new tab for the walkthrough
+  // This ensures the dashboard (sender tab) stays open for the user
+  const newTab = await chrome.tabs.create({ url: workflow.starting_url });
+  if (!newTab.id) {
+    throw new Error("Failed to create new tab");
+  }
+  const tabId = newTab.id;
+  console.log(
+    `[Background] [LEGACY] Created new tab ${tabId} for workflow starting URL: ${workflow.starting_url}`,
+  );
+  await waitForTabLoad(tabId, workflow.starting_url);
+
+  // GAP-001: Create walkthrough session for multi-page persistence
+  const session = await startSession(workflow, tabId);
+  console.log(
+    `[Background] [LEGACY] Created walkthrough session: ${session.sessionId}`,
+  );
+
+  // Check if walkthrough content script is already loaded (manifest injects on <all_urls>)
+  // Only inject if ping fails to avoid duplicate listeners
+  let contentScriptReady = false;
+  try {
+    const pingResponse = await chrome.tabs.sendMessage(tabId, {
+      type: "WALKTHROUGH_PING",
+    });
+    contentScriptReady = pingResponse?.ready === true;
+    console.log(
+      "[Background] [LEGACY] WALKTHROUGH_PING response:",
+      pingResponse,
+      "ready:",
+      contentScriptReady,
+    );
+  } catch (err) {
+    console.log(
+      "[Background] [LEGACY] WALKTHROUGH_PING failed, content script not loaded yet:",
+      err,
+    );
+  }
+
+  if (!contentScriptReady) {
+    console.log(
+      "[Background] [LEGACY] Injecting walkthrough content script into tab",
+      tabId,
+    );
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ["content/walkthrough.js"],
+    });
+
+    // Small delay to ensure content script message listener is ready
+    await new Promise((r) => setTimeout(r, 100));
+  }
+
+  // Send workflow data with retries in case listener init lags
+  // Now properly waits for content script initialization to complete
+  let walkthroughStarted = false;
+  let lastError: string | null = null;
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const response = await chrome.tabs.sendMessage(tabId, {
+        type: "WALKTHROUGH_DATA",
+        payload: {
+          workflowId: workflow.id,
+          workflowName: workflow.name,
+          startingUrl: workflow.starting_url,
+          steps: workflow.steps,
+          totalSteps: workflow.steps.length,
+        },
+      });
+      console.log(
+        `[Background] [LEGACY] WALKTHROUGH_DATA ack (attempt ${attempt}):`,
+        response,
+      );
+
+      // Check if content script successfully initialized
+      if (response?.success) {
+        walkthroughStarted = true;
+        break;
+      } else {
+        lastError = response?.error || "Content script initialization failed";
+        console.warn(
+          `[Background] [LEGACY] WALKTHROUGH_DATA attempt ${attempt} - content script reported error:`,
+          lastError,
+        );
+      }
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
+      console.warn(
+        `[Background] [LEGACY] WALKTHROUGH_DATA attempt ${attempt} failed:`,
+        err,
+      );
+    }
+    // Wait before retry (increasing delay)
+    await new Promise((r) => setTimeout(r, 150 * attempt));
+  }
+
+  // Report result to dashboard
+  if (walkthroughStarted) {
+    sendResponse({
+      type: "START_WALKTHROUGH",
+      payload: {
+        success: true,
+        workflowId: workflow.id,
+        workflowName: workflow.name,
+        stepCount: workflow.steps.length,
+        system: "legacy",
+      },
+    });
+  } else {
+    // End the session since walkthrough failed to start
+    await endSession("error");
+    sendResponse({
+      type: "START_WALKTHROUGH",
+      payload: {
+        success: false,
+        error:
+          lastError || "Failed to initialize walkthrough in content script",
       },
     });
   }

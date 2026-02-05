@@ -5,6 +5,7 @@
   "description": "Record and replay interactive workflows with AI-powered guidance",
   "permissions": [
     "activeTab",
+    "alarms",
     "storage",
     "tabs",
     "scripting",
