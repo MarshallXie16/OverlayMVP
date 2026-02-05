@@ -5,6 +5,196 @@
 
 ---
 
+# Walkthrough Overhaul Debug Notepad (Sample Workflow)
+
+**Started**: 2026-02-05  
+**Goal**: Fix walkthrough getting “stuck” after Google search navigation when running `docs/sample_workflow.md`.
+
+## Symptom (User-Reported)
+- Run walkthrough on the sample workflow.
+- After completing “step 1 + 2” (type search query + press Enter), the browser navigates to Google search results.
+- Walkthrough UI shows **step 1 again** on the results page (doesn’t progress).
+
+## Evidence (Logs)
+- Content script logs show state changes only between `NAVIGATING` and `SHOWING_STEP` (no `WAITING_ACTION` observed).
+- After navigation completes, content shows `SHOWING_STEP` and renders **step 1/8**.
+- Manual “Next” results in `JUMP_TO_STEP` but then `No selector matched any element` / `Cannot show step: target element not found` (likely step 2 has empty selectors).
+- Service worker shows navigation detection works (`URL_CHANGED`, `PAGE_LOADED`), but step index is still `0` after navigation.
+
+## Key Findings (Likely Root Causes)
+1. **Element status is never reported → state machine never enters `WAITING_ACTION`**
+   - `WalkthroughController.showStep()` finds element + renders UI but **does not send `WALKTHROUGH_ELEMENT_STATUS`**.
+   - Background only transitions `SHOWING_STEP → WAITING_ACTION` on `ELEMENT_FOUND` (sent via `WALKTHROUGH_ELEMENT_STATUS`).
+   - Result: action listeners never attach → user actions aren’t detected → step index never advances.
+   - Code: `extension/src/content/walkthrough/WalkthroughController.ts` (`showStep()`).
+
+2. **Recorder records `input_commit` on Enter keydown; walkthrough only detects `input_commit` on blur**
+   - Recorder: `extension/src/content/recorder.ts` records `input_commit` on `keydown Enter` to capture values before navigation.
+   - New walkthrough ActionDetector only emits `input_commit` on `blur` (`ActionDetector.setupInputListeners`).
+   - On Google, pressing Enter (often) navigates without a reliable blur event → step 1 never completes.
+
+3. **Navigate steps need special handling**
+   - Recorder `navigate` steps have `selectors: {}` and `page_context.url` is the *departing* URL (`recordNavigation()`).
+   - In walkthrough, step 2 appears to have empty selectors (consistent with `navigate`), so it can’t be highlighted/detected.
+   - Suggestion: auto-advance `navigate` steps when `URL_CHANGED` occurs while they are current.
+
+4. **Potential auto-advance bug**
+   - `WalkthroughController.cleanupActionState()` clears `advanceTimeout` whenever leaving `WAITING_ACTION`.
+   - Background dispatches `ACTION_DETECTED` immediately on valid actions (transitioning out of `WAITING_ACTION`), which can cancel the delayed `NEXT` (non-navigation actions).
+   - Needs review/fix to avoid flakiness / “never advances”.
+
+## Files of Interest
+- Content:
+  - `extension/src/content/walkthrough/WalkthroughController.ts`
+  - `extension/src/content/walkthrough/actions/ActionDetector.ts`
+  - `extension/src/content/walkthrough/actions/ActionValidator.ts`
+  - `extension/src/content/walkthrough/navigation/NavigationHandler.ts`
+- Background:
+  - `extension/src/background/walkthrough/messageHandlers.ts` (REPORT_ACTION auto-advance)
+  - `extension/src/shared/walkthrough/StateMachine.ts` (URL_CHANGED / PAGE_LOADED)
+  - `extension/src/background/walkthrough/NavigationWatcher.ts`
+
+## Working Hypothesis
+Primary issue is **action detection never activates** (missing `ELEMENT_FOUND` reporting), plus **input_commit is not detected on Enter**. This prevents step progression before navigation, so after navigation the restored state still points to step 1.
+
+## TODO / Next Steps
+- [x] Implement content-side element status reporting (found/not found) after step rendering.
+- [x] Add Enter-key `input_commit` detection in `ActionDetector`.
+- [x] Implement auto-advance for `navigate` steps on `URL_CHANGED` (state machine-level).
+- [x] Move auto-advance scheduling to background (remove content-side `advanceTimeout`).
+- [x] Improve recording: capture `navigate` destination URL + suppress Enter-search extra NAVIGATE.
+- [x] Add/adjust tests + run extension build/tests.
+
+## Implementation Notes (2026-02-05)
+### Walkthrough (Playback)
+- **Element status reporting**: `WalkthroughController.showStep()` now uses `findElement()` and sends `WALKTHROUGH_ELEMENT_STATUS` (found/false) so background transitions `SHOWING_STEP → WAITING_ACTION` and listeners attach.
+- **Enter detection**: `ActionDetector` emits `input_commit` on **Enter keydown** (ignores Shift+Enter in textarea) and updates baseline to prevent blur double-emits.
+- **Navigate step UX**: `action_type: "navigate"` steps render a centered tooltip (`renderNavigateStep`) and skip element finding.
+- **Auto-advance moved to background**: `REPORT_ACTION` handler schedules `NEXT_STEP` with delays; content no longer schedules delayed `NEXT` (fixes canceled-timeout bug).
+- **State machine robustness**: `URL_CHANGED` can complete navigate steps (match policy: origin + normalized path, ignore query/hash; expected `/` matches any same-origin path). Added transitions to tolerate races (`TRANSITIONING → NAVIGATING` on URL change; allow `NEXT_STEP` while navigating).
+
+### Recording
+- **Navigate destination capture**: `recordingSession.handleRecordingNavigationStart/Complete` patch `action_data.target_url` and `action_data.final_url` on pending `navigate` steps.
+- **Suppress Enter-search extra NAVIGATE**: `recorder.ts` tracks immediate Enter `input_commit` and skips recording a separate `navigate` step on `beforeunload` when appropriate (pure helper: `recordingNavigation.ts`).
+
+### Verification
+- Build: `npm run build --workspace=extension` ✅
+- Tests: `npm test --workspace=extension` ✅
+
+### Code Review (Codex)
+- Codex review run via `codex exec` (read-only). Key follow-ups applied:
+  - Background guards added to ignore stale `ELEMENT_STATUS` / `REPORT_ACTION` when `stepIndex` doesn’t match `currentStepIndex`.
+  - Recorder aligned with walkthrough: ignore Shift+Enter in textarea for immediate Enter commits (pure helper + tests).
+
+---
+
+# Walkthrough Overhaul Debug Notepad (Example Workflow Follow-up)
+
+**Date**: 2026-02-05  
+**Context**: Rerunning `docs/sample_workflow.md` (“example workflow”) exposed healing + UI issues on Google search results step.
+
+## Issue A — Step 2 triggers auto-healing (82% match) when it shouldn’t
+
+**Symptom**
+- Step 2 (“click 1st search result”) correctly highlights the intended link, but via **auto-healing** with a confirmation modal at **~82% confidence**.
+- Expectation: no healing prompt; deterministic selector match should find the element.
+
+**Evidence**
+- Service worker: `ELEMENT_STATUS ... found=false` for step 1 (0-based) → `SHOWING_STEP → HEALING`.
+- Then: `HEALING_RESULT: success=true, confidence=0.8225...` → `HEALING → WAITING_ACTION`.
+
+**Root Cause (confirmed by code)**
+- `extension/src/content/utils/elementFinder.ts` ignores `selectors.stable_attrs` (including `href`) and does not do any link/text-specific matching.
+- Recorded Google DOM CSS paths are brittle; when `primary/css/xpath/data-testid` fail, we declare `found=false` and invoke healing.
+
+## Issue B — “Confirm Element” modal buttons do nothing (can’t proceed)
+
+**Symptom**
+- In the “Confirm Element” modal, clicking **No, Skip** or **Yes, Continue** appears to do nothing (stuck).
+
+**Root Cause (confirmed by code)**
+1. **Duplicate healing result reporting**
+   - `WalkthroughController.showHealingIndicator()` awaits `healElement()`, and the user-prompt path returns a result after the promise resolves.
+   - But `WalkthroughController.handleHealingConfirmation()` *also* immediately calls `handleHealingResult()` using `pendingHealResult`.
+   - Result: two `WALKTHROUGH_HEALING_RESULT` messages; background logs show a second `HEAL_SUCCESS` attempted from `WAITING_ACTION` (`No valid transition...`).
+2. **Listeners never attach to healed element**
+   - `handleHealingResult()` sets `currentTargetElement` on success, but **does not set** `currentTargetStepIndex`.
+   - When state enters `WAITING_ACTION`, `setupActionListeners()` can’t reuse the healed element (step index mismatch) and falls back to selector lookup (still failing) → no target, no action listeners.
+   - This makes the user “stuck” even after accepting the healed candidate.
+
+## Planned Fixes
+- Fix healing confirmation flow to report a single healing result (only from `showHealingIndicator`).
+- Store healed element with `currentTargetStepIndex` so `WAITING_ACTION` attaches listeners.
+- Improve `elementFinder` to use stable attrs + link/text heuristics (Google redirect URL parsing) so Step 2 is found deterministically and healing is not triggered.
+
+---
+
+# Walkthrough Demo Polish (Copy/Input Commit/Completion) — 2026-02-05
+
+## Issue 1 — Walkthrough doesn’t detect `copy` but recorder does
+
+**Symptom**
+- On the docs page, Step 4 prompt asks user to copy selected text, but walkthrough does not detect any action.
+
+**Root Cause (code)**
+- New walkthrough ActionDetector only supports: `click`, `input_commit`, `select_change`, `submit`.
+  - File: `extension/src/content/walkthrough/actions/ActionDetector.ts`
+- Recorder detects clipboard via document-level `copy/cut/paste` (`extension/src/content/recorder.ts`).
+
+**Proposed Fix**
+- Add `copy` to walkthrough ActionDetector + ActionValidator.
+- Capture copied text via `window.getSelection()?.toString()` (works without clipboard permissions); fall back to `ClipboardEvent.clipboardData`.
+- Validate against recorded `action_data.clipboard_preview`:
+  - Normalize whitespace.
+  - If preview ends with `...` (truncated), treat as prefix; otherwise require exact match or prefix match.
+- Ensure copy happened “on” the expected element by checking selection range common ancestor is within the highlighted element (or composedPath contains it).
+
+## Issue 2 — Input commit not detected on Google Docs title field
+
+**Symptom**
+- User changes doc title and clicks out; walkthrough does not advance.
+
+**Most Likely Root Cause (code)**
+- For `input_commit`, ActionDetector listens for `blur` on the *target element*.
+  - `blur` does **not** bubble, so if the highlighted “target” is a container (common on dynamic UIs), we miss the descendant input’s blur.
+  - Using `focusout` (bubbles) or capture-phase `blur` fixes this.
+
+**Proposed Fix**
+- Switch commit detection from `blur` → `focusout` for `input_commit`.
+- Add support for `contenteditable` elements (baseline + commit on focusout).
+
+## Issue 3 — No completion modal
+
+**Symptom**
+- At the end, walkthrough session ends and UI disappears without a “completed” state.
+
+**Root Cause (code)**
+- Controller’s `COMPLETED` state handler is a placeholder (`showCompleted()` logs only).
+  - File: `extension/src/content/walkthrough/WalkthroughController.ts`
+- UI already supports completion render: `WalkthroughUI.showCompletion()` + `TooltipRenderer.renderCompletion()`.
+
+**Proposed Fix**
+- Wire controller `COMPLETED` state to `ui.showCompletion(state)`.
+- Keep “Done” button mapped to `EXIT` (for now). Optional future: store dashboard tab URL at start and implement “Return to dashboard”.
+
+## Implementation (Completed)
+- Added walkthrough support for `copy` steps:
+  - `ActionDetector` listens to document-level `copy` (capture) and emits value (prefers `ClipboardEvent.clipboardData`, falls back to `selection.toString()`).
+  - `ActionValidator` validates copy origin + compares against `step.action_data.clipboard_preview` (whitespace-normalized; supports truncated `...` previews).
+- Fixed `input_commit` detection for nested/dynamic inputs:
+  - Switched commit detection from `blur` → `focusout` (bubbling), added baseline init for already-focused descendants, and contenteditable support.
+  - Added a regression unit test that attaches to a container and commits from a descendant input.
+- Added completion UX:
+  - Controller now renders `WalkthroughUI.showCompletion()` when the state machine enters `COMPLETED`.
+- Updated shared unions/guards:
+  - Shared walkthrough event unions now include `copy` + `wrong_value`.
+  - Background now maps `wrong_value`/`invalid_target` correctly instead of defaulting to `wrong_action`.
+- Verified:
+  - `npm run build --workspace=extension` ✅
+  - `npm test --workspace=extension` ✅
+
+---
+
 ## Problem Statement
 
 User reported:
@@ -245,3 +435,59 @@ If session crashes, pick up here:
 3. Implement solution based on design above
 4. Key files to modify: recorder.ts, messaging.ts, index.ts
 5. Create new file: recordingSession.ts
+
+---
+
+## Walkthrough Modal Dismiss Fixes (2026-02-06)
+
+### New User-Reported Issues
+1. Completion modal `Done` button does not dismiss walkthrough.
+2. Auto-healing modal `X` should cancel healing flow (not act like hard exit).
+
+### Root Cause Analysis
+- **Completion modal stuck**:
+  - `SessionManager.endSession()` exits early when `hasActiveSession()` is false.
+  - `hasActiveSession()` depends on `isActiveWalkthrough()`.
+  - `isActiveWalkthrough()` incorrectly returned false for `COMPLETED` and `ERROR`, so `EXIT` command became a no-op in those states.
+
+- **Healing modal X behavior wrong**:
+  - Tooltip event delegation treated all close/exit buttons the same and emitted `exit` regardless of mode.
+  - In healing UI, this should cancel healing (equivalent to reject), not force session exit.
+  - If user closes during spinner phase (before confirmation resolver exists), there was no cancellation path.
+
+### Implemented Fixes
+- `extension/src/shared/walkthrough/WalkthroughState.ts`
+  - Updated `isActiveWalkthrough()` to treat all non-`IDLE` states as active.
+  - This allows `EXIT` from `COMPLETED` and `ERROR` to end session and broadcast `IDLE` cleanup.
+
+- `extension/src/content/walkthrough/ui/TooltipRenderer.ts`
+  - Close/exit buttons are now mode-aware:
+    - In `healing` mode: emit `reject_heal`.
+    - Other modes: keep emitting `exit`.
+
+- `extension/src/content/walkthrough/WalkthroughController.ts`
+  - Added `handleHealingRejectFromUI()`:
+    - If confirmation prompt is active, resolves as rejected.
+    - If still in spinner phase, cancels in-flight healing attempt and sends `WALKTHROUGH_HEALING_RESULT` failure (`"User canceled auto-healing"`) so state exits `HEALING` cleanly.
+
+### Tests Added/Updated
+- `extension/src/shared/walkthrough/__tests__/WalkthroughState.test.ts`
+  - Verifies `isActiveWalkthrough()` behavior for `IDLE`, `COMPLETED`, `ERROR`.
+
+- `extension/src/content/walkthrough/ui/__tests__/TooltipRenderer.test.ts`
+  - Verifies healing close button dispatches `reject_heal`.
+
+- `extension/src/content/walkthrough/__tests__/healingFlow.test.ts`
+  - Verifies closing healing before confirmation reports `WALKTHROUGH_HEALING_RESULT` failure and cancels in-progress healing.
+
+### Validation
+- `npm run build --workspace=extension` ✅
+- `npm test --workspace=extension` ✅
+
+### Code Quality / Maintainability Opportunities Observed
+1. **State semantics drift**: `isActiveWalkthrough()` had become semantically inconsistent with `getState()` (`getState()` already treated non-`IDLE` as an active session snapshot). Consider formalizing utility contracts with unit tests for all exported state helpers.
+2. **Mode-action coupling in TooltipRenderer**: action routing is currently switch-based with mode-specific branches. Consider an explicit `actionMapByMode` table to reduce regressions when new modes/buttons are added.
+3. **Healing cancellation path centralization**: healing cancel/reject logic now exists in multiple branches (resolver vs spinner). Consider consolidating into a single cancel API to reduce future race-condition risk.
+- Follow-up improvement implemented: `TooltipRenderer` now removes drag handlers before rendering non-step modes (`error`, `completion`, `navigation`, `navigate_step`, `healing`) to avoid document-level handler leaks across mode transitions.
+- Added regression test: `TooltipRenderer.test.ts` verifies `removeEventListener` is called for drag handlers when switching from step mode to completion mode.
+- Attempted codex read-only review command timed out at 120s; no actionable automated findings were returned in final output.

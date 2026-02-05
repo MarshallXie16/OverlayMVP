@@ -7,6 +7,7 @@ Provides endpoints for:
 - Revoking invites (admin only)
 - Verifying invite tokens (public)
 """
+import logging
 from datetime import datetime, timedelta
 from uuid import uuid4
 
@@ -28,6 +29,7 @@ from app.utils.permissions import Permission, require_permission
 from app.tasks.email import send_team_invite_email
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 # Invite expiry in days
 INVITE_EXPIRY_DAYS = 7
@@ -171,13 +173,17 @@ async def create_invite(
     company_name = company.name if company else "Your Company"
 
     # Queue invite email via Celery
-    send_team_invite_email.delay(
-        to_email=invite.email,
-        inviter_name=current_user.name or current_user.email,
-        company_name=company_name,
-        invite_token=invite.token,
-        role=invite.role,
-    )
+    try:
+        send_team_invite_email.delay(
+            to_email=invite.email,
+            inviter_name=current_user.name or current_user.email,
+            company_name=company_name,
+            invite_token=invite.token,
+            role=invite.role,
+        )
+    except Exception as e:
+        # Invites should still be created even if async email dispatch is unavailable.
+        logger.exception("Failed to enqueue invite email (invite_id=%s): %s", invite.id, e)
 
     return InviteResponse(
         id=invite.id,

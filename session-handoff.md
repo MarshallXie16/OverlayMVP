@@ -1,4 +1,47 @@
-# Session Handoff: 2026-02-03 (Night - Final)
+# Session Handoff: 2026-02-05
+
+## Current Task
+**Task**: Post-walkthrough-overhaul bug fix — walkthrough progress across navigation (sample workflow)
+**Status**: COMPLETED — build + tests pass, ready for manual demo smoke test
+
+## What Was Done This Session
+
+### Walkthrough Progress Across Navigation — FIXED
+**Symptom**: On `docs/sample_workflow.md` (Google search flow), after typing a query and pressing Enter, the walkthrough navigates to results but stays on step 1.
+
+**Root Causes**:
+- Content controller rendered steps but never sent `WALKTHROUGH_ELEMENT_STATUS` → background never transitioned `SHOWING_STEP → WAITING_ACTION` → action listeners never attached.
+- Walkthrough `input_commit` detection relied on blur, missing Enter-triggered immediate navigations.
+- Auto-advance was tied to a content-side timeout that could be canceled on state changes.
+- `navigate` steps had empty selectors and needed URL-driven completion.
+
+**Fixes**:
+- Content `WalkthroughController` uses `findElement()` and reports element found/not found so the state machine reaches `WAITING_ACTION`.
+- `ActionDetector` emits `input_commit` on Enter keydown (ignore Shift+Enter in textarea) and prevents blur double-emit.
+- Background `REPORT_ACTION` schedules `NEXT_STEP` with delays (advancement survives content teardown); added guards to ignore stale stepIndex reports.
+- State machine auto-completes `navigate` steps on `URL_CHANGED` using match policy: origin + normalized pathname, ignore query/hash, expected `/` matches any same-origin path; legacy navigate (no destination) advances on any URL change.
+- Recording improvements:
+  - Patch `navigate` steps with `action_data.target_url` (on navigation start) + `action_data.final_url` (on navigation complete).
+  - Suppress extra NAVIGATE step after Enter-search (immediate input_commit side effect).
+
+**Docs Updated**:
+- `docs/sample_workflow.md` updated to reflect “type + Enter” as a single `input_commit` and no separate navigate step for search results.
+
+**Verification**:
+- `npm run build --workspace=extension` ✅
+- `npm test --workspace=extension` ✅
+- Codex read-only review run via `codex exec` ✅
+
+## Manual Demo Smoke Test (Recommended)
+1. Reload extension in `chrome://extensions` (Dev Mode).
+2. Start walkthrough for a workflow that begins at `https://www.google.com/`.
+3. Step 1 highlights search box → type query + press Enter.
+4. On results page, walkthrough should now be on the next actionable step (click first result), not step 1.
+5. Confirm explicit `navigate` steps only complete once URL matches expected destination.
+
+---
+
+## Previous Session (2026-02-03)
 
 ## Current Task
 **Task**: Post-Sprint 6 Bug Fixes - Walkthrough System

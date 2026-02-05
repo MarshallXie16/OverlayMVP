@@ -42,7 +42,19 @@ def test_delete_file_actually_deletes(self, real_screenshots_dir):
 
 ---
 
-### 2. Log All Exceptions Before Swallowing
+### 2. Live Network Tests Must Be Opt-In
+
+**Symptom**: Test suite fails in CI/offline environments with API connection errors.
+
+**Root Cause**: Tests make real network calls by default (or only gate on API key presence), which breaks when outbound networking is blocked.
+
+**Solution**: Skip live-call tests unless an explicit opt-in env flag is set (e.g., `RUN_LIVE_*_TESTS=1`), and keep unit tests fully mocked.
+
+**Prevention**: Treat external API connectivity as a manual/integration check, not part of the default unit/integration test suite.
+
+---
+
+### 3. Log All Exceptions Before Swallowing
 
 **Symptom**: Operations fail silently with no way to diagnose issues.
 
@@ -73,7 +85,7 @@ except Exception as e:
 
 ## Event Handling Patterns
 
-### 3. Click Validation Must Handle Child Elements
+### 4. Click Validation Must Handle Child Elements
 
 **Symptom**: Click validation fails when user clicks on nested elements (SVG icon inside button).
 
@@ -111,7 +123,7 @@ function isClickOnTarget(event: Event, targetElement: HTMLElement): boolean {
 
 ## Data Integrity Patterns
 
-### 4. Clean Up Associated Files on Deletion
+### 5. Clean Up Associated Files on Deletion
 
 **Symptom**: Storage bloat from orphaned files.
 
@@ -145,7 +157,7 @@ def delete_workflow(db, workflow_id, company_id):
 
 ## Chrome Extension Build Patterns
 
-### 5. Content Scripts Must Be IIFE Bundles (Not ES Modules)
+### 6. Content Scripts Must Be IIFE Bundles (Not ES Modules)
 
 **Symptom**: Content script fails with "Cannot use import statement outside a module" error.
 
@@ -192,7 +204,7 @@ await esbuild.build({
 
 ## Error Recovery Patterns
 
-### 6. Retain Data on Upload Failure
+### 7. Retain Data on Upload Failure
 
 **Symptom**: User loses recorded data when upload fails.
 
@@ -222,6 +234,49 @@ try {
 **Prevention**: For operations with valuable user data, always implement local persistence on failure.
 
 ---
+
+## Walkthrough Patterns
+
+### 8. Walkthrough Progress Must Be Background-Owned (Content Scripts Die on Navigation)
+
+**Symptom**: Walkthrough appears to “reset” or stay on the same step after a page navigation (e.g., Google search Enter → results page still shows step 1).
+
+**Root Cause**:
+- Content script UI can render a step, but if it **doesn’t report element-found status**, the background state machine never transitions `SHOWING_STEP → WAITING_ACTION`, so action listeners never attach.
+- `input_commit` detected only on **blur** misses flows where **Enter triggers immediate navigation**.
+- Content-side delayed “NEXT” can be canceled on state changes because the content script is ephemeral and state transitions are fast.
+
+**Solution**:
+- Always send `WALKTHROUGH_ELEMENT_STATUS(found=true/false)` from the content script after element resolution.
+- Detect `input_commit` on **Enter keydown** (and update baseline to prevent blur double-emits).
+- Schedule step advancement (`NEXT_STEP`) in the **background** after `REPORT_ACTION` so advancement isn’t tied to the content script lifecycle.
+- Treat `navigate` steps as URL-driven: auto-complete on `URL_CHANGED` when the URL matches the expected destination (origin + normalized pathname; ignore query/hash; expected `/` matches any same-origin path).
+
+**Prevention**:
+- Any progress/state that must survive navigation should be owned by the background worker.
+- Add unit tests for navigation race ordering (`ACTION_DETECTED` vs `URL_CHANGED`) and for `navigate` URL matching.
+
+---
+
+### 9. Healing Confirmation Must Be Single-Source-Of-Truth (Avoid Duplicate Results + Stale UI)
+
+**Symptom**: “Confirm Element” healing modal appears, but clicking **Yes, Continue** / **No, Skip** does nothing (walkthrough feels stuck). Service worker may log: `No valid transition for HEAL_SUCCESS from WAITING_ACTION`.
+
+**Root Cause**:
+- The content script reported `WALKTHROUGH_HEALING_RESULT` **twice**:
+  - once immediately on button click, and
+  - again after `healElement()` returned from the user-prompt path.
+- On success, the controller stored the healed element but **did not associate it with the current step index**, so `WAITING_ACTION` couldn’t attach action listeners and the click interceptor had no target.
+- Background handler accepted healing results even when the session was no longer in `HEALING`, amplifying duplicate/stale message issues.
+
+**Solution**:
+- Only report healing results from the async healing flow (`showHealingIndicator()`), and let UI buttons only resolve the confirmation promise.
+- When healing succeeds, store both `currentTargetElement` **and** `currentTargetStepIndex`, and swap tooltip back to the normal step UI so the user can proceed.
+- Add background guards to ignore `HEALING_RESULT` unless `machineState === "HEALING"` and `stepIndex` matches `currentStepIndex`.
+
+**Prevention**:
+- Any message that mutates session state should be **idempotent** and gated on `(machineState, stepIndex)` to tolerate retries/duplicates.
+- For “modal” UI flows, ensure the next state re-renders the UI (don’t leave users staring at stale prompts).
 
 ## Historical Bug Fixes
 

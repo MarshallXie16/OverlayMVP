@@ -9,6 +9,7 @@ Tests:
 """
 import pytest
 from datetime import datetime, timedelta
+from unittest.mock import patch
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
@@ -172,6 +173,21 @@ class TestCreateInvite:
         invite = db.query(Invite).filter(Invite.email == "newuser@example.com").first()
         assert invite is not None
         assert invite.company_id == company.id
+
+    def test_create_invite_succeeds_when_email_queue_fails(
+        self, client: TestClient, db: Session, admin_token: str
+    ):
+        """Invite creation should not fail if async email dispatch is unavailable."""
+        with patch("app.api.invites.send_team_invite_email.delay", side_effect=Exception("queue down")):
+            response = client.post(
+                "/api/invites/me/invites",
+                headers={"Authorization": f"Bearer {admin_token}"},
+                json={"email": "queuefail@example.com", "role": "viewer"},
+            )
+
+        assert response.status_code == 201
+        invite = db.query(Invite).filter(Invite.email == "queuefail@example.com").first()
+        assert invite is not None
 
     def test_regular_user_cannot_create_invite(
         self, client: TestClient, regular_token: str

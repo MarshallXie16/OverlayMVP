@@ -5,9 +5,9 @@ AI-powered Chrome extension for recording, managing, and executing interactive w
 ## 📚 Documentation
 
 ### Technical Documentation
-- **[API Reference](./backend/API_EXAMPLES.md)** - Complete REST API documentation
+- **[API Reference](./docs/API_EXAMPLES.md)** - Complete REST API documentation
 - **[Architecture](./docs/architecture.md)** - System architecture and component interaction
-- **[Testing Guide](./TESTING_GUIDE.md)** - Testing procedures and scenarios
+- **[Testing Guide](./docs/guides/TESTING_GUIDE.md)** - Testing procedures and scenarios
 
 ### Project Knowledge
 - **[Memory](./memory.md)** - Project context and architectural decisions
@@ -50,8 +50,8 @@ cd ..
 ### Step 2: Configure Environment
 
 ```bash
-# Copy environment template
-cp backend/.env.example backend/.env
+# Create env file manually
+touch backend/.env
 ```
 
 Edit `backend/.env` with your values:
@@ -67,7 +67,7 @@ ANTHROPIC_API_KEY=sk-ant-...
 # Optional - for screenshot storage (uses local filesystem if not set)
 AWS_ACCESS_KEY_ID=
 AWS_SECRET_ACCESS_KEY=
-AWS_S3_BUCKET=
+S3_BUCKET_NAME=
 ```
 
 **Generate a secure JWT key:**
@@ -314,4 +314,3 @@ npm test -- --coverage         # With coverage report
 4. Run test suite before committing
 5. Update documentation if API changes
 6. Submit PR for review
-

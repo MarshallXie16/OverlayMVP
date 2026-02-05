@@ -8,6 +8,16 @@ import pytest
 from anthropic import Anthropic
 
 
+RUN_LIVE_ANTHROPIC_TESTS = os.getenv("RUN_LIVE_ANTHROPIC_TESTS") == "1"
+
+# These tests make real network calls and should be opt-in so the default test suite
+# runs in offline/CI environments.
+pytestmark = pytest.mark.skipif(
+    not RUN_LIVE_ANTHROPIC_TESTS,
+    reason="Live Anthropic API tests disabled (set RUN_LIVE_ANTHROPIC_TESTS=1 to enable)",
+)
+
+
 def test_anthropic_api_key_exists():
     """Test that ANTHROPIC_API_KEY is set in environment."""
     api_key = os.getenv("ANTHROPIC_API_KEY")

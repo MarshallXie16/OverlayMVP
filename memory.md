@@ -51,6 +51,12 @@ New state machine-based architecture replaces legacy event-driven system. Featur
 
 **Docs**: `docs/walkthrough-architecture.md` | Sprint plans: `docs/plans/walkthrough-overhaul/`
 
+**Post-Migration Fixes (2026-02-05)**:
+- Content script now reports `WALKTHROUGH_ELEMENT_STATUS` after element resolution so the state machine can transition `SHOWING_STEP → WAITING_ACTION` (and attach action listeners).
+- `input_commit` supports Enter keydown (pre-navigation) in addition to blur-based commits.
+- Auto-advance timing moved to background (`REPORT_ACTION` schedules `NEXT_STEP`) to survive content script teardown on navigation.
+- `navigate` steps are URL-driven: auto-complete on `URL_CHANGED` when URL matches expected destination (`action_data.target_url`, origin + normalized pathname; ignore query/hash; expected `/` matches any same-origin path). Legacy `navigate` (no destination) advances on any URL change.
+
 ### Test Status
 
 | Component | Tests | Status |

@@ -106,11 +106,20 @@ class AIService:
             # Extract workflow context for better labelling
             workflow_context = None
             if step.workflow:
-                workflow_context = {
-                    "name": step.workflow.name,
-                    "step_number": step.step_number,
-                    "total_steps": len(step.workflow.steps),
-                }
+                # Best-effort: avoid crashing if workflow/steps can't be loaded (e.g., detached instances)
+                total_steps = None
+                try:
+                    workflow_steps = step.workflow.steps
+                    if workflow_steps is not None:
+                        total_steps = len(workflow_steps)
+                except Exception:
+                    logger.debug(
+                        "Failed to compute workflow total_steps for step %s",
+                        getattr(step, "id", "unknown"),
+                        exc_info=True,
+                    )
+
+                workflow_context = {"name": step.workflow.name, "step_number": step.step_number, "total_steps": total_steps}
 
             # Try AI labeling
             try:
