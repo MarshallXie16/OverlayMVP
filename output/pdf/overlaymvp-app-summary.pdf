@@ -1,0 +1,232 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+endobj
+6 0 obj
+<< /Length 3467 >>
+stream
+BT
+0.000 0.000 0.000 rg
+/F2 16 Tf
+18 TL
+48.0 744.0 Td
+(Workflow Automation Platform \(OverlayMVP\)) Tj
+ET
+q
+0.830 0.830 0.830 RG
+1 w
+48.0 734.0 m 564.0 734.0 l S
+Q
+q
+0.900 0.900 0.900 RG
+1 w
+48.0 72.0 249.0 650.0 re S
+Q
+q
+0.900 0.900 0.900 RG
+1 w
+315.0 72.0 249.0 650.0 re S
+Q
+BT
+0.060 0.460 0.420 rg
+/F2 9 Tf
+12 TL
+60.0 704.0 Td
+(WHAT IT IS) Tj
+ET
+BT
+0.000 0.000 0.000 rg
+/F1 10 Tf
+12 TL
+60.0 690.0 Td
+(AI-powered Chrome extension + web dashboard) Tj
+T*
+(to record and guide interactive web) Tj
+T*
+(workflows \(SOP walkthroughs\).) Tj
+ET
+BT
+0.060 0.460 0.420 rg
+/F2 9 Tf
+12 TL
+60.0 646.0 Td
+(WHO ITS FOR) Tj
+ET
+BT
+0.000 0.000 0.000 rg
+/F1 10 Tf
+12 TL
+60.0 632.0 Td
+(Department managers at SMBs \(10-500) Tj
+T*
+(employees\) who need a repeatable way to) Tj
+T*
+(capture and teach software processes to) Tj
+T*
+(their teams.) Tj
+ET
+BT
+0.060 0.460 0.420 rg
+/F2 9 Tf
+12 TL
+60.0 570.0 Td
+(HOW TO RUN \(MINIMAL\)) Tj
+ET
+BT
+0.000 0.000 0.000 rg
+/F1 9 Tf
+11 TL
+60.0 556.0 Td
+(- Prereqs: Node 18+, Python 3.11+, Chrome) Tj
+T*
+(- Install JS deps: npm install \(repo root\)) Tj
+T*
+(- Backend deps: cd backend; python -m venv venv;) Tj
+T*
+(  source venv/bin/activate; pip install -r) Tj
+T*
+(  requirements.txt) Tj
+T*
+(- Configure env: cp backend/.env.example) Tj
+T*
+(  backend/.env; set JWT_SECRET_KEY + \(optional\)) Tj
+T*
+(  ANTHROPIC_API_KEY) Tj
+T*
+(- Migrate DB: cd backend; alembic upgrade head) Tj
+T*
+(- Start: uvicorn app.main:app --reload --port) Tj
+T*
+(  8000) Tj
+T*
+(- Start UI: cd dashboard; npm run dev) Tj
+T*
+(  \(http://localhost:3000\)) Tj
+T*
+(- Extension: cd extension; npm run build; load) Tj
+T*
+(  extension/dist in Chrome) Tj
+T*
+(- Celery/AI: celery -A app.celery_app worker;) Tj
+T*
+(  Redis install/start steps: Not found in repo) Tj
+ET
+BT
+0.060 0.460 0.420 rg
+/F2 9 Tf
+12 TL
+327.0 704.0 Td
+(WHAT IT DOES) Tj
+ET
+BT
+0.000 0.000 0.000 rg
+/F1 10 Tf
+12 TL
+327.0 690.0 Td
+(- Records user actions + screenshots \(Chrome) Tj
+T*
+(  extension\)) Tj
+T*
+(- Stores captured steps locally \(IndexedDB\)) Tj
+T*
+(  during recording) Tj
+T*
+(- Uploads workflows + screenshots to backend) Tj
+T*
+(  REST API) Tj
+T*
+(- AI step labeling in background \(Celery task\)) Tj
+T*
+(- Walkthrough overlay guides users on live sites) Tj
+T*
+(- Dashboard to sign up/login and review) Tj
+T*
+(  workflows + step details) Tj
+T*
+(- Company features: invites, roles, permissions,) Tj
+T*
+(  notifications, health endpoints) Tj
+ET
+BT
+0.060 0.460 0.420 rg
+/F2 9 Tf
+12 TL
+327.0 540.0 Td
+(HOW IT WORKS \(ARCHITECTURE\)) Tj
+ET
+BT
+0.000 0.000 0.000 rg
+/F1 8 Tf
+10 TL
+327.0 526.0 Td
+(Components:) Tj
+T*
+(- Extension \(MV3\): popup UI + background service) Tj
+T*
+(  worker + content scripts) Tj
+T*
+(- Backend: FastAPI routers \(auth, workflows, steps,) Tj
+T*
+(  screenshots, healing, company, invites,) Tj
+T*
+(  notifications, health, users\)) Tj
+T*
+(- DB: SQLAlchemy + SQLite by default \(see) Tj
+T*
+(  backend/.env.example\)) Tj
+T*
+(- Async: Celery worker + Redis broker for AI labeling) Tj
+T*
+(- Storage: S3 if configured; else local) Tj
+T*
+(  backend/screenshots \(served at /screenshots\)) Tj
+T*
+(- Dashboard: React + Vite app \(see) Tj
+T*
+(  dashboard/.env.example\)) Tj
+T*
+() Tj
+T*
+(Data flow \(happy path\):) Tj
+T*
+(1\) Record in extension -> steps/screenshots captured) Tj
+T*
+(2\) Upload to backend -> DB records stored) Tj
+T*
+(3\) Trigger processing -> Celery labels steps ->) Tj
+T*
+(   notification created) Tj
+T*
+(4\) Review in dashboard; run walkthrough overlay in) Tj
+T*
+(   extension) Tj
+ET
+endstream
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000121 00000 n 
+0000000257 00000 n 
+0000000354 00000 n 
+0000000456 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+3974
+%%EOF

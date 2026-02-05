@@ -1,0 +1,402 @@
+{
+  "overview": {
+    "total_files": 430,
+    "total_lines": 127735,
+    "code_lines": 90562,
+    "blank_lines": 21495,
+    "comment_lines": 15678
+  },
+  "test_vs_source": {
+    "source": {
+      "files": 360,
+      "lines": 101655
+    },
+    "test": {
+      "files": 70,
+      "lines": 26080
+    }
+  },
+  "by_language": {
+    "Shell": {
+      "files": 8,
+      "total": 723,
+      "code": 467,
+      "blank": 94,
+      "comment": 162
+    },
+    "Markdown": {
+      "files": 95,
+      "total": 49014,
+      "code": 33823,
+      "blank": 10429,
+      "comment": 4762
+    },
+    "Config": {
+      "files": 13,
+      "total": 483,
+      "code": 347,
+      "blank": 33,
+      "comment": 103
+    },
+    "JSON": {
+      "files": 16,
+      "total": 487,
+      "code": 434,
+      "blank": 12,
+      "comment": 41
+    },
+    "Other (.example)": {
+      "files": 2,
+      "total": 38,
+      "code": 29,
+      "blank": 9,
+      "comment": 0
+    },
+    "Other (.png)": {
+      "files": 6,
+      "total": 6,
+      "code": 6,
+      "blank": 0,
+      "comment": 0
+    },
+    "SVG": {
+      "files": 1,
+      "total": 15,
+      "code": 13,
+      "blank": 2,
+      "comment": 0
+    },
+    "JavaScript (ES Module)": {
+      "files": 1,
+      "total": 59,
+      "code": 42,
+      "blank": 7,
+      "comment": 10
+    },
+    "TypeScript": {
+      "files": 126,
+      "total": 43660,
+      "code": 29652,
+      "blank": 6404,
+      "comment": 7604
+    },
+    "TypeScript (React)": {
+      "files": 55,
+      "total": 11041,
+      "code": 9645,
+      "blank": 791,
+      "comment": 605
+    },
+    "HTML": {
+      "files": 4,
+      "total": 279,
+      "code": 261,
+      "blank": 9,
+      "comment": 9
+    },
+    "CSS": {
+      "files": 6,
+      "total": 1128,
+      "code": 864,
+      "blank": 159,
+      "comment": 105
+    },
+    "Other (.local)": {
+      "files": 2,
+      "total": 2,
+      "code": 2,
+      "blank": 0,
+      "comment": 0
+    },
+    "Other (.ini)": {
+      "files": 2,
+      "total": 138,
+      "code": 112,
+      "blank": 26,
+      "comment": 0
+    },
+    "Other (.txt)": {
+      "files": 1,
+      "total": 46,
+      "code": 35,
+      "blank": 11,
+      "comment": 0
+    },
+    "TOML": {
+      "files": 1,
+      "total": 19,
+      "code": 16,
+      "blank": 3,
+      "comment": 0
+    },
+    "Other": {
+      "files": 3,
+      "total": 9,
+      "code": 9,
+      "blank": 0,
+      "comment": 0
+    },
+    "Python": {
+      "files": 87,
+      "total": 20562,
+      "code": 14789,
+      "blank": 3498,
+      "comment": 2275
+    },
+    "Other (.mako)": {
+      "files": 1,
+      "total": 26,
+      "code": 16,
+      "blank": 8,
+      "comment": 2
+    }
+  },
+  "by_module": {
+    "root": {
+      "files": 14,
+      "total": 5126,
+      "code": 2678,
+      "ts_files": 0,
+      "py_files": 0
+    },
+    ".windsurf": {
+      "files": 2,
+      "total": 375,
+      "code": 127,
+      "ts_files": 0,
+      "py_files": 0
+    },
+    "extension": {
+      "files": 136,
+      "total": 43880,
+      "code": 29913,
+      "ts_files": 114,
+      "py_files": 0
+    },
+    "designed": {
+      "files": 39,
+      "total": 5783,
+      "code": 4700,
+      "ts_files": 22,
+      "py_files": 0
+    },
+    "workflow_prompts": {
+      "files": 6,
+      "total": 2254,
+      "code": 1767,
+      "ts_files": 0,
+      "py_files": 0
+    },
+    "sprints": {
+      "files": 12,
+      "total": 10648,
+      "code": 6932,
+      "ts_files": 0,
+      "py_files": 0
+    },
+    ".claude": {
+      "files": 18,
+      "total": 5893,
+      "code": 4219,
+      "ts_files": 0,
+      "py_files": 0
+    },
+    "backend": {
+      "files": 94,
+      "total": 20714,
+      "code": 14920,
+      "ts_files": 0,
+      "py_files": 86
+    },
+    "docs": {
+      "files": 40,
+      "total": 16674,
+      "code": 11945,
+      "ts_files": 0,
+      "py_files": 0
+    },
+    "design_docs": {
+      "files": 5,
+      "total": 4946,
+      "code": 3849,
+      "ts_files": 0,
+      "py_files": 0
+    },
+    "dashboard": {
+      "files": 62,
+      "total": 10994,
+      "code": 9175,
+      "ts_files": 51,
+      "py_files": 0
+    },
+    "scripts": {
+      "files": 2,
+      "total": 448,
+      "code": 337,
+      "ts_files": 0,
+      "py_files": 1
+    }
+  },
+  "largest_files": [
+    {
+      "path": "extension/src/content/walkthrough.ts",
+      "language": "TypeScript",
+      "lines": 2310,
+      "code": 1665,
+      "is_test": false,
+      "module": "extension"
+    },
+    {
+      "path": "extension/src/background/messaging.ts",
+      "language": "TypeScript",
+      "lines": 1952,
+      "code": 1437,
+      "is_test": false,
+      "module": "extension"
+    },
+    {
+      "path": "extension/src/content/__tests__/walkthrough.test.ts",
+      "language": "TypeScript",
+      "lines": 1829,
+      "code": 1263,
+      "is_test": true,
+      "module": "extension"
+    },
+    {
+      "path": "design_docs/technical_requirements.md",
+      "language": "Markdown",
+      "lines": 1629,
+      "code": 1321,
+      "is_test": false,
+      "module": "design_docs"
+    },
+    {
+      "path": "backlog.md",
+      "language": "Markdown",
+      "lines": 1575,
+      "code": 54,
+      "is_test": false,
+      "module": "root"
+    },
+    {
+      "path": "sprints/archive/completed_tasks.md",
+      "language": "Markdown",
+      "lines": 1548,
+      "code": 457,
+      "is_test": false,
+      "module": "sprints"
+    },
+    {
+      "path": "docs/API_EXAMPLES.md",
+      "language": "Markdown",
+      "lines": 1286,
+      "code": 1051,
+      "is_test": false,
+      "module": "docs"
+    },
+    {
+      "path": "designed/flowguide 2/design_docs/product_design.md",
+      "language": "Markdown",
+      "lines": 1285,
+      "code": 923,
+      "is_test": false,
+      "module": "designed"
+    },
+    {
+      "path": "design_docs/product_design.md",
+      "language": "Markdown",
+      "lines": 1285,
+      "code": 923,
+      "is_test": false,
+      "module": "design_docs"
+    },
+    {
+      "path": "extension/src/content/walkthrough/WalkthroughController.ts",
+      "language": "TypeScript",
+      "lines": 1193,
+      "code": 725,
+      "is_test": false,
+      "module": "extension"
+    },
+    {
+      "path": "extension/src/content/recorder.ts",
+      "language": "TypeScript",
+      "lines": 1149,
+      "code": 749,
+      "is_test": false,
+      "module": "extension"
+    },
+    {
+      "path": "sprints/sprint-3-admin-dashboard.md",
+      "language": "Markdown",
+      "lines": 1068,
+      "code": 834,
+      "is_test": false,
+      "module": "sprints"
+    },
+    {
+      "path": ".claude/session-log.md",
+      "language": "Markdown",
+      "lines": 1066,
+      "code": 886,
+      "is_test": false,
+      "module": ".claude"
+    },
+    {
+      "path": "extension/src/content/healing/__tests__/candidateFinder.test.ts",
+      "language": "TypeScript",
+      "lines": 1049,
+      "code": 780,
+      "is_test": true,
+      "module": "extension"
+    },
+    {
+      "path": "sprints/sprint-5-team-settings.md",
+      "language": "Markdown",
+      "lines": 1038,
+      "code": 855,
+      "is_test": false,
+      "module": "sprints"
+    },
+    {
+      "path": "docs/plans/walkthrough-overhaul/03-action-detection.md",
+      "language": "Markdown",
+      "lines": 1038,
+      "code": 640,
+      "is_test": false,
+      "module": "docs"
+    },
+    {
+      "path": "sprints/sprint-6-backend-quality.md",
+      "language": "Markdown",
+      "lines": 1030,
+      "code": 775,
+      "is_test": false,
+      "module": "sprints"
+    },
+    {
+      "path": "sprints/archive/tasks.md",
+      "language": "Markdown",
+      "lines": 1011,
+      "code": 810,
+      "is_test": false,
+      "module": "sprints"
+    },
+    {
+      "path": "extension/src/shared/walkthrough/StateMachine.ts",
+      "language": "TypeScript",
+      "lines": 995,
+      "code": 762,
+      "is_test": false,
+      "module": "extension"
+    },
+    {
+      "path": "backend/tests/integration/test_workflows_api.py",
+      "language": "Python",
+      "lines": 992,
+      "code": 782,
+      "is_test": true,
+      "module": "backend"
+    }
+  ]
+}
