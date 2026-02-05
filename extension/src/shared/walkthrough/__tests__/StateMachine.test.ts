@@ -40,6 +40,30 @@ function createTestWorkflow() {
   };
 }
 
+function createWorkflowWithNavigateStep(options?: {
+  expectedTargetUrl?: string;
+  includeActionData?: boolean;
+}) {
+  const includeActionData = options?.includeActionData ?? true;
+  return {
+    id: 2,
+    name: "Navigate Workflow",
+    starting_url: "https://example.com",
+    steps: [
+      { id: 1, order: 0, action_type: "click" },
+      {
+        id: 2,
+        order: 1,
+        action_type: "navigate",
+        action_data: includeActionData
+          ? { target_url: options?.expectedTargetUrl }
+          : undefined,
+      },
+      { id: 3, order: 2, action_type: "click" },
+    ],
+  };
+}
+
 // ============================================================================
 // TESTS
 // ============================================================================
@@ -200,6 +224,41 @@ describe("WalkthroughStateMachine", () => {
       expect(newState.machineState).toBe("SHOWING_STEP");
       expect(newState.currentStepIndex).toBe(0);
     });
+
+    it("should transition TRANSITIONING → NAVIGATING on URL_CHANGED (navigation race)", () => {
+      machine.dispatch({
+        type: "ACTION_DETECTED",
+        stepIndex: 0,
+        actionType: "click",
+      });
+
+      const newState = machine.dispatch({
+        type: "URL_CHANGED",
+        tabId: 1,
+        url: "https://example.com/page2",
+      });
+
+      expect(newState.machineState).toBe("NAVIGATING");
+      expect(newState.navigation.inProgress).toBe(true);
+    });
+
+    it("should allow NEXT_STEP while NAVIGATING (auto-advance during navigation)", () => {
+      machine.dispatch({
+        type: "ACTION_DETECTED",
+        stepIndex: 0,
+        actionType: "click",
+      });
+      machine.dispatch({
+        type: "URL_CHANGED",
+        tabId: 1,
+        url: "https://example.com/page2",
+      });
+
+      const newState = machine.dispatch({ type: "NEXT_STEP" });
+
+      expect(newState.machineState).toBe("NAVIGATING");
+      expect(newState.currentStepIndex).toBe(1);
+    });
   });
 
   describe("Element Finding Transitions", () => {
@@ -337,6 +396,82 @@ describe("WalkthroughStateMachine", () => {
       });
 
       expect(newState.machineState).toBe("NAVIGATING"); // Still navigating
+    });
+
+    it("should auto-complete navigate step on URL_CHANGED when destination matches", () => {
+      machine = new WalkthroughStateMachine();
+      machine.dispatch({ type: "START", workflowId: 123, tabId: 1 });
+      const workflow = createWorkflowWithNavigateStep({
+        expectedTargetUrl: "https://docs.google.com/document/u/0/",
+      });
+      machine.dispatch({ type: "DATA_LOADED", workflow, tabId: 1 });
+      machine.dispatch({ type: "JUMP_TO_STEP", stepIndex: 1 }); // Navigate step
+
+      const newState = machine.dispatch({
+        type: "URL_CHANGED",
+        tabId: 1,
+        url: "https://docs.google.com/document/u/0/?tgif=d",
+      });
+
+      expect(newState.machineState).toBe("NAVIGATING");
+      expect(newState.completedStepIndexes).toContain(1);
+      expect(newState.currentStepIndex).toBe(2);
+    });
+
+    it('should treat expected "/" as same-origin match for any path', () => {
+      machine = new WalkthroughStateMachine();
+      machine.dispatch({ type: "START", workflowId: 123, tabId: 1 });
+      const workflow = createWorkflowWithNavigateStep({
+        expectedTargetUrl: "https://www.google.com/",
+      });
+      machine.dispatch({ type: "DATA_LOADED", workflow, tabId: 1 });
+      machine.dispatch({ type: "JUMP_TO_STEP", stepIndex: 1 }); // Navigate step
+
+      const newState = machine.dispatch({
+        type: "URL_CHANGED",
+        tabId: 1,
+        url: "https://www.google.com/search?q=test",
+      });
+
+      expect(newState.currentStepIndex).toBe(2);
+    });
+
+    it("should not auto-complete navigate step on URL_CHANGED when destination does not match", () => {
+      machine = new WalkthroughStateMachine();
+      machine.dispatch({ type: "START", workflowId: 123, tabId: 1 });
+      const workflow = createWorkflowWithNavigateStep({
+        expectedTargetUrl: "https://docs.google.com/",
+      });
+      machine.dispatch({ type: "DATA_LOADED", workflow, tabId: 1 });
+      machine.dispatch({ type: "JUMP_TO_STEP", stepIndex: 1 }); // Navigate step
+
+      const newState = machine.dispatch({
+        type: "URL_CHANGED",
+        tabId: 1,
+        url: "https://drive.google.com/",
+      });
+
+      expect(newState.currentStepIndex).toBe(1);
+      expect(newState.completedStepIndexes).not.toContain(1);
+    });
+
+    it("should auto-complete legacy navigate step (no target_url) on any URL_CHANGED", () => {
+      machine = new WalkthroughStateMachine();
+      machine.dispatch({ type: "START", workflowId: 123, tabId: 1 });
+      const workflow = createWorkflowWithNavigateStep({
+        includeActionData: false,
+      });
+      machine.dispatch({ type: "DATA_LOADED", workflow, tabId: 1 });
+      machine.dispatch({ type: "JUMP_TO_STEP", stepIndex: 1 }); // Navigate step
+
+      const newState = machine.dispatch({
+        type: "URL_CHANGED",
+        tabId: 1,
+        url: "https://anywhere.example.com/path",
+      });
+
+      expect(newState.currentStepIndex).toBe(2);
+      expect(newState.completedStepIndexes).toContain(1);
     });
   });
 

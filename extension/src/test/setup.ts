@@ -23,10 +23,10 @@ globalThis.XPathResult = {
 
 // Mock chrome.storage API
 const createStorageMock = () => {
-  let storage: Record<string, any> = {};
+  const createArea = () => {
+    let storage: Record<string, any> = {};
 
-  return {
-    local: {
+    return {
       get: vi.fn(
         (keys: string | string[] | null, callback?: (items: any) => void) => {
           return new Promise((resolve) => {
@@ -94,7 +94,12 @@ const createStorageMock = () => {
           resolve(undefined);
         });
       }),
-    },
+    };
+  };
+
+  return {
+    local: createArea(),
+    session: createArea(),
 
     onChanged: {
       addListener: vi.fn(),
@@ -140,6 +145,9 @@ export function resetChromeStorage() {
   // Check if chrome.storage exists before trying to clear
   if (globalThis.chrome?.storage?.local?.clear) {
     (globalThis.chrome.storage.local.clear as any)();
+  }
+  if (globalThis.chrome?.storage?.session?.clear) {
+    (globalThis.chrome.storage.session.clear as any)();
   }
 }
 

@@ -206,11 +206,7 @@ export function createIdleState(): WalkthroughState {
  * Check if state is in an active walkthrough
  */
 export function isActiveWalkthrough(state: WalkthroughState): boolean {
-  return (
-    state.machineState !== "IDLE" &&
-    state.machineState !== "COMPLETED" &&
-    state.machineState !== "ERROR"
-  );
+  return state.machineState !== "IDLE";
 }
 
 /**

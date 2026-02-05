@@ -293,7 +293,7 @@ chrome.webNavigation.onCompleted.addListener(async (details) => {
       console.log(
         `[Background] Navigation completed in recording tab ${details.tabId}: ${details.url}`,
       );
-      await handleRecordingNavigationComplete(details.tabId);
+      await handleRecordingNavigationComplete(details.tabId, details.url);
 
       // Re-inject recorder content script for the new page
       // (Content scripts are destroyed on navigation, need to re-inject for multi-page recording)

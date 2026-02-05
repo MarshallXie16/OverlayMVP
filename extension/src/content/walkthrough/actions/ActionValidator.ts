@@ -27,6 +27,7 @@ export interface ValidationResult {
   reason?:
     | "wrong_element"
     | "wrong_action"
+    | "wrong_value"
     | "no_value_change"
     | "invalid_target";
   retryCount: number;
@@ -131,6 +132,10 @@ export class ActionValidator {
     expectedElement: HTMLElement,
     expectedActionType: ActionType,
     stepIndex: number,
+    context?: {
+      /** For copy validation: clipboard preview recorded at record-time */
+      expectedClipboardPreview?: string | null;
+    },
   ): ValidationResult {
     this.log(
       `Validating ${action.type} against expected ${expectedActionType}`,
@@ -141,6 +146,7 @@ export class ActionValidator {
       action,
       expectedElement,
       expectedActionType,
+      context,
     );
 
     if (!validationResult.valid) {
@@ -193,6 +199,9 @@ export class ActionValidator {
     action: DetectedAction,
     expectedElement: HTMLElement,
     expectedActionType: ActionType,
+    context?: {
+      expectedClipboardPreview?: string | null;
+    },
   ): { valid: boolean; reason?: ValidationResult["reason"] } {
     const eventTarget = action.event.target as HTMLElement;
 
@@ -209,6 +218,13 @@ export class ActionValidator {
 
       case "submit":
         return this.validateSubmit(action);
+
+      case "copy":
+        return this.validateCopy(
+          action,
+          expectedElement,
+          context?.expectedClipboardPreview ?? null,
+        );
 
       default:
         this.log(`Unknown action type: ${expectedActionType}`, "warn");
@@ -327,6 +343,57 @@ export class ActionValidator {
 
     // LEGACY PARITY: Only check event type
     // Submit event target is always the form, which matches our listener target
+    return { valid: true };
+  }
+
+  /**
+   * Validate copy action.
+   * - Must be copy action
+   * - Must originate from within the expected element (or its descendants)
+   *
+   * Note: Clipboard text matching is handled by higher-level logic (WalkthroughController),
+   * since expected clipboard preview lives in step.action_data.
+   */
+  private validateCopy(
+    action: DetectedAction,
+    expectedElement: HTMLElement,
+    expectedClipboardPreview: string | null,
+  ): { valid: boolean; reason?: ValidationResult["reason"] } {
+    if (action.type !== "copy") {
+      this.log(`Wrong action type: expected copy, got ${action.type}`);
+      return { valid: false, reason: "wrong_action" };
+    }
+
+    if (!isClickOnTarget(action.event, expectedElement)) {
+      this.log("Copy not on target element");
+      return { valid: false, reason: "wrong_element" };
+    }
+
+    if (expectedClipboardPreview) {
+      const normalize = (s: string) => s.replace(/\s+/g, " ").trim();
+      const expectedRaw = normalize(expectedClipboardPreview);
+      const copied = normalize(action.value ?? "");
+
+      if (!copied) {
+        return { valid: false, reason: "wrong_value" };
+      }
+
+      const isTruncated = expectedRaw.endsWith("...");
+      const expected = isTruncated
+        ? expectedRaw.slice(0, -3).trim()
+        : expectedRaw;
+
+      // If recorder stored a preview, accept if the copied text matches it or starts with it.
+      // For truncated previews, only prefix checks are meaningful.
+      const matches = isTruncated
+        ? copied.startsWith(expected)
+        : copied === expected || copied.startsWith(expected);
+
+      if (!matches) {
+        return { valid: false, reason: "wrong_value" };
+      }
+    }
+
     return { valid: true };
   }
 

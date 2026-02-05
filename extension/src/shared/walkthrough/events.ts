@@ -136,14 +136,14 @@ export interface ElementNotFoundEvent {
 export interface ActionDetectedEvent {
   type: "ACTION_DETECTED";
   stepIndex: number;
-  actionType: "click" | "input_commit" | "select_change" | "submit";
+  actionType: "click" | "input_commit" | "select_change" | "submit" | "copy";
 }
 
 /** User action was invalid (wrong element, wrong action type) */
 export interface ActionInvalidEvent {
   type: "ACTION_INVALID";
   stepIndex: number;
-  reason: "wrong_element" | "wrong_action" | "no_value_change";
+  reason: "wrong_element" | "wrong_action" | "wrong_value" | "no_value_change" | "invalid_target";
 }
 
 // ============================================================================

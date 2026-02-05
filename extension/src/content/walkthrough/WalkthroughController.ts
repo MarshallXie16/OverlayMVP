@@ -25,16 +25,13 @@ import {
   createCommandMessage,
   createHealingResultMessage,
   MAX_ACTION_RETRIES,
-  ADVANCE_DELAY_CLICK,
-  ADVANCE_DELAY_SELECT,
-  ADVANCE_DELAY_INPUT,
-  ADVANCE_DELAY_DEFAULT,
   FLASH_SUCCESS_DURATION_MS,
   FLASH_ERROR_DURATION_MS,
 } from "../../shared/walkthrough";
 import type { HealingResult as MessageHealingResult } from "../../shared/walkthrough/messages";
 import type { StepResponse } from "../../shared/types";
 import { healElement, type HealingResult as HealerResult } from "../healing";
+import { findElement } from "../utils/elementFinder";
 import type { WalkthroughControllerConfig, StateChangeCallback } from "./types";
 import {
   ActionDetector,
@@ -80,9 +77,6 @@ export class WalkthroughController {
   // Flash effect timeout for cleanup
   private flashTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  // Auto-advance timeout (for cancellation on state change or destroy)
-  private advanceTimeout: ReturnType<typeof setTimeout> | null = null;
-
   // UI facade (Sprint 2, integrated in Sprint 4)
   private ui: WalkthroughUI;
 
@@ -91,11 +85,13 @@ export class WalkthroughController {
 
   // Healing state (Sprint 5)
   private healingInProgress = false;
-  private pendingHealResult: {
-    result: HealerResult;
-    step: StepResponse;
-    stepIndex: number;
-  } | null = null;
+  private healingAttemptId = 0;
+
+  // Async render cancellation guard (prevents stale renders after rapid transitions)
+  private stepRenderId = 0;
+
+  // Track which step the currentTargetElement belongs to
+  private currentTargetStepIndex: number | null = null;
 
   constructor(config?: WalkthroughControllerConfig) {
     this.config = config ?? {};
@@ -232,15 +228,8 @@ export class WalkthroughController {
       this.flashTimeout = null;
     }
 
-    // Clean up advance timeout (Critical: prevent stray NEXT commands after teardown)
-    if (this.advanceTimeout) {
-      clearTimeout(this.advanceTimeout);
-      this.advanceTimeout = null;
-    }
-
     // Clean up healing state
     this.healingInProgress = false;
-    this.pendingHealResult = null;
     if (this.healingConfirmResolver) {
       // Reject any pending healing confirmation
       this.healingConfirmResolver({ confirmed: false });
@@ -253,6 +242,7 @@ export class WalkthroughController {
     // Clear state
     this.currentState = null;
     this.currentTargetElement = null;
+    this.currentTargetStepIndex = null;
     this.stateCallbacks.clear();
     this.initialized = false;
 
@@ -337,7 +327,9 @@ export class WalkthroughController {
 
       case "SHOWING_STEP":
         // Find element and show step UI (placeholder)
-        this.showStep();
+        void this.showStep().catch((error) => {
+          this.log(`showStep failed: ${error}`, "error");
+        });
         break;
 
       case "WAITING_ACTION":
@@ -387,14 +379,9 @@ export class WalkthroughController {
     // Clear click interceptor target (but keep enabled - session-scoped)
     this.clickInterceptor.clearTarget();
 
-    // Cancel any pending auto-advance
-    if (this.advanceTimeout) {
-      clearTimeout(this.advanceTimeout);
-      this.advanceTimeout = null;
-    }
-
     // Clear target element reference
     this.currentTargetElement = null;
+    this.currentTargetStepIndex = null;
   }
 
   /**
@@ -406,7 +393,7 @@ export class WalkthroughController {
 
     // Reset healing flags
     this.healingInProgress = false;
-    this.pendingHealResult = null;
+    this.healingAttemptId++;
 
     // Reject any pending healing confirmation promise
     if (this.healingConfirmResolver) {
@@ -430,7 +417,7 @@ export class WalkthroughController {
   /**
    * Show current step UI (spotlight, tooltip)
    */
-  private showStep(): void {
+  private async showStep(): Promise<void> {
     if (!this.currentState) {
       this.log("Cannot show step: no current state", "warn");
       return;
@@ -442,18 +429,70 @@ export class WalkthroughController {
       return;
     }
 
-    const targetElement = this.findTargetElement(step);
-    if (!targetElement) {
-      this.log("Cannot show step: target element not found", "warn");
-      // TODO: Report element not found to background for healing
+    const stepIndex = this.currentState.currentStepIndex;
+
+    // Async cancellation guard: only render the most recent SHOWING_STEP
+    const renderId = ++this.stepRenderId;
+
+    // Special-case navigate steps: no element highlighting or action listeners.
+    if (step.action_type === "navigate") {
+      this.currentTargetElement = null;
+      this.currentTargetStepIndex = null;
+
+      const targetUrl =
+        (step.action_data as Record<string, unknown> | null | undefined)
+          ?.target_url ?? undefined;
+
+      this.ui.showNavigateStep(this.currentState, {
+        targetUrl:
+          typeof targetUrl === "string" && targetUrl.length > 0
+            ? targetUrl
+            : undefined,
+      });
       return;
     }
 
-    // Show UI with spotlight and tooltip
-    this.ui.showStep(targetElement, this.currentState);
-    this.log(
-      `UI: showStep ${this.currentState.currentStepIndex + 1}/${this.currentState.totalSteps}`,
-    );
+    try {
+      const { element } = await findElement(step);
+
+      // Abort if state moved on while we were awaiting the element
+      if (
+        renderId !== this.stepRenderId ||
+        !this.currentState ||
+        this.currentState.machineState !== "SHOWING_STEP" ||
+        this.currentState.currentStepIndex !== stepIndex
+      ) {
+        this.log("Skipping stale showStep render (state changed)", "warn");
+        return;
+      }
+
+      // Store element for WAITING_ACTION listener setup
+      this.currentTargetElement = element;
+      this.currentTargetStepIndex = stepIndex;
+
+      this.ui.showStep(element, this.currentState);
+      this.log(
+        `UI: showStep ${this.currentState.currentStepIndex + 1}/${this.currentState.totalSteps}`,
+      );
+
+      // Report element found status to background so it can transition to WAITING_ACTION
+      await this.reportElementStatus(stepIndex, true);
+    } catch (error) {
+      // Abort if state moved on while we were awaiting the element
+      if (
+        renderId !== this.stepRenderId ||
+        !this.currentState ||
+        this.currentState.machineState !== "SHOWING_STEP" ||
+        this.currentState.currentStepIndex !== stepIndex
+      ) {
+        return;
+      }
+
+      this.log(`Element not found for step ${stepIndex}: ${error}`, "warn");
+
+      // Report element NOT found status to background (triggers healing/error path)
+      await this.reportElementStatus(stepIndex, false);
+    }
   }
 
   /**
@@ -474,15 +513,26 @@ export class WalkthroughController {
       return;
     }
 
-    // Find target element - in full implementation, this comes from element finder
-    // For now, try to find by selector from step
-    const targetElement = this.findTargetElement(step);
+    const stepIndex = this.currentState.currentStepIndex;
+
+    // Prefer the element found during SHOWING_STEP (or healing) if it matches this step.
+    let targetElement =
+      this.currentTargetStepIndex === stepIndex
+        ? this.currentTargetElement
+        : null;
+
+    if (!targetElement) {
+      // Fallback: attempt a quick selector lookup (should be rare if showStep succeeded)
+      targetElement = this.findTargetElement(step);
+    }
+
     if (!targetElement) {
       this.log("Cannot setup listeners: target element not found", "warn");
       return;
     }
 
     this.currentTargetElement = targetElement;
+    this.currentTargetStepIndex = stepIndex;
 
     // Get action type from step
     const actionType = this.getActionTypeFromStep(step);
@@ -502,20 +552,20 @@ export class WalkthroughController {
   /**
    * Get the current step from state.
    */
-  private getCurrentStep(): Record<string, unknown> | null {
+  private getCurrentStep(): StepResponse | null {
     if (!this.currentState?.steps) {
       return null;
     }
     const index = this.currentState.currentStepIndex;
     const step = this.currentState.steps[index];
-    return step ? (step as unknown as Record<string, unknown>) : null;
+    return step ? (step as unknown as StepResponse) : null;
   }
 
   /**
    * Find target element for the current step.
    * Uses the selectors object stored by recording: { primary, css, xpath, data_testid, stable_attrs }
    */
-  private findTargetElement(step: Record<string, unknown>): HTMLElement | null {
+  private findTargetElement(step: StepResponse): HTMLElement | null {
     // Get selectors object from step (matches recording format)
     const selectors = step.selectors as
       | {
@@ -593,9 +643,8 @@ export class WalkthroughController {
    * Get action type from step definition.
    * API uses snake_case: action_type (not eventType)
    */
-  private getActionTypeFromStep(step: Record<string, unknown>): ActionType {
-    // API returns snake_case field name
-    const actionType = step.action_type as string | undefined;
+  private getActionTypeFromStep(step: StepResponse): ActionType {
+    const actionType = step.action_type;
 
     switch (actionType) {
       case "click":
@@ -606,6 +655,8 @@ export class WalkthroughController {
         return "select_change";
       case "submit":
         return "submit";
+      case "copy":
+        return "copy";
       default:
         // Default to click for unknown types
         return "click";
@@ -657,12 +708,22 @@ export class WalkthroughController {
     const expectedActionType = this.getActionTypeFromStep(step);
     const stepIndex = this.currentState.currentStepIndex;
 
+    const expectedClipboardPreview =
+      expectedActionType === "copy" &&
+      (step.action_data as Record<string, unknown> | null | undefined) &&
+      typeof (step.action_data as any).clipboard_preview === "string"
+        ? String((step.action_data as any).clipboard_preview)
+        : null;
+
     // Validate the action
     const result = this.actionValidator.validate(
       action,
       this.currentTargetElement,
       expectedActionType,
       stepIndex,
+      expectedActionType === "copy"
+        ? { expectedClipboardPreview }
+        : undefined,
     );
 
     this.log(
@@ -673,9 +734,15 @@ export class WalkthroughController {
     // - submit actions always cause navigation
     // - input_commit (Enter key) inside a form causes navigation
     // - click on a link causes navigation
+    const actionElement =
+      action.event.target instanceof HTMLElement
+        ? action.event.target
+        : action.target;
+
     const causesNavigation = this.actionCausesNavigation(
       action.type,
-      action.target,
+      actionElement,
+      action.event,
     );
 
     // Report to background - it will dispatch ACTION_DETECTED or ACTION_INVALID
@@ -692,19 +759,6 @@ export class WalkthroughController {
       this.flashSuccess(action.target);
       this.actionDetector.detach();
       this.clickInterceptor.clearTarget();
-
-      // Cancel any existing advance timeout
-      if (this.advanceTimeout) {
-        clearTimeout(this.advanceTimeout);
-      }
-
-      // Schedule auto-advance after delay (background will handle state transition)
-      // Store timeout for cancellation on state change or destroy
-      const delay = this.getAdvanceDelay(action.type);
-      this.advanceTimeout = setTimeout(() => {
-        this.advanceTimeout = null;
-        this.sendCommand("NEXT", {});
-      }, delay);
     } else {
       // Show error flash
       this.flashError(action.target);
@@ -751,7 +805,7 @@ export class WalkthroughController {
         this.handleHealingConfirmation(true);
         break;
       case "reject_heal":
-        this.handleHealingConfirmation(false);
+        void this.handleHealingRejectFromUI();
         break;
     }
   }
@@ -767,23 +821,45 @@ export class WalkthroughController {
       this.healingConfirmResolver({ confirmed });
       this.healingConfirmResolver = null;
     }
+  }
 
-    // If we have a pending result, handle it
-    if (this.pendingHealResult) {
-      const { result, step, stepIndex } = this.pendingHealResult;
+  /**
+   * Handle user-rejected healing from tooltip UI.
+   *
+   * Two modes:
+   * - Confirmation mode (resolver exists): resolve prompt as rejected.
+   * - Spinner mode (no resolver yet): cancel attempt and report HEAL_FAILED immediately.
+   */
+  private async handleHealingRejectFromUI(): Promise<void> {
+    if (this.healingConfirmResolver) {
+      this.handleHealingConfirmation(false);
+      return;
+    }
 
-      if (confirmed) {
-        // User confirmed - report success
-        result.resolution = "healed_user";
-        result.healingLog.status = "user_confirmed";
-        this.handleHealingResult(result, step, stepIndex);
-      } else {
-        // User rejected - report failure
-        result.success = false;
-        result.resolution = "user_rejected";
-        result.healingLog.status = "user_rejected";
-        this.handleHealingResult(result, step, stepIndex);
-      }
+    if (!this.currentState || this.currentState.machineState !== "HEALING") {
+      return;
+    }
+
+    const stepIndex = this.currentState.currentStepIndex;
+
+    this.log("Healing canceled by user before confirmation");
+
+    // Cancel any in-flight healer attempt. Its eventual result will be ignored via attemptId guard.
+    this.healingInProgress = false;
+    this.healingAttemptId++;
+
+    const message = createHealingResultMessage(stepIndex, {
+      success: false,
+      confidence: 0,
+      aiValidated: false,
+      failureReason: "User canceled auto-healing",
+      candidatesEvaluated: 0,
+    });
+
+    try {
+      await chrome.runtime.sendMessage(message);
+    } catch (error) {
+      this.log(`Failed to report canceled healing result: ${error}`, "error");
     }
   }
 
@@ -795,14 +871,20 @@ export class WalkthroughController {
   private actionCausesNavigation(
     actionType: ActionType,
     target: HTMLElement,
+    event: Event,
   ): boolean {
     // Submit actions always cause navigation
     if (actionType === "submit") {
       return true;
     }
 
-    // Input commit (Enter key) inside a form causes form submission
+    // Input commit can be triggered by blur OR Enter keydown.
+    // Blur-based commits should NOT be treated as navigation-causing.
     if (actionType === "input_commit") {
+      if (!(event instanceof KeyboardEvent) || event.key !== "Enter") {
+        return false;
+      }
+
       // Check if input is inside a form
       const form = target.closest("form");
       if (form) {
@@ -835,23 +917,6 @@ export class WalkthroughController {
     }
 
     return false;
-  }
-
-  /**
-   * Get auto-advance delay based on action type.
-   */
-  private getAdvanceDelay(actionType: ActionType): number {
-    switch (actionType) {
-      case "click":
-      case "submit":
-        return ADVANCE_DELAY_CLICK;
-      case "select_change":
-        return ADVANCE_DELAY_SELECT;
-      case "input_commit":
-        return ADVANCE_DELAY_INPUT;
-      default:
-        return ADVANCE_DELAY_DEFAULT;
-    }
   }
 
   /**
@@ -941,6 +1006,7 @@ export class WalkthroughController {
 
     const stepIndex = this.currentState.currentStepIndex;
     this.healingInProgress = true;
+    const attemptId = ++this.healingAttemptId;
 
     this.log(`Starting healing for step ${stepIndex}: ${step.field_label}`);
 
@@ -952,37 +1018,6 @@ export class WalkthroughController {
       const result = await healElement(step, {
         aiEnabled: false, // AI disabled for now
         onUserPrompt: async (element, score) => {
-          // Store pending result for UI confirmation
-          this.pendingHealResult = {
-            result: {
-              success: true,
-              element,
-              confidence: score,
-              resolution: "healed_user",
-              scoringResult: null,
-              candidatesEvaluated: 0,
-              aiConfidence: null,
-              healingLog: {
-                timestamp: Date.now(),
-                stepId: step.id,
-                workflowId: step.workflow_id,
-                status: "user_confirmed",
-                deterministicScore: score,
-                aiConfidence: null,
-                finalConfidence: score,
-                candidatesEvaluated: 0,
-                topCandidateScore: score,
-                runnerUpScore: null,
-                vetoesApplied: [],
-                factorScores: {},
-                originalContext: {},
-                selectedContext: null,
-              },
-            },
-            step,
-            stepIndex,
-          };
-
           // Show confirmation UI with confidence
           this.ui.showHealing(this.currentState!, {
             confidence: score,
@@ -1000,11 +1035,18 @@ export class WalkthroughController {
         },
       });
 
-      // Clear pending if we got a result (auto-accept or reject)
-      if (!this.pendingHealResult) {
-        await this.handleHealingResult(result, step, stepIndex);
+      // If the state moved on while healing was running, do not report stale results.
+      if (
+        attemptId !== this.healingAttemptId ||
+        !this.currentState ||
+        this.currentState.machineState !== "HEALING" ||
+        this.currentState.currentStepIndex !== stepIndex
+      ) {
+        this.log("Skipping stale healing result (state changed)", "warn");
+        return;
       }
-      // If pendingHealResult exists, user confirmation flow is active
+
+      await this.handleHealingResult(result, step, stepIndex);
     } catch (error) {
       this.log(`Healing error: ${error}`, "error");
       await this.handleHealingResult(
@@ -1053,7 +1095,6 @@ export class WalkthroughController {
     stepIndex: number,
   ): Promise<void> {
     this.healingInProgress = false;
-    this.pendingHealResult = null;
 
     this.log(
       `Healing result: ${result.success ? "SUCCESS" : "FAILED"} (${Math.round(result.confidence * 100)}%)`,
@@ -1089,6 +1130,12 @@ export class WalkthroughController {
     // If successful, store the healed element for use in WAITING_ACTION
     if (result.success && result.element) {
       this.currentTargetElement = result.element;
+      this.currentTargetStepIndex = stepIndex;
+
+      // Replace healing confirmation/spinner with the normal step UI so the user can proceed.
+      if (this.currentState) {
+        this.ui.showStep(result.element, this.currentState);
+      }
     }
   }
 
@@ -1116,8 +1163,16 @@ export class WalkthroughController {
    * Show completion UI
    */
   private showCompleted(): void {
-    this.log("UI: showCompleted (placeholder)");
-    // TODO: Sprint 2 - Implement completion UI
+    this.log("UI: showCompleted");
+    if (!this.currentState) {
+      this.log("Cannot show completed: no current state", "warn");
+      return;
+    }
+
+    // Detach listeners and clear targets; we are done.
+    this.cleanupActionState();
+
+    this.ui.showCompletion(this.currentState);
   }
 
   /**

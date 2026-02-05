@@ -20,7 +20,12 @@
 /**
  * Supported action types (matches recording system, minus navigate/clipboard)
  */
-export type ActionType = "click" | "input_commit" | "select_change" | "submit";
+export type ActionType =
+  | "click"
+  | "input_commit"
+  | "select_change"
+  | "submit"
+  | "copy";
 
 /**
  * Detected action event emitted by ActionDetector
@@ -37,7 +42,7 @@ export interface DetectedAction {
  * Listener tracking for cleanup
  */
 interface TrackedListener {
-  element: Element;
+  element: EventTarget;
   eventType: string;
   handler: EventListener;
   options?: boolean | AddEventListenerOptions;
@@ -71,10 +76,7 @@ export interface ActionDetectorConfig {
 export class ActionDetector {
   private onActionDetected: (action: DetectedAction) => void;
   private activeListeners: TrackedListener[] = [];
-  private inputBaselines: WeakMap<
-    HTMLInputElement | HTMLTextAreaElement,
-    string
-  > = new WeakMap();
+  private inputBaselines: WeakMap<HTMLElement, string> = new WeakMap();
   private config: ActionDetectorConfig;
 
   constructor(
@@ -114,6 +116,10 @@ export class ActionDetector {
 
       case "submit":
         this.setupSubmitListener(element);
+        break;
+
+      case "copy":
+        this.setupCopyListener(element);
         break;
 
       default:
@@ -186,25 +192,59 @@ export class ActionDetector {
     ) {
       this.inputBaselines.set(element, element.value);
       this.log(`Initial baseline set: "${element.value}"`);
+    } else if (element.isContentEditable) {
+      const value = element.innerText || element.textContent || "";
+      this.inputBaselines.set(element, value);
+      this.log(`Initial baseline set (contenteditable)`);
     }
 
     // 1. Capture baseline on focusin (refresh if user re-focuses)
     const focusHandler = (event: Event) => {
-      const input = event.target as HTMLInputElement | HTMLTextAreaElement;
+      const input = event.target as HTMLElement;
       if (
         input instanceof HTMLInputElement ||
         input instanceof HTMLTextAreaElement
       ) {
         this.inputBaselines.set(input, input.value);
         this.log(`Baseline refreshed on focusin: "${input.value}"`);
+      } else if (input instanceof HTMLElement && input.isContentEditable) {
+        const value = input.innerText || input.textContent || "";
+        this.inputBaselines.set(input, value);
+        this.log(`Baseline refreshed on focusin (contenteditable)`);
       }
     };
     element.addEventListener("focusin", focusHandler);
     this.track(element, "focusin", focusHandler);
 
-    // 2. Emit on blur if value changed
-    // IMPORTANT: No capture phase - matches legacy walkthrough.ts:1942
-    const blurHandler = (event: Event) => {
+    // If an input/contenteditable within the target is already focused when we attach,
+    // initialize its baseline immediately so the first focusout isn't compared to "".
+    const active = document.activeElement;
+    if (
+      active instanceof HTMLElement &&
+      (active instanceof HTMLInputElement ||
+        active instanceof HTMLTextAreaElement ||
+        active.isContentEditable) &&
+      (active === element || element.contains(active))
+    ) {
+      if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) {
+        this.inputBaselines.set(active, active.value);
+      } else {
+        const value = active.innerText || active.textContent || "";
+        this.inputBaselines.set(active, value);
+      }
+    }
+
+    // 2. Emit on Enter keydown (critical for pages that navigate immediately on Enter,
+    // e.g., Google search). This must run before blur, and should update baseline
+    // to avoid double-emitting on subsequent blur.
+    const keydownHandler = (event: Event) => {
+      if (!(event instanceof KeyboardEvent)) {
+        return;
+      }
+      if (event.key !== "Enter") {
+        return;
+      }
+
       const input = event.target as HTMLInputElement | HTMLTextAreaElement;
       if (
         !(
@@ -215,13 +255,19 @@ export class ActionDetector {
         return;
       }
 
-      const baseline = this.inputBaselines.get(input) ?? "";
-      if (input.value === baseline) {
-        this.log(`Blur ignored: no value change (value="${input.value}")`);
+      // Ignore Shift+Enter in textarea (treat as newline, not commit)
+      if (input instanceof HTMLTextAreaElement && event.shiftKey) {
         return;
       }
 
-      this.log(`Value changed: "${baseline}" → "${input.value}"`);
+      const baseline = this.inputBaselines.get(input) ?? "";
+      if (input.value === baseline) {
+        this.log(`Enter ignored: no value change (value="${input.value}")`);
+        return;
+      }
+
+      this.log(`Enter commit: "${baseline}" → "${input.value}"`);
+
       this.emit({
         type: "input_commit",
         target: element,
@@ -229,10 +275,68 @@ export class ActionDetector {
         value: input.value,
         timestamp: Date.now(),
       });
+
+      // Prevent blur from double-emitting for the same value
+      this.inputBaselines.set(input, input.value);
     };
-    // Bubble phase (no capture) - matches legacy
-    element.addEventListener("blur", blurHandler);
-    this.track(element, "blur", blurHandler);
+    // Capture phase helps ensure we run before navigation can tear down the page
+    element.addEventListener("keydown", keydownHandler, { capture: true });
+    this.track(element, "keydown", keydownHandler, { capture: true });
+
+    // 3. Emit on focusout (bubbles) if value changed.
+    // NOTE: blur does not bubble, which breaks cases where the highlighted target is a container
+    // and the actual editable input is a descendant (e.g., Google Docs title field).
+    const focusOutHandler = (event: Event) => {
+      const target = event.target as HTMLElement;
+
+      // Handle normal inputs/textareas
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement
+      ) {
+        const baseline = this.inputBaselines.get(target) ?? "";
+        if (target.value === baseline) {
+          this.log(
+            `Focusout ignored: no value change (value="${target.value}")`,
+          );
+          return;
+        }
+
+        this.log(`Value changed: "${baseline}" → "${target.value}"`);
+        this.emit({
+          type: "input_commit",
+          target: element,
+          event,
+          value: target.value,
+          timestamp: Date.now(),
+        });
+        return;
+      }
+
+      // Handle contenteditable elements
+      if (
+        target instanceof HTMLElement &&
+        target.isContentEditable
+      ) {
+        const value = target.innerText || target.textContent || "";
+        const baseline = this.inputBaselines.get(target) ?? "";
+        if (value === baseline) {
+          this.log(`Focusout ignored: no value change (contenteditable)`);
+          return;
+        }
+
+        this.log(`Contenteditable changed`);
+        this.emit({
+          type: "input_commit",
+          target: element,
+          event,
+          value,
+          timestamp: Date.now(),
+        });
+      }
+    };
+    element.addEventListener("focusout", focusOutHandler);
+    this.track(element, "focusout", focusOutHandler);
   }
 
   /**
@@ -284,6 +388,39 @@ export class ActionDetector {
     this.track(form, "submit", handler);
   }
 
+  /**
+   * Setup copy listener for copy action type.
+   *
+   * Uses document selection text to avoid clipboard permission issues.
+   * Filters by event target relationship to expected element.
+   */
+  private setupCopyListener(element: HTMLElement): void {
+    const handler = (event: Event) => {
+      // Prefer clipboardData (matches recorder semantics), fall back to selection text.
+      const clipboardText =
+        event instanceof ClipboardEvent
+          ? event.clipboardData?.getData("text/plain") ?? ""
+          : "";
+
+      const selection = window.getSelection?.();
+      const selectedText = selection ? selection.toString() : "";
+
+      const value = clipboardText || selectedText || undefined;
+
+      this.emit({
+        type: "copy",
+        target: element,
+        event,
+        value,
+        timestamp: Date.now(),
+      });
+    };
+
+    // Capture phase so we see it early and consistently across pages/editors.
+    document.addEventListener("copy", handler, { capture: true });
+    this.track(document, "copy", handler, { capture: true });
+  }
+
   // ============================================================================
   // HELPERS
   // ============================================================================
@@ -292,7 +429,7 @@ export class ActionDetector {
    * Track a listener for cleanup.
    */
   private track(
-    element: Element,
+    element: EventTarget,
     eventType: string,
     handler: EventListener,
     options?: boolean | AddEventListenerOptions,

@@ -15,6 +15,10 @@
 import { sessionManager } from "./SessionManager";
 import { StepRouter } from "./StepRouter";
 import {
+  ADVANCE_DELAY_CLICK,
+  ADVANCE_DELAY_DEFAULT,
+  ADVANCE_DELAY_INPUT,
+  ADVANCE_DELAY_SELECT,
   WALKTHROUGH_MESSAGE_TYPES,
   isWalkthroughMessage,
   type WalkthroughCommandMessage,
@@ -24,7 +28,7 @@ import {
   type WalkthroughExecutionLogMessage,
   type WalkthroughTabReadyResponse,
   type WalkthroughCommandResponse,
-} from "../../shared/walkthrough/messages";
+} from "../../shared/walkthrough";
 
 // ============================================================================
 // ROUTER INSTANCE
@@ -35,6 +39,29 @@ const stepRouter = new StepRouter(sessionManager, { debug: true });
 // ============================================================================
 // MESSAGE HANDLER
 // ============================================================================
+
+function getAdvanceDelay(
+  actionType: "click" | "input_commit" | "select_change" | "submit" | "copy",
+  causesNavigation: boolean,
+): number {
+  // Navigation-causing actions should advance immediately (content script may be torn down)
+  if (causesNavigation || actionType === "submit") {
+    return 0;
+  }
+
+  switch (actionType) {
+    case "click":
+      return ADVANCE_DELAY_CLICK;
+    case "select_change":
+      return ADVANCE_DELAY_SELECT;
+    case "input_commit":
+      return ADVANCE_DELAY_INPUT;
+    case "copy":
+      return ADVANCE_DELAY_DEFAULT;
+    default:
+      return ADVANCE_DELAY_DEFAULT;
+  }
+}
 
 /**
  * Handle Sprint 4 walkthrough messages
@@ -196,13 +223,35 @@ async function handleCommand(
           causesNavigation?: boolean;
         };
 
+        const stateBefore = await sessionManager.getState();
+        if (!stateBefore) {
+          sendResponse({ success: false, error: "No active session" });
+          break;
+        }
+
+        // Guard against stale content script messages (e.g. navigation teardown / rapid step jumps).
+        // Only accept action reports for the currently active step.
+        if (stateBefore.currentStepIndex !== actionPayload.stepIndex) {
+          console.log(
+            `[WalkthroughHandler] Ignoring REPORT_ACTION for stale stepIndex=${actionPayload.stepIndex} (current=${stateBefore.currentStepIndex})`,
+          );
+          sendResponse({ success: true, state: stateBefore });
+          break;
+        }
+
         if (actionPayload.valid) {
           // Map action type to expected format
           const actionType = actionPayload.actionType as
             | "click"
             | "input_commit"
             | "select_change"
-            | "submit";
+            | "submit"
+            | "copy";
+
+          const delay = getAdvanceDelay(
+            actionType,
+            actionPayload.causesNavigation ?? false,
+          );
 
           await sessionManager.dispatch({
             type: "ACTION_DETECTED",
@@ -210,30 +259,60 @@ async function handleCommand(
             actionType,
           });
 
-          // W-026.3: Auto-advance for navigation-causing actions.
-          // When an action causes page navigation (e.g., pressing Enter on a form,
-          // clicking a link), the content script is destroyed before it can send NEXT.
-          // For these actions, we auto-advance in the background immediately.
-          // For non-navigation actions, the content script handles advancement after
-          // the auto-advance delay.
-          const isNavigationAction =
-            actionPayload.causesNavigation || actionType === "submit";
+          // Schedule NEXT_STEP in background so advancement isn't tied to the content script lifecycle.
+          // Safety check prevents stray advances if user manually navigates/jumps meanwhile.
+          const scheduledState = await sessionManager.getState();
+          const scheduledSessionId = scheduledState?.sessionId ?? null;
+          const scheduledStepIndex = scheduledState?.currentStepIndex ?? null;
 
-          if (isNavigationAction) {
-            console.log(
-              `[WalkthroughHandler] Auto-advancing for navigation action: ${actionType}`,
-            );
-            await stepRouter.next();
+          const maybeAdvance = async () => {
+            try {
+              const current = await sessionManager.getState();
+              if (!current || !scheduledSessionId) return;
+
+              if (current.sessionId !== scheduledSessionId) return;
+              if (
+                scheduledStepIndex === null ||
+                current.currentStepIndex !== scheduledStepIndex
+              ) {
+                return;
+              }
+
+              // Navigation can begin immediately after action detection.
+              // Allow advancing while TRANSITIONING (normal) or NAVIGATING (race ordering).
+              if (
+                current.machineState !== "TRANSITIONING" &&
+                current.machineState !== "NAVIGATING"
+              ) {
+                return;
+              }
+
+              await sessionManager.dispatch({ type: "NEXT_STEP" });
+            } catch (error) {
+              console.warn(
+                "[WalkthroughHandler] Failed to auto-advance NEXT_STEP:",
+                error,
+              );
+            }
+          };
+
+          // For navigation-causing actions (delay=0), advance immediately so that a following
+          // URL_CHANGED can be attributed to a potential "navigate" step (and auto-completed).
+          if (delay === 0) {
+            await maybeAdvance();
+          } else {
+            setTimeout(() => {
+              void maybeAdvance();
+            }, delay);
           }
-          // W-026.2: For non-navigation actions, the content script's
-          // WalkthroughController sends a separate NEXT command after the
-          // auto-advance delay. We don't dispatch here to avoid double advancement.
         } else {
           // Map reason to expected format, default to "wrong_action"
           const reason =
             actionPayload.reason === "wrong_element" ||
             actionPayload.reason === "wrong_action" ||
-            actionPayload.reason === "no_value_change"
+            actionPayload.reason === "no_value_change" ||
+            actionPayload.reason === "wrong_value" ||
+            actionPayload.reason === "invalid_target"
               ? actionPayload.reason
               : "wrong_action";
 
@@ -346,6 +425,25 @@ async function handleElementStatus(
   }
 
   try {
+    const state = await sessionManager.getState();
+    if (!state) {
+      sendResponse({ success: false });
+      return;
+    }
+
+    // Guard against stale element status reports from old renders or torn-down content scripts.
+    // Only accept element status for the currently showing step.
+    if (
+      state.machineState !== "SHOWING_STEP" ||
+      state.currentStepIndex !== stepIndex
+    ) {
+      console.log(
+        `[WalkthroughHandler] Ignoring ELEMENT_STATUS for step ${stepIndex} (current=${state.currentStepIndex}, machineState=${state.machineState})`,
+      );
+      sendResponse({ success: true });
+      return;
+    }
+
     if (found) {
       // ELEMENT_FOUND event only needs stepIndex (per events.ts spec)
       await sessionManager.dispatch({
@@ -381,6 +479,22 @@ async function handleHealingResult(
   );
 
   try {
+    const state = await sessionManager.getState();
+    if (!state) {
+      sendResponse({ success: false });
+      return;
+    }
+
+    // Guard against duplicate or stale healing results.
+    // Only accept healing result for the currently healing step.
+    if (state.machineState !== "HEALING" || state.currentStepIndex !== stepIndex) {
+      console.log(
+        `[WalkthroughHandler] Ignoring HEALING_RESULT for step ${stepIndex} (current=${state.currentStepIndex}, machineState=${state.machineState})`,
+      );
+      sendResponse({ success: true });
+      return;
+    }
+
     if (result.success) {
       await sessionManager.dispatch({
         type: "HEAL_SUCCESS",

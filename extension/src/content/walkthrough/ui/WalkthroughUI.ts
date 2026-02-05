@@ -19,6 +19,7 @@ import {
   TooltipRenderer,
   type TooltipAction,
   type HealingOptions,
+  type NavigateStepOptions,
 } from "./TooltipRenderer";
 
 // ============================================================================
@@ -261,6 +262,36 @@ export class WalkthroughUI {
         stepNumber: state.currentStepIndex + 1,
         totalSteps: state.totalSteps,
         targetUrl: state.navigation.targetUrl ?? undefined,
+      });
+    }
+  }
+
+  /**
+   * Show a "navigate" step (explicit navigation expected, but not yet in progress).
+   * Unlike showNavigating(), this does not show a spinner.
+   */
+  showNavigateStep(
+    state: WalkthroughState,
+    options?: Pick<NavigateStepOptions, "targetUrl">,
+  ): void {
+    this.log("showNavigateStep");
+
+    // Ensure overlay exists
+    if (!this.overlayManager.isCreated()) {
+      this.createUI();
+    }
+
+    // Hide spotlight for navigate steps and clear element to prevent scroll/resize repositioning
+    if (this.spotlightRenderer) {
+      this.spotlightRenderer.hide();
+    }
+    this.currentElement = null;
+
+    if (this.tooltipRenderer) {
+      this.tooltipRenderer.renderNavigateStep({
+        stepNumber: state.currentStepIndex + 1,
+        totalSteps: state.totalSteps,
+        targetUrl: options?.targetUrl,
       });
     }
   }

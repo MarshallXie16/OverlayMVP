@@ -23,6 +23,8 @@ import {
   InputDebouncer,
 } from "./utils/filters";
 import { EventDeduplicator } from "./utils/event-deduplicator";
+import { isEnterCommitKeydown } from "./utils/recordingEnterCommit";
+import { shouldRecordNavigateStep } from "./utils/recordingNavigation";
 // Note: IndexedDB imports kept for backward compatibility but we prefer session storage
 import {
   addStep as addStepToIndexedDB,
@@ -88,6 +90,8 @@ interface RecorderState {
   startingUrl: string | null;
   debouncer: InputDebouncer;
   deduplicator: EventDeduplicator;
+  /** Timestamp when we recorded an input_commit immediately on Enter keydown */
+  immediateInputCommitRecordedAtMs: number | null;
 }
 
 const state: RecorderState = {
@@ -96,6 +100,7 @@ const state: RecorderState = {
   startingUrl: null,
   debouncer: new InputDebouncer(),
   deduplicator: new EventDeduplicator(),
+  immediateInputCommitRecordedAtMs: null,
 };
 
 // ============================================================================
@@ -359,9 +364,6 @@ function handleKeydown(event: KeyboardEvent): void {
   if (!state.isRecording) return;
 
   try {
-    // Only interested in Enter key
-    if (event.key !== "Enter") return;
-
     const element = event.target as Element;
 
     // Filter out events on the recording widget
@@ -373,6 +375,16 @@ function handleKeydown(event: KeyboardEvent): void {
     if (
       !(element instanceof HTMLInputElement) &&
       !(element instanceof HTMLTextAreaElement)
+    ) {
+      return;
+    }
+
+    if (
+      !isEnterCommitKeydown({
+        key: event.key,
+        shiftKey: event.shiftKey,
+        isTextArea: element instanceof HTMLTextAreaElement,
+      })
     ) {
       return;
     }
@@ -393,6 +405,10 @@ function handleKeydown(event: KeyboardEvent): void {
     // Use the keydown event itself - recordInteraction will detect input_commit
     // based on the element type, not the event type
     recordInteraction(event, element);
+
+    // Mark immediate input commit so beforeunload doesn't create a separate NAVIGATE step.
+    // (Enter search submits often navigate without any deduplicator-flushed events.)
+    state.immediateInputCommitRecordedAtMs = Date.now();
 
     // IMPORTANT: Mark the input as recorded to prevent blur from re-recording
     // This prevents the duplicate action bug (keydown + blur recording same input)
@@ -472,19 +488,29 @@ async function handleNavigation(_event: Event): Promise<void> {
     const eventsFlushed =
       await state.deduplicator.forceFlush(recordInteraction);
 
-    // Only record a NAVIGATE step if no click/input was flushed
-    // This handles address bar navigation (no click element to record)
-    // For link clicks, the flushed click IS the navigation intent - no separate NAVIGATE needed
-    if (eventsFlushed === 0) {
+    const immediateInputCommitRecorded =
+      state.immediateInputCommitRecordedAtMs !== null &&
+      Date.now() - state.immediateInputCommitRecordedAtMs < 1000;
+
+    const shouldRecord = shouldRecordNavigateStep({
+      eventsFlushed,
+      immediateInputCommitRecorded,
+    });
+
+    if (shouldRecord) {
       console.log("Recording navigation (no prior events flushed)");
       await recordNavigation();
     } else {
-      console.log(
-        `Skipping separate NAVIGATE step - ${eventsFlushed} event(s) already recorded`,
-      );
+      const reason = immediateInputCommitRecorded
+        ? "immediate Enter input_commit recorded"
+        : `${eventsFlushed} event(s) already recorded`;
+      console.log(`Skipping separate NAVIGATE step - ${reason}`);
     }
   } catch (error) {
     console.error("Error handling navigation:", error);
+  } finally {
+    // Clear suppression flag after navigation handling
+    state.immediateInputCommitRecordedAtMs = null;
   }
 }
 

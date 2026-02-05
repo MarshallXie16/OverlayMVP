@@ -19,7 +19,7 @@ function createMockAction(
   target: HTMLElement,
   eventTarget: HTMLElement = target,
 ): DetectedAction {
-  const event = new Event(type === "input_commit" ? "blur" : type);
+  const event = new Event(type === "input_commit" ? "focusout" : type);
   Object.defineProperty(event, "target", { value: eventTarget });
   return {
     type,
@@ -263,6 +263,51 @@ describe("ActionValidator", () => {
 
       expect(result.valid).toBe(false);
       expect(result.reason).toBe("wrong_action");
+    });
+  });
+
+  // ============================================================================
+  // COPY VALIDATION
+  // ============================================================================
+
+  describe("copy validation", () => {
+    it("should validate copy when clipboard preview matches", () => {
+      const container = document.createElement("div");
+      const action = createMockAction("copy", container);
+      action.value = "BUILD WITH CLAUDE CODE";
+
+      const result = validator.validate(action, container, "copy", 0, {
+        expectedClipboardPreview: "BUILD WITH CLAUDE CODE",
+      });
+
+      expect(result.valid).toBe(true);
+    });
+
+    it("should reject copy when clipboard preview does not match", () => {
+      const container = document.createElement("div");
+      const action = createMockAction("copy", container);
+      action.value = "WRONG TEXT";
+
+      const result = validator.validate(action, container, "copy", 0, {
+        expectedClipboardPreview: "BUILD WITH CLAUDE CODE",
+      });
+
+      expect(result.valid).toBe(false);
+      expect(result.reason).toBe("wrong_value");
+      expect(result.retryCount).toBe(1);
+    });
+
+    it("should accept prefix match when preview is truncated", () => {
+      const container = document.createElement("div");
+      const action = createMockAction("copy", container);
+      action.value =
+        "This is a long copied text that starts with the preview and continues";
+
+      const result = validator.validate(action, container, "copy", 0, {
+        expectedClipboardPreview: "This is a long copied text...",
+      });
+
+      expect(result.valid).toBe(true);
     });
   });
 

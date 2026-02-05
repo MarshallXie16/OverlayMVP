@@ -85,9 +85,9 @@ describe("ActionDetector", () => {
 
       detector.attach(input, "input_commit");
 
-      // Change value and blur
+      // Change value and focusout
       input.value = "changed";
-      input.dispatchEvent(new FocusEvent("blur"));
+      input.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
 
       // Should emit because value differs from initial baseline
       expect(onAction).toHaveBeenCalledTimes(1);
@@ -111,12 +111,12 @@ describe("ActionDetector", () => {
       // Now baseline is "after-focus"
 
       // Blur without change - should NOT emit
-      input.dispatchEvent(new FocusEvent("blur"));
+      input.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
       expect(onAction).not.toHaveBeenCalled();
 
       // Now change and blur
       input.value = "final";
-      input.dispatchEvent(new FocusEvent("blur"));
+      input.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
       expect(onAction).toHaveBeenCalledTimes(1);
 
       document.body.removeChild(input);
@@ -130,7 +130,7 @@ describe("ActionDetector", () => {
       detector.attach(input, "input_commit");
 
       // Blur without changing value
-      input.dispatchEvent(new FocusEvent("blur"));
+      input.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
 
       expect(onAction).not.toHaveBeenCalled();
 
@@ -145,7 +145,7 @@ describe("ActionDetector", () => {
       detector.attach(textarea, "input_commit");
 
       textarea.value = "changed textarea";
-      textarea.dispatchEvent(new FocusEvent("blur"));
+      textarea.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
 
       expect(onAction).toHaveBeenCalledTimes(1);
       const action = onAction.mock.calls[0][0] as DetectedAction;
@@ -153,6 +153,135 @@ describe("ActionDetector", () => {
       expect(action.value).toBe("changed textarea");
 
       document.body.removeChild(textarea);
+    });
+
+    it("should emit input_commit on Enter keydown when value changed", () => {
+      const input = document.createElement("input");
+      input.value = "initial";
+      document.body.appendChild(input);
+
+      detector.attach(input, "input_commit");
+
+      input.value = "changed";
+      input.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+      );
+
+      expect(onAction).toHaveBeenCalledTimes(1);
+      const action = onAction.mock.calls[0][0] as DetectedAction;
+      expect(action.type).toBe("input_commit");
+      expect(action.value).toBe("changed");
+
+      document.body.removeChild(input);
+    });
+
+    it("should not emit on Enter keydown if value unchanged", () => {
+      const input = document.createElement("input");
+      input.value = "same";
+      document.body.appendChild(input);
+
+      detector.attach(input, "input_commit");
+
+      input.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+      );
+
+      expect(onAction).not.toHaveBeenCalled();
+
+      document.body.removeChild(input);
+    });
+
+    it("should not double-emit on blur after Enter keydown commit", () => {
+      const input = document.createElement("input");
+      input.value = "initial";
+      document.body.appendChild(input);
+
+      detector.attach(input, "input_commit");
+
+      input.value = "changed";
+      input.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+      );
+      input.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+
+      expect(onAction).toHaveBeenCalledTimes(1);
+
+      document.body.removeChild(input);
+    });
+
+    it("should ignore Shift+Enter in textarea", () => {
+      const textarea = document.createElement("textarea");
+      textarea.value = "initial";
+      document.body.appendChild(textarea);
+
+      detector.attach(textarea, "input_commit");
+
+      textarea.value = "changed";
+      textarea.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Enter",
+          shiftKey: true,
+          bubbles: true,
+        }),
+      );
+
+      expect(onAction).not.toHaveBeenCalled();
+
+      document.body.removeChild(textarea);
+    });
+
+    it("should detect focusout from a descendant input when attached to a container", () => {
+      const container = document.createElement("div");
+      const input = document.createElement("input");
+      input.value = "initial";
+      container.appendChild(input);
+      document.body.appendChild(container);
+
+      detector.attach(container, "input_commit");
+
+      // Establish baseline via focusin on the input
+      input.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+      input.value = "changed";
+
+      // focusout bubbles, so container-level listener should see it
+      input.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+
+      expect(onAction).toHaveBeenCalledTimes(1);
+      const action = onAction.mock.calls[0][0] as DetectedAction;
+      expect(action.type).toBe("input_commit");
+      expect(action.value).toBe("changed");
+
+      document.body.removeChild(container);
+    });
+  });
+
+  // ============================================================================
+  // COPY DETECTION
+  // ============================================================================
+
+  describe("copy detection", () => {
+    it("should detect copy and include selection text", () => {
+      const container = document.createElement("div");
+      container.textContent = "BUILD WITH CLAUDE CODE";
+      document.body.appendChild(container);
+
+      // Select the container text
+      const range = document.createRange();
+      range.selectNodeContents(container);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+
+      detector.attach(container, "copy");
+
+      document.dispatchEvent(new Event("copy", { bubbles: true }));
+
+      expect(onAction).toHaveBeenCalledTimes(1);
+      const action = onAction.mock.calls[0][0] as DetectedAction;
+      expect(action.type).toBe("copy");
+      expect(action.value).toContain("BUILD WITH CLAUDE CODE");
+
+      document.body.removeChild(container);
     });
   });
 

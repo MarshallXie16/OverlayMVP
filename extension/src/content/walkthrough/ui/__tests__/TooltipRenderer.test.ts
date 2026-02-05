@@ -195,6 +195,30 @@ describe("TooltipRenderer", () => {
       const instruction = container.querySelector(".walkthrough-instruction");
       expect(instruction?.textContent).toContain("My Awesome Workflow");
     });
+
+    it("should remove step drag handlers before rendering completion", () => {
+      const removeSpy = vi.spyOn(document, "removeEventListener");
+
+      renderer.render({
+        stepNumber: 2,
+        totalSteps: 5,
+        fieldLabel: "Step",
+        instruction: "Do it",
+        isFirstStep: false,
+        isLastStep: false,
+      });
+
+      renderer.renderCompletion({
+        workflowName: "Test Workflow",
+        totalSteps: 5,
+      });
+
+      expect(removeSpy).toHaveBeenCalledWith(
+        "mousemove",
+        expect.any(Function),
+      );
+      expect(removeSpy).toHaveBeenCalledWith("mouseup", expect.any(Function));
+    });
   });
 
   describe("button click event delegation", () => {
@@ -271,6 +295,24 @@ describe("TooltipRenderer", () => {
       ) as HTMLElement;
       retryBtn.click();
       expect(onAction).toHaveBeenCalledWith("retry");
+    });
+  });
+
+  describe("healing mode button clicks", () => {
+    it("should dispatch 'reject_heal' when close button is clicked", () => {
+      renderer.renderHealing({
+        stepNumber: 2,
+        totalSteps: 8,
+        fieldLabel: "Test element",
+        confidence: 0.82,
+        showConfirmation: true,
+      });
+
+      const closeBtn = container.querySelector(
+        "#walkthrough-btn-exit",
+      ) as HTMLElement;
+      closeBtn.click();
+      expect(onAction).toHaveBeenCalledWith("reject_heal");
     });
   });
 

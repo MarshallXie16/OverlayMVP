@@ -51,6 +51,48 @@ interface TransitionDef {
   guard?: (state: WalkthroughState, event: WalkthroughEvent) => boolean;
 }
 
+function normalizePathname(pathname: string): string {
+  return pathname.replace(/\/$/, "") || "/";
+}
+
+function safeParseUrl(url: string): URL | null {
+  try {
+    return new URL(url);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Match policy for explicit navigate steps:
+ * - Compare origin + normalized pathname
+ * - Ignore query/hash
+ * - If expected pathname is "/", treat as match for any pathname on the same origin
+ */
+function doesNavigateUrlMatchExpected(
+  expectedUrl: string,
+  actualUrl: string,
+): boolean {
+  const expected = safeParseUrl(expectedUrl);
+  const actual = safeParseUrl(actualUrl);
+
+  if (!expected || !actual) {
+    return false;
+  }
+
+  if (expected.origin !== actual.origin) {
+    return false;
+  }
+
+  const expectedPath = normalizePathname(expected.pathname);
+  if (expectedPath === "/") {
+    return true;
+  }
+
+  const actualPath = normalizePathname(actual.pathname);
+  return expectedPath === actualPath;
+}
+
 // ============================================================================
 // TRANSITION TABLE
 // ============================================================================
@@ -230,6 +272,12 @@ const TRANSITIONS: TransitionDef[] = [
       return jumpEvent.stepIndex >= 0 && jumpEvent.stepIndex < state.totalSteps;
     },
   },
+  // Navigation can begin immediately after an action triggers TRANSITIONING
+  {
+    from: "TRANSITIONING",
+    event: "URL_CHANGED",
+    to: "NAVIGATING",
+  },
 
   // === NAVIGATION ===
   {
@@ -251,6 +299,28 @@ const TRANSITIONS: TransitionDef[] = [
       const jumpEvent = event as { stepIndex: number };
       return jumpEvent.stepIndex >= 0 && jumpEvent.stepIndex < state.totalSteps;
     },
+  },
+  {
+    from: "NAVIGATING",
+    event: "URL_CHANGED",
+    to: "NAVIGATING", // Stay navigating, update targetUrl (redirects) + allow navigate-step matching
+  },
+  {
+    from: "NAVIGATING",
+    event: "ACTION_DETECTED",
+    to: "NAVIGATING", // Allow race ordering where navigation starts before action report arrives
+  },
+  {
+    from: "NAVIGATING",
+    event: "NEXT_STEP",
+    to: "NAVIGATING",
+    guard: (state) => hasNextStep(state),
+  },
+  {
+    from: "NAVIGATING",
+    event: "NEXT_STEP",
+    to: "COMPLETED",
+    guard: (state) => !hasNextStep(state),
   },
   {
     from: "NAVIGATING",
@@ -680,6 +750,44 @@ export class WalkthroughStateMachine {
 
       case "URL_CHANGED": {
         const urlEvent = event as { tabId: number; url: string };
+
+        // Special-case: explicit navigate steps can complete themselves on URL change.
+        // This prevents "navigate" steps (with empty selectors) from blocking progress.
+        const currentStep = state.steps[state.currentStepIndex] as
+          | { action_type?: string; action_data?: unknown }
+          | undefined;
+        if (currentStep?.action_type === "navigate") {
+          const actionData = currentStep.action_data as
+            | Record<string, unknown>
+            | null
+            | undefined;
+          const expectedUrl =
+            (typeof actionData?.target_url === "string"
+              ? actionData?.target_url
+              : undefined) ??
+            (typeof actionData?.targetUrl === "string"
+              ? actionData?.targetUrl
+              : undefined);
+
+          const shouldAdvance = expectedUrl
+            ? doesNavigateUrlMatchExpected(expectedUrl, urlEvent.url)
+            : true; // Legacy navigate steps: advance on any URL change
+
+          if (shouldAdvance) {
+            newState = {
+              ...newState,
+              completedStepIndexes: state.completedStepIndexes.includes(
+                state.currentStepIndex,
+              )
+                ? state.completedStepIndexes
+                : [...state.completedStepIndexes, state.currentStepIndex],
+              currentStepIndex: hasNextStep(state)
+                ? state.currentStepIndex + 1
+                : state.currentStepIndex,
+            };
+          }
+        }
+
         newState = {
           ...newState,
           navigation: {

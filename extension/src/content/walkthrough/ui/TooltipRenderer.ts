@@ -64,6 +64,13 @@ export interface NavigationOptions {
   totalSteps: number;
 }
 
+export interface NavigateStepOptions {
+  /** Expected destination URL for the navigate step (if captured during recording) */
+  targetUrl?: string;
+  stepNumber: number;
+  totalSteps: number;
+}
+
 export interface HealingOptions {
   stepNumber: number;
   totalSteps: number;
@@ -80,6 +87,7 @@ export type TooltipMode =
   | "error"
   | "completion"
   | "navigation"
+  | "navigate_step"
   | "healing";
 
 /** Actions that can be triggered from tooltip buttons */
@@ -215,6 +223,9 @@ export class TooltipRenderer {
   renderError(options: ErrorOptions): void {
     if (!this.tooltip) return;
 
+    // Ensure drag handlers from step mode are removed before replacing markup.
+    this.removeDragHandlers();
+
     this.currentMode = "error";
     this.tooltip.className = "walkthrough-tooltip walkthrough-error";
 
@@ -283,6 +294,9 @@ export class TooltipRenderer {
   renderCompletion(options: CompletionOptions): void {
     if (!this.tooltip) return;
 
+    // Ensure drag handlers from step mode are removed before replacing markup.
+    this.removeDragHandlers();
+
     this.currentMode = "completion";
     this.tooltip.className = "walkthrough-tooltip walkthrough-complete";
 
@@ -333,6 +347,9 @@ export class TooltipRenderer {
   renderNavigation(options: NavigationOptions): void {
     if (!this.tooltip) return;
 
+    // Ensure drag handlers from step mode are removed before replacing markup.
+    this.removeDragHandlers();
+
     this.currentMode = "navigation";
     this.tooltip.className = "walkthrough-tooltip walkthrough-navigating";
 
@@ -376,11 +393,92 @@ export class TooltipRenderer {
   }
 
   /**
+   * Render a navigate step (mode: 'navigate_step').
+   * This is different from the loading 'navigation' mode:
+   * - No spinner
+   * - Message tells the user what URL to navigate to
+   * - Waits for URL change to advance
+   */
+  renderNavigateStep(options: NavigateStepOptions): void {
+    if (!this.tooltip) return;
+
+    // Ensure drag handlers from step mode are removed before replacing markup.
+    this.removeDragHandlers();
+
+    this.currentMode = "navigate_step";
+    this.tooltip.className = "walkthrough-tooltip walkthrough-navigate-step";
+
+    const progress = Math.round(
+      (options.stepNumber / options.totalSteps) * 100,
+    );
+
+    const destination = (() => {
+      if (!options.targetUrl) return null;
+      try {
+        const u = new URL(options.targetUrl);
+        return `${u.host}${u.pathname}`;
+      } catch {
+        return options.targetUrl;
+      }
+    })();
+
+    const title = destination ? "Navigate" : "Navigate to continue";
+    const instruction = destination
+      ? `Please navigate to <span class="walkthrough-url">${escapeHtml(destination)}</span> to continue.`
+      : "Navigate to the next page to continue.";
+
+    this.tooltip.innerHTML = `
+      <!-- Header -->
+      <div class="walkthrough-tooltip-header">
+        <div class="walkthrough-step-info">
+          <span class="walkthrough-step-number">${options.stepNumber}</span>
+          <span class="walkthrough-progress">of ${options.totalSteps}</span>
+        </div>
+        <button class="walkthrough-btn-close" id="walkthrough-btn-exit" title="Exit walkthrough">
+          ${ICONS.x}
+        </button>
+      </div>
+
+      <!-- Content -->
+      <div class="walkthrough-tooltip-content walkthrough-navigation-content">
+        <h3 class="walkthrough-field-label">${escapeHtml(title)}</h3>
+        <p class="walkthrough-instruction">
+          ${instruction}
+        </p>
+      </div>
+
+      <!-- Footer -->
+      <div class="walkthrough-tooltip-footer">
+        <div class="walkthrough-footer-left">
+          <button class="walkthrough-btn walkthrough-btn-back" id="walkthrough-btn-back">
+            ${ICONS.chevronLeft}
+            Back
+          </button>
+        </div>
+        <div class="walkthrough-footer-right"></div>
+      </div>
+
+      <!-- Progress Bar -->
+      <div class="walkthrough-progress-bar">
+        <div class="walkthrough-progress-bar-fill" style="width: ${progress}%"></div>
+      </div>
+    `;
+
+    // Center the tooltip for navigate steps
+    this.centerTooltip();
+
+    this.log("Rendered navigate step");
+  }
+
+  /**
    * Render healing state (mode: 'healing').
    * Shows spinner while healing is in progress, or confirmation UI if needed.
    */
   renderHealing(options: HealingOptions): void {
     if (!this.tooltip) return;
+
+    // Ensure drag handlers from step mode are removed before replacing markup.
+    this.removeDragHandlers();
 
     this.currentMode = "healing";
     this.tooltip.className = "walkthrough-tooltip walkthrough-healing";
@@ -727,7 +825,11 @@ export class TooltipRenderer {
           break;
         case "walkthrough-btn-exit":
         case "walkthrough-close-btn":
-          this.onAction("exit");
+          if (this.currentMode === "healing") {
+            this.onAction("reject_heal");
+          } else {
+            this.onAction("exit");
+          }
           break;
         case "walkthrough-btn-done":
           this.onAction("done");

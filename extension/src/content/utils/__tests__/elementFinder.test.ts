@@ -44,7 +44,10 @@ function mockZeroSizeElement(element: HTMLElement): void {
 }
 
 // Mock step factory
-function createMockStep(selectors: any): StepResponse {
+function createMockStep(
+  selectors: any,
+  overrides: Partial<StepResponse> = {},
+): StepResponse {
   return {
     id: 1,
     workflow_id: 1,
@@ -71,6 +74,7 @@ function createMockStep(selectors: any): StepResponse {
     healing_confidence: null,
     healing_method: null,
     created_at: new Date().toISOString(),
+    ...overrides,
   };
 }
 
@@ -253,6 +257,94 @@ describe("findElement", () => {
 
     expect(result.element.id).toBe("dynamic-btn");
   }, 10000); // Increase timeout for this test
+
+  it("should use stable_attrs href when selectors are brittle (unique match)", async () => {
+    const a1 = document.createElement("a");
+    a1.href = "https://example.com/a";
+    a1.textContent = "A";
+    mockVisibleElement(a1);
+    document.body.appendChild(a1);
+
+    const a2 = document.createElement("a");
+    a2.href = "https://example.com/b";
+    a2.textContent = "B";
+    mockVisibleElement(a2);
+    document.body.appendChild(a2);
+
+    const step = createMockStep({
+      primary: null,
+      css: ".nope",
+      xpath: null,
+      data_testid: null,
+      stable_attrs: { href: "https://example.com/b" },
+    });
+
+    const result = await findElement(step);
+    expect(result.element).toBe(a2);
+    expect(result.selectorUsed).toContain("stable_attrs.href");
+  });
+
+  it("should match Google redirect links by destination URL", async () => {
+    const link = document.createElement("a");
+    link.setAttribute(
+      "href",
+      "https://www.google.com/url?q=https://code.claude.com/docs/en/hooks-guide&sa=U&ved=0ahUKE",
+    );
+    link.textContent = "Automate workflows with hooks - Claude Code Docs";
+    mockVisibleElement(link);
+    document.body.appendChild(link);
+
+    const step = createMockStep(
+      {
+        primary: null,
+        css: ".nope",
+        xpath: null,
+        data_testid: null,
+        stable_attrs: {
+          href: "https://www.google.com/url?q=https://code.claude.com/docs/en/hooks-guide&sa=U&ved=DIFFERENT",
+        },
+      },
+      {
+        action_type: "click",
+      },
+    );
+
+    const result = await findElement(step);
+    expect(result.element).toBe(link);
+    expect(result.selectorUsed).toContain("stable_attrs.href");
+  });
+
+  it("should fallback to strict recorded text match when unique", async () => {
+    const anchor = document.createElement("a");
+    anchor.href = "https://code.claude.com/docs/en/hooks-guide";
+    mockVisibleElement(anchor);
+
+    const h3 = document.createElement("h3");
+    h3.textContent = "Automate workflows with hooks - Claude Code Docs";
+    mockVisibleElement(h3);
+    anchor.appendChild(h3);
+    document.body.appendChild(anchor);
+
+    const step = createMockStep(
+      {
+        primary: null,
+        css: ".nope",
+        xpath: null,
+        data_testid: null,
+      },
+      {
+        action_type: "click",
+        element_meta: {
+          tag_name: "h3",
+          text: "Automate workflows with hooks - Claude Code Docs",
+        } as any,
+      },
+    );
+
+    const result = await findElement(step);
+    expect(result.element).toBe(anchor);
+    expect(result.selectorUsed).toBe("text_match");
+  });
 });
 
 describe("scrollToElement", () => {

@@ -64,9 +64,12 @@ export interface CommandPayloads {
     stepIndex: number;
     actionType: string;
     valid: boolean;
+    /** Indicates the action is expected to trigger page navigation (e.g. Enter submit, link click). */
+    causesNavigation?: boolean;
     reason?:
       | "wrong_element"
       | "wrong_action"
+      | "wrong_value"
       | "no_value_change"
       | "invalid_target";
   };

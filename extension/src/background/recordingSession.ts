@@ -302,7 +302,7 @@ export async function updateSessionPauseState(
  */
 export async function handleRecordingNavigationStart(
   tabId: number,
-  _url: string,
+  url: string,
 ): Promise<void> {
   const { session, isRecordingTab } = await getRecordingSession(tabId);
 
@@ -310,10 +310,31 @@ export async function handleRecordingNavigationStart(
     return;
   }
 
+  const pendingStepNumber = session.pendingNavigateScreenshotStepNumber;
+
+  // If we're in the middle of recording a NAVIGATE step, patch the destination URL
+  // onto that step so playback can match against the expected destination.
+  const updatedSteps =
+    pendingStepNumber === null
+      ? session.steps
+      : session.steps.map((step) => {
+          if (step.step_number !== pendingStepNumber) {
+            return step;
+          }
+          return {
+            ...step,
+            action_data: {
+              ...(step.action_data ?? {}),
+              target_url: url,
+            },
+          };
+        });
+
   const updatedSession: RecordingSessionState = {
     ...session,
     navigationInProgress: true,
     lastActivityAt: Date.now(),
+    steps: updatedSteps,
   };
 
   await saveToStorage(updatedSession);
@@ -334,6 +355,7 @@ export async function handleRecordingNavigationStart(
  */
 export async function handleRecordingNavigationComplete(
   tabId: number,
+  finalUrl?: string,
 ): Promise<void> {
   // CRITICAL: Invalidate cache FIRST to ensure fresh session read
   // This prevents stale session data from causing screenshot storage failures
@@ -348,12 +370,29 @@ export async function handleRecordingNavigationComplete(
   // Check if there's a pending NAVIGATE screenshot to capture
   const pendingStepNumber = session.pendingNavigateScreenshotStepNumber;
 
+  const updatedSteps =
+    pendingStepNumber === null || !finalUrl
+      ? session.steps
+      : session.steps.map((step) => {
+          if (step.step_number !== pendingStepNumber) {
+            return step;
+          }
+          return {
+            ...step,
+            action_data: {
+              ...(step.action_data ?? {}),
+              final_url: finalUrl,
+            },
+          };
+        });
+
   const updatedSession: RecordingSessionState = {
     ...session,
     navigationInProgress: false,
     lastActivityAt: Date.now(),
     // Clear the pending screenshot flag
     pendingNavigateScreenshotStepNumber: null,
+    steps: updatedSteps,
   };
 
   await saveToStorage(updatedSession);
