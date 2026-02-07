@@ -30,6 +30,11 @@
       "js": ["content/walkthrough.js"],
       "css": ["content/styles/overlay.css", "content/styles/widget.css", "content/styles/feedback.css", "content/styles/walkthrough.css"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content/dynamicWorkflow.js"],
+      "run_at": "document_idle"
     }
   ],
   "icons": {

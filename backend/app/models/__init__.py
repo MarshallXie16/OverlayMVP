@@ -12,6 +12,7 @@ from app.models.step import Step
 from app.models.screenshot import Screenshot
 from app.models.health_log import HealthLog
 from app.models.notification import Notification
+from app.models.dynamic_session import DynamicSession
 
 __all__ = [
     "Base",
@@ -23,4 +24,5 @@ __all__ = [
     "Screenshot",
     "HealthLog",
     "Notification",
+    "DynamicSession",
 ]

@@ -35,6 +35,9 @@ import { NavigationWatcher } from "./walkthrough/NavigationWatcher";
 import { TabManager } from "./walkthrough/TabManager";
 import { useNewWalkthroughSystem } from "../shared/featureFlags";
 
+// Dynamic workflow session management
+import { dynamicSessionManager } from "./dynamicWorkflow/DynamicSessionManager";
+
 // Sprint 4: Walkthrough components (instantiated but only initialized if feature flag is on)
 // These are created at module level to allow initialization in any lifecycle event
 let navigationWatcher: NavigationWatcher | null = null;
@@ -83,6 +86,18 @@ console.log("🚀 Workflow Recorder: Background service worker loaded");
     console.log("Walkthrough initialization complete (immediate)");
   } catch (error) {
     console.error("Failed to initialize walkthrough components:", error);
+  }
+
+  // Initialize dynamic workflow session manager (always - message routing
+  // handles the feature flag check, and the manager is lightweight)
+  try {
+    await dynamicSessionManager.initialize();
+    console.log("Dynamic workflow session manager initialized (immediate)");
+  } catch (error) {
+    console.error(
+      "Failed to initialize dynamic workflow session manager:",
+      error,
+    );
   }
 })();
 
@@ -229,6 +244,23 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
       );
       await handleRecordingTabClose(recordingSession);
     }
+
+    // Check dynamic workflow session
+    if (dynamicSessionManager.hasActiveSession()) {
+      const dynamicState = await dynamicSessionManager.getState();
+      if (dynamicState && dynamicState.tabs.activeTabIds.includes(tabId)) {
+        console.log(
+          `[Background] Tab ${tabId} closed during dynamic workflow session`,
+        );
+        if (dynamicState.tabs.primaryTabId === tabId) {
+          // Primary tab closed - end the entire session
+          await dynamicSessionManager.endSession("primary_tab_closed");
+        } else {
+          // Secondary tab closed - just remove it
+          await dynamicSessionManager.removeTab(tabId);
+        }
+      }
+    }
   } catch (error) {
     console.error("[Background] Error handling tab removal:", error);
   }
@@ -261,6 +293,23 @@ chrome.webNavigation.onBeforeNavigate.addListener(async (details) => {
         `[Background] Navigation starting in recording tab ${details.tabId}: ${details.url}`,
       );
       await handleRecordingNavigationStart(details.tabId, details.url);
+    }
+
+    // Check dynamic workflow session
+    if (dynamicSessionManager.hasActiveSession()) {
+      const dynamicState = await dynamicSessionManager.getState();
+      if (
+        dynamicState &&
+        dynamicState.tabs.activeTabIds.includes(details.tabId)
+      ) {
+        console.log(
+          `[Background] Navigation starting in dynamic workflow tab ${details.tabId}: ${details.url}`,
+        );
+        await dynamicSessionManager.dispatch({
+          type: "URL_CHANGED",
+          url: details.url,
+        });
+      }
     }
   } catch (error) {
     console.error("[Background] Error handling navigation start:", error);

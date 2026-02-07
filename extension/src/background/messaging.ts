@@ -53,6 +53,9 @@ import {
 // Sprint 4: New walkthrough message handlers
 import { handleWalkthroughMessage } from "./walkthrough/messageHandlers";
 
+// Dynamic workflow message handlers
+import { handleDynamicMessage } from "./dynamicWorkflow/DynamicMessageHandlers";
+
 // ============================================================================
 // FAILED UPLOAD STORAGE (FEAT-012)
 // ============================================================================
@@ -176,6 +179,20 @@ export function handleMessage(
   if (walkthroughMessageTypes.includes(message.type)) {
     handleWalkthroughMessage(message, sender, sendResponse).catch((error) => {
       console.error("[Messaging] Walkthrough handler error:", error);
+      sendResponse({ success: false, error: String(error) });
+    });
+    return true; // Async response
+  }
+
+  // Dynamic workflow messages
+  const dynamicMessageTypes = [
+    "DYNAMIC_COMMAND",
+    "DYNAMIC_TAB_READY",
+    "DYNAMIC_REPORT_CONTEXT",
+  ];
+  if (dynamicMessageTypes.includes(message.type)) {
+    handleDynamicMessage(message, sender, sendResponse).catch((error) => {
+      console.error("[Messaging] Dynamic workflow handler error:", error);
       sendResponse({ success: false, error: String(error) });
     });
     return true; // Async response

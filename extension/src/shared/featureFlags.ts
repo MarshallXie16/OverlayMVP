@@ -26,6 +26,13 @@ export interface FeatureFlags {
    * When true: Uses new background/walkthrough/ and content/walkthrough/ modules
    */
   WALKTHROUGH_USE_NEW_SYSTEM: boolean;
+
+  /**
+   * Enable dynamic AI-guided workflows
+   * When false (default): Dynamic workflow UI hidden in popup
+   * When true: Shows goal textbox in popup, enables AI-guided step generation
+   */
+  DYNAMIC_WORKFLOW_ENABLED: boolean;
 }
 
 /**
@@ -43,6 +50,7 @@ export type FeatureFlagName = keyof FeatureFlags;
  */
 const DEFAULT_FLAGS: FeatureFlags = {
   WALKTHROUGH_USE_NEW_SYSTEM: true,
+  DYNAMIC_WORKFLOW_ENABLED: true,
 };
 
 // ============================================================================
@@ -152,4 +160,12 @@ export async function resetFeatureFlags(): Promise<void> {
  */
 export async function useNewWalkthroughSystem(): Promise<boolean> {
   return getFeatureFlag("WALKTHROUGH_USE_NEW_SYSTEM");
+}
+
+/**
+ * Check if dynamic AI-guided workflows are enabled
+ * Convenience wrapper for the dynamic workflow feature flag
+ */
+export async function useDynamicWorkflows(): Promise<boolean> {
+  return getFeatureFlag("DYNAMIC_WORKFLOW_ENABLED");
 }

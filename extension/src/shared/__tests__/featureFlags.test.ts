@@ -86,6 +86,7 @@ describe("Feature Flags", () => {
 
       expect(flags).toEqual({
         WALKTHROUGH_USE_NEW_SYSTEM: true,
+        DYNAMIC_WORKFLOW_ENABLED: false,
       });
     });
 
@@ -96,6 +97,7 @@ describe("Feature Flags", () => {
 
       expect(flags).toEqual({
         WALKTHROUGH_USE_NEW_SYSTEM: false,
+        DYNAMIC_WORKFLOW_ENABLED: false,
       });
     });
 
@@ -109,6 +111,7 @@ describe("Feature Flags", () => {
       const flags = await getAllFeatureFlags();
       expect(flags).toEqual({
         WALKTHROUGH_USE_NEW_SYSTEM: true,
+        DYNAMIC_WORKFLOW_ENABLED: false,
       });
 
       // Restore

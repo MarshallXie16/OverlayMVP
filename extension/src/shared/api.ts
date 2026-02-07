@@ -491,6 +491,132 @@ export class ApiClient {
   }
 
   // ==========================================================================
+  // DYNAMIC WORKFLOWS
+  // ==========================================================================
+
+  /**
+   * Create a new dynamic workflow session
+   * Returns session ID and extracted entities from the goal
+   */
+  async createDynamicSession(request: {
+    goal: string;
+    starting_url: string;
+  }): Promise<{
+    session_id: number;
+    goal: string;
+    goal_entities: Record<string, string>;
+    status: string;
+  }> {
+    return makeRequest<{
+      session_id: number;
+      goal: string;
+      goal_entities: Record<string, string>;
+      status: string;
+    }>("/api/dynamic-workflows/sessions", {
+      method: "POST",
+      body: request,
+    });
+  }
+
+  /**
+   * Get next AI-guided step based on page context
+   */
+  async getDynamicStep(
+    sessionId: number,
+    pageContext: {
+      url: string;
+      title: string;
+      interactive_elements: string;
+      status_text: string;
+      element_count: number;
+    },
+  ): Promise<{
+    instruction: string;
+    field_label: string;
+    action_type: string;
+    element_index: number;
+    selector_hint?: string;
+    auto_fill_value?: string;
+    confidence: number;
+    reasoning: string;
+    goal_achieved: boolean;
+    progress_estimate: number;
+    automation_level: string;
+    ai_message?: string;
+  }> {
+    return makeRequest(`/api/dynamic-workflows/sessions/${sessionId}/step`, {
+      method: "POST",
+      body: { page_context: pageContext },
+    });
+  }
+
+  /**
+   * Submit user correction for AI adjustment
+   */
+  async submitDynamicFeedback(
+    sessionId: number,
+    correctionText: string,
+    stepContext?: string,
+  ): Promise<{
+    instruction: string;
+    field_label: string;
+    action_type: string;
+    element_index: number;
+    confidence: number;
+    reasoning: string;
+    goal_achieved: boolean;
+    progress_estimate: number;
+    automation_level: string;
+  }> {
+    return makeRequest(
+      `/api/dynamic-workflows/sessions/${sessionId}/feedback`,
+      {
+        method: "POST",
+        body: { correction_text: correctionText, step_context: stepContext },
+      },
+    );
+  }
+
+  /**
+   * Mark dynamic workflow session as completed or abandoned
+   */
+  async completeDynamicSession(
+    sessionId: number,
+    reason: "completed" | "abandoned",
+  ): Promise<{
+    id: number;
+    status: string;
+    step_count: number;
+    estimated_cost: number;
+  }> {
+    return makeRequest(
+      `/api/dynamic-workflows/sessions/${sessionId}/complete`,
+      {
+        method: "POST",
+        body: { reason },
+      },
+    );
+  }
+
+  /**
+   * Get dynamic workflow session state
+   */
+  async getDynamicSession(sessionId: number): Promise<{
+    id: number;
+    goal: string;
+    goal_entities: Record<string, string>;
+    status: string;
+    step_count: number;
+    total_input_tokens: number;
+    total_output_tokens: number;
+    estimated_cost: number;
+  }> {
+    return makeRequest(`/api/dynamic-workflows/sessions/${sessionId}`, {
+      method: "GET",
+    });
+  }
+
+  // ==========================================================================
   // UTILITY METHODS
   // ==========================================================================
 

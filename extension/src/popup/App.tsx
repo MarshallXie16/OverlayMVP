@@ -12,6 +12,7 @@ import { RecordingControls } from "./components/RecordingControls";
 import { WorkflowList } from "./components/WorkflowList";
 import { FailedUploads } from "./components/FailedUploads";
 import { DeveloperSettings } from "./components/DeveloperSettings";
+import { DynamicWorkflow } from "./components/DynamicWorkflow";
 
 const App: React.FC = () => {
   const { user, isLoading, checkAuth, logout } = useAuthStore();
@@ -116,6 +117,7 @@ const App: React.FC = () => {
         style={{ height: "calc(600px - 60px)" }}
       >
         <FailedUploads />
+        <DynamicWorkflow />
         <RecordingControls />
         <WorkflowList />
         <DeveloperSettings />

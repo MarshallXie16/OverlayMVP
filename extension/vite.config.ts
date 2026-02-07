@@ -72,6 +72,10 @@ export default defineConfig({
         // Content scripts - MUST be self-contained (no ES module imports)
         "content-recorder": resolve(__dirname, "src/content/recorder.ts"),
         "content-walkthrough": resolve(__dirname, "src/content/walkthrough.ts"),
+        "content-dynamicWorkflow": resolve(
+          __dirname,
+          "src/content/dynamicWorkflow.ts",
+        ),
       },
 
       output: {

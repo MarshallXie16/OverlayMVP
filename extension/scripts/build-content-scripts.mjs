@@ -18,6 +18,10 @@ const distDir = resolve(__dirname, "../dist");
 const contentScripts = [
   { entry: "content/recorder.ts", output: "content/recorder.js" },
   { entry: "content/walkthrough.ts", output: "content/walkthrough.js" },
+  {
+    entry: "content/dynamicWorkflow.ts",
+    output: "content/dynamicWorkflow.js",
+  },
 ];
 
 async function buildContentScripts() {
